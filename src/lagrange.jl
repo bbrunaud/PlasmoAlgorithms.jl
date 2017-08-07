@@ -59,9 +59,11 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
 
     # 7. Solve Lagrange heuristic
     mflat.colVal = vcat([SP[j].colVal for j in keys(getnodes(graph))]...)
-    for j in 1:1
-      mflat.colUpper[j] = mflat.colVal[j]
-      mflat.colLower[j] = mflat.colVal[j]
+    for j in 1:mflat.numCols
+      if mflat.colCat[j] in (:Bin,:Int)
+        mflat.colUpper[j] = mflat.colVal[j]
+        mflat.colLower[j] = mflat.colVal[j]
+      end
     end
     solve(mflat)
     Hk = getobjectivevalue(mflat)
@@ -80,8 +82,8 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
       UB = min(Zk,UB)
       graph.objVal = LB
     end
-    res[:Objective] = Hk
-    res[:BestBound] = Zk
+    res[:Objective] = sense == :Min ? UB : LB
+    res[:BestBound] = sense == :Min ? LB : UB
     res[:Iterations] = iter
     UB - LB < ϵ &&  break
 
