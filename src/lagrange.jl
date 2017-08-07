@@ -1,7 +1,7 @@
 # Parallel model solve function, returns an array of objective values with dimension equal to of elements in the collection for which pmap was applied
-@everywhere function psolve(m::JuMP.Model)
-  JuMP.solve(m)
-  return JuMP.getobjectivevalue(m)
+function psolve(m::JuMP.Model)
+  solve(m)
+  return getobjectivevalue(m)
 end
 
 function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=50,ϵ=0.001,α=2,UB=1e5,LB=-1e5)
@@ -44,6 +44,9 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
 
   # 5. Solve subproblems
   for iter in 1:max_iterations
+    debug("*********************")
+    debug("*** ITERATION $iter  ***")
+    debug("*********************")
     Zprev = 0
     spobjs = pmap(psolve,SP)
     Zk = sum(spobjs)
@@ -56,8 +59,6 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
 
     # 7. Solve Lagrange heuristic
     mflat.colVal = vcat([SP[j].colVal for j in keys(getnodes(graph))]...)
-    println("mf val = $(mflat.colVal)")
-    println("S1 val = $(SP[1].colVal)")
     for j in 1:1
       mflat.colUpper[j] = mflat.colVal[j]
       mflat.colLower[j] = mflat.colVal[j]
@@ -70,7 +71,6 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
 
     # 8. Update bounds and check bounds convergence
     # Minimization problem
-    debug("sense = $sense")
     if sense == :Min
       LB = max(Zk,LB)
       UB = min(Hk,UB)
@@ -92,6 +92,7 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     lval = [getvalue(links[j].terms) for j in 1:nmult]
     step = α*(UB-LB)/norm(lval)^2
     debug("Step = $step")
+    debug("α = $α")
 
     # update multiplier bounds (Bundle method)
     if update_method == :bundle
@@ -112,9 +113,6 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
       λk = λprev - step*lval
     end
 
-    debug("λ = $λk")
-    # sqrt(sum( (λ-λprev).^2 )) < ϵ && break
-
     # 10. Update objectives
     # Restore initial objective
     for (j,sp) in enumerate(SP)
@@ -128,8 +126,7 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
         var.m.obj += λk[l]*coeff*var
       end
     end
-    debug("SP1 objective = $(SP[1].obj)")
-    debug("SP2 objective = $(SP[2].obj)")
+
     debug("UB = $UB")
     debug("LB = $LB")
   end
