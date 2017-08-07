@@ -1,7 +1,14 @@
 # Parallel model solve function, returns an array of objective values with dimension equal to of elements in the collection for which pmap was applied
 function psolve(m::JuMP.Model)
   solve(m)
-  return getobjectivevalue(m)
+  d = Dict()
+  d[:objective] = getobjectivevalue(m)
+  d[:values] = m.colVal
+  node = getnode(m)
+  for v in values(node.index)
+    d[:nodeindex] = v
+  end
+  return d
 end
 
 function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=50,ϵ=0.001,α=2,UB=1e5,LB=-1e5)
@@ -48,8 +55,15 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     debug("*** ITERATION $iter  ***")
     debug("*********************")
     Zprev = 0
-    spobjs = pmap(psolve,SP)
-    Zk = sum(spobjs)
+    SPR = pmap(psolve,SP)
+    debug("$SPR")
+    Zk = 0
+    nodedict = getnodes(graph)
+    for spd in SPR
+      Zk += spd[:objective]
+      getmodel(nodedict[spd[:nodeindex]]).colVal = spd[:values]
+    end
+
     if iter > 1
       i += Zk == Zprev ? 1 : -i
       α *= i>2 ? 0.85 : 1
@@ -57,8 +71,8 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     Zprev = Zk
     debug("Zk = $Zk")
 
-    # 7. Solve Lagrange heuristic
-    mflat.colVal = vcat([SP[j].colVal for j in keys(getnodes(graph))]...)
+    # 7. Solve Lagrange heuristic (fix integers and binaries)
+    mflat.colVal = vcat([getmodel(n).colVal for n in values(nodedict)]...)
     for j in 1:mflat.numCols
       if mflat.colCat[j] in (:Bin,:Int)
         mflat.colUpper[j] = mflat.colVal[j]
