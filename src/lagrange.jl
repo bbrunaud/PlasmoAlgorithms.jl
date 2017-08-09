@@ -8,7 +8,7 @@ function psolve(m::JuMP.Model)
   for v in values(node.index)
     d[:nodeindex] = v
   end
-  println("Solved node $(d[:nodeindex])")
+  println("Solved node $(d[:nodeindex]) on $(gethostname())")
   return d
 end
 
