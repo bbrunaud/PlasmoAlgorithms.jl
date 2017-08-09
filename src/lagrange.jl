@@ -8,6 +8,7 @@ function psolve(m::JuMP.Model)
   for v in values(node.index)
     d[:nodeindex] = v
   end
+  println("Solved node $(d[:nodeindex])")
   return d
 end
 
@@ -55,8 +56,7 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     debug("*** ITERATION $iter  ***")
     debug("*********************")
     Zprev = 0
-    SPR = pmap(psolve,SP)
-    debug("$SPR")
+    SPR = pmap(psolve,SP)  
     Zk = 0
     nodedict = getnodes(graph)
     for spd in SPR
