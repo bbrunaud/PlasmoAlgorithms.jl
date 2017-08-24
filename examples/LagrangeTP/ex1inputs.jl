@@ -1,6 +1,14 @@
 using JuMP
 using Gurobi
 
+oproducts = 1:3
+#m
+markets = 1:3
+#s
+sites = 1:3
+#t
+otime = 1:3
+#nt
 
 nt = 3
 #horas disponibles de produccion (longitud del periodo de tiempo)
@@ -41,14 +49,13 @@ fcast[:,3,:] = [
 
 
 #table beta(m,i) sale price
-#bb(i,m) sale price of product i in market m during time period t
+#bb(m,i) sale price of product i in market m during time period t
 β=[
              20	23	26
              25	28	32
              30	33	37]
 
 #table gamma(m,s,i,t) shipment cost- != f(t)
-#gg(i,s,m) shipment cost between production site s during time period t
 γ = zeros(3,3,3)
 γ[1,:,:]=[
 3	3	3

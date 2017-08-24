@@ -12,7 +12,7 @@ function psolve(m::JuMP.Model)
   return d
 end
 
-function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=50,ϵ=0.001,α=2,UB=1e5,LB=-1e5)
+function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=50,ϵ=0.001,α=2,UB=5e5,LB=-1e5)
   tic()
   res = Dict()
   # 1. Check for dynamic structure. If not error
@@ -56,7 +56,7 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     debug("*** ITERATION $iter  ***")
     debug("*********************")
     Zprev = 0
-    SPR = pmap(psolve,SP)  
+    SPR = pmap(psolve,SP)
     Zk = 0
     nodedict = getnodes(graph)
     for spd in SPR
@@ -65,8 +65,16 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     end
 
     if iter > 1
+    ###ver esto!
       i += Zk == Zprev ? 1 : -i
       α *= i>2 ? 0.85 : 1
+    #=
+    if i > 2
+      a *= 0.85
+    else
+      a *= 1
+    end
+    =#
     end
     Zprev = Zk
     debug("Zk = $Zk")
@@ -91,15 +99,17 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
       LB = max(Zk,LB)
       UB = min(Hk,UB)
       graph.objVal = UB
+      (UB - LB)/UB < ϵ &&  break
     else
       LB = max(Hk,LB)
       UB = min(Zk,UB)
       graph.objVal = LB
+      (UB - LB)/LB < ϵ &&  break
     end
     res[:Objective] = sense == :Min ? UB : LB
     res[:BestBound] = sense == :Min ? LB : UB
     res[:Iterations] = iter
-    UB - LB < ϵ &&  break
+
 
     # 9. Update λ
     λprev = λk
