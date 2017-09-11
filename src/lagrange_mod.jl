@@ -12,7 +12,7 @@ function psolve(m::JuMP.Model)
   return d
 end
 
-function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=100,ϵ=0.001,α=2,UB=5e5,LB=-1e5)
+function lagrangesolvemod(graph::PlasmoGraph;update_method=:subgradient_original,max_iterations=100,ϵ=0.001,α=2,UB=5e5,LB=-1e5)
   tic()
   res = Dict()
   # 1. Check for dynamic structure. If not error
@@ -47,7 +47,9 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
   # To update the multiplier in the suproblem, call @objective again
 
   # 4. Initialize
+####
   θ=0
+####
   Kprev=[0 for j in 1:nmult]
   λk = [0 for j in 1:nmult]
   i = 0
@@ -67,7 +69,7 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     end
 
 
-
+    Zprev = Zk
     debug("Zk = $Zk")
 
     # 7. Solve Lagrange heuristic (fix integers and binaries)
@@ -86,31 +88,35 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
 
     # 8. Update bounds and check bounds convergence
     # Minimization problem
+###
     UBprev = UB
+###
     LBprev = LB
     if sense == :Min
-      if iter > 2
+      if iter > 1
         i += LB == LBprev ? 1 : -i
-        α *= i>2 ? 0.85 : 1
+        α *= i>2 ? 0.95 : 1
       end
       LB = max(Zk,LB)
       UB = min(Hk,UB)
       graph.objVal = UB
-      (UB - LB)/UB < ϵ &&  break
+      gap = (UB - LB)/UB
+      gap < ϵ &&  break
     else
-      if iter > 2
+      if iter > 1
         i += UB == UBprev ? 1 : -i
-        α *= i>2 ? 0.85 : 1
+        α *= i>2 ? 0.95 : 1
       end
       LB = max(Hk,LB)
       UB = min(Zk,UB)
       graph.objVal = LB
-      (UB - LB)/LB < ϵ &&  break
+      gap = (UB - LB)/LB
+      gap < ϵ &&  break
     end
 
 
-    if α < 0.001 break
-    end
+    #if α < 0.001 break
+    #end
     res[:Objective] = sense == :Min ? UB : LB
     res[:BestBound] = sense == :Min ? LB : UB
     res[:Iterations] = iter
@@ -123,14 +129,14 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     lval = [getvalue(links[j].terms) for j in 1:nmult]
     dif = sense == :Max ? Zk-LB : UB - Zk
     μ=lval+θ* Kprev
-    if norm(Kprev)>0 && dot(lval,Kprev)<0
+#    if norm(Kprev)>0 && dot(lval,Kprev)<0
+    if  dot(lval,Kprev)<0
         θ=norm(lval)/norm(Kprev)
       else
         θ=0
       end
-    step = α*dif/dot(lval,μ)
-    debug("Step = $step")
-    debug("α = $α")
+
+
 
     # update multiplier bounds (Bundle method)
     if update_method == :bundle
@@ -148,10 +154,17 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     end
     # Subgradient
     if update_method == :subgradient
-####ver el sig - para max, + para min ??
-      λk = λprev + step*lval
+      step = α*dif/dot(lval,μ)
+      λk = λprev - step*μ
     end
 
+    if update_method == :subgradient_original
+      step = α*dif/norm(lval)^2
+      λk = λprev - step*lval
+    end
+
+    debug("Step = $step")
+    debug("α = $α")
     # 10. Update objectives
     # Restore initial objective
     for (j,sp) in enumerate(SP)
@@ -168,6 +181,7 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
 
     debug("UB = $UB")
     debug("LB = $LB")
+    debug("gap = $gap")
   end
   res[:Time] = toc()
   return res
