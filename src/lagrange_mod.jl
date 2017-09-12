@@ -12,8 +12,10 @@ function psolve(m::JuMP.Model)
   return d
 end
 
-function lagrangesolvemod(graph::PlasmoGraph;update_method=:subgradient_original,max_iterations=100,ϵ=0.001,α=2,UB=5e5,LB=-1e5)
+function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient_original,max_iterations=100,ϵ=0.001,α=2,UB=5e5,LB=-1e5,δ=0.95)
   tic()
+  starttime = time()
+  df = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[])
   res = Dict()
   # 1. Check for dynamic structure. If not error
   # TODO
@@ -105,7 +107,7 @@ function lagrangesolvemod(graph::PlasmoGraph;update_method=:subgradient_original
     else
       if iter > 1
         i += UB == UBprev ? 1 : -i
-        α *= i>2 ? 0.95 : 1
+        α *= i>2 ? δ : 1
       end
       LB = max(Hk,LB)
       UB = min(Zk,UB)
@@ -182,7 +184,8 @@ function lagrangesolvemod(graph::PlasmoGraph;update_method=:subgradient_original
     debug("UB = $UB")
     debug("LB = $LB")
     debug("gap = $gap")
+    push!(df,[iter,round(time()-starttime),α,step,UB,LB,Hk,Zk,gap])
   end
   res[:Time] = toc()
-  return res
+  return res, df
 end
