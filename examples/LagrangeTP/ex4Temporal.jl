@@ -2,6 +2,7 @@ using Plasmo
 using PlasmoAlgorithms
 using Logging
 using Gurobi
+using DataFrames
 
 Logging.configure(level=DEBUG)
 

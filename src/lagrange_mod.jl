@@ -8,7 +8,7 @@ function psolve(m::JuMP.Model)
   for v in values(node.index)
     d[:nodeindex] = v
   end
-  println("Solved node $(d[:nodeindex]) on $(gethostname())")
+  #println("Solved node $(d[:nodeindex]) on $(gethostname())")
   return d
 end
 
@@ -54,6 +54,7 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient_original,m
 ####
   Kprev=[0 for j in 1:nmult]
   λk = [0 for j in 1:nmult]
+  λprev = [0 for j in 1:nmult]
   i = 0
 
   # 5. Solve subproblems
@@ -94,10 +95,20 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient_original,m
     UBprev = UB
 ###
     LBprev = LB
+    improved = true
     if sense == :Min
-      if iter > 1
-        i += LB == LBprev ? 1 : -i
-        α *= i>2 ? 0.95 : 1
+      if iter > 4
+        if LB == LBprev
+          i += 1
+          improved = false
+        else
+          i = 0
+          α = 2
+        end
+        if i > 2
+          α *= δ
+          i = 0
+        end
       end
       LB = max(Zk,LB)
       UB = min(Hk,UB)
@@ -106,8 +117,17 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient_original,m
       gap < ϵ &&  break
     else
       if iter > 1
-        i += UB == UBprev ? 1 : -i
-        α *= i>2 ? δ : 1
+        if UB == UBprev
+          i += 1
+          improved = false
+        else
+          i = 0
+          α = 2
+        end
+        if i > 4
+          α *= δ
+          i = 0
+        end
       end
       LB = max(Hk,LB)
       UB = min(Zk,UB)
@@ -117,7 +137,8 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient_original,m
     end
 
 
-    #if α < 0.001 break
+
+
     #end
     res[:Objective] = sense == :Min ? UB : LB
     res[:BestBound] = sense == :Min ? LB : UB
@@ -125,7 +146,14 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient_original,m
 
 
     # 9. Update λ
-    λprev = λk
+    if iter == 1
+      λprev = λk
+      println("Set λprev at iter 1")
+    end
+    if improved
+      λprev = λk
+      println("UPDATED λprev")
+    end
 
     # 9. Multipliers Update
     lval = [getvalue(links[j].terms) for j in 1:nmult]
@@ -185,6 +213,9 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient_original,m
     debug("LB = $LB")
     debug("gap = $gap")
     push!(df,[iter,round(time()-starttime),α,step,UB,LB,Hk,Zk,gap])
+
+    α < 1e-8 && break
+    step < 1e-8 && break
   end
   res[:Time] = toc()
   return res, df
