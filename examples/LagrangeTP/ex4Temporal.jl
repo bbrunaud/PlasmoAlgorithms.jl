@@ -10,6 +10,9 @@ g = PlasmoGraph()
 g.solver = GurobiSolver(OutputFlag=0)
 
 include("modelgen4.jl")
+psize=6
+otime=1:psize
+oproducts=1:psize
 node = Dict()
 for t in otime
   n = add_node(g)
@@ -23,15 +26,16 @@ end
 
 methods = [:subgradient_original,:subgradient]
 Δ = 0.5:0.1:1.0
-maxiter = 500
+maxiter = 1000
 
 DF = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[],Example=[],Method=[],δ=[])
 for method in methods
   for δ in Δ
     result, df = lagrangesolve(g,max_iterations=maxiter,update_method=method,δ=δ)
-    df[:Example] = ["Example4 Temporal" for i in 1:maxiter]
-    df[:Method] = [method for i in 1:maxiter]
-    df[:δ] = [δ for i in 1:maxiter]
+    iters = result[:Iterations]
+    df[:Example] = ["Example4 Temporal" for i in 1:iters]
+    df[:Method] = [method for i in 1:iters]
+    df[:δ] = [δ for i in 1:iters]
     DF = vcat(DF,df)
   end
 end
