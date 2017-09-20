@@ -25,11 +25,11 @@ end
 
 @linkconstraint(g, [s in sites, i in 1:oproducts[end-1], t in otime],node[i][:hf][s,i,t] == node[i+1][:hi][s,i+1,t])
 
-methods = [:subgradient_original,:subgradient]
+methods = [:subgradient]
 #methods = [:subgradient_original]
-Δ = 0.5:0.1:1.0
+Δ = [0.9]
 #Δ = 0.95
-maxiter = 1000
+maxiter = 50
 
 DF = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[],Example=[],Method=[],δ=[])
 for method in methods

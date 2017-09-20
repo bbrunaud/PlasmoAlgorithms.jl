@@ -5,8 +5,9 @@ using JuMP
 using Logging
 using DataFrames
 
-export lagrangesolve, psolve
+export lagrangesolve, psolve, bendersolve
 
-include("lagrange_mod.jl")
+include("lagrange.jl")
+include("benders.jl")
 
 end

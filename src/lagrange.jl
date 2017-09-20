@@ -8,53 +8,77 @@ function psolve(m::JuMP.Model)
   for v in values(node.index)
     d[:nodeindex] = v
   end
-  println("Solved node $(d[:nodeindex]) on $(gethostname())")
+  #println("Solved node $(d[:nodeindex]) on $(gethostname())")
   return d
 end
 
-function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=50,ϵ=0.001,α=2,UB=5e5,LB=-1e5)
-  tic()
-  res = Dict()
-  # 1. Check for dynamic structure. If not error
-  # TODO
+function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=100,ϵ=0.001,α=2,UB=5e5,LB=-1e5,δ=0.9)
 
-  # 2. Generate model for heuristic
+  ########## 1. Initialize ########
+  tic()
+  starttime = time()
+  # Results outputs
+  df = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[])
+  res = Dict()
+
+  # Generate model for heuristic
   mflat = create_flat_graph_model(graph)
   mflat.solver = graph.solver
 
-  # 2. Generate master problem
-  ## Number of multipliers
+  # Get Linkings
   links = getlinkconstraints(graph)
   nmult = length(links)
 
-  ## Master Model
-  ms = Model(solver=graph.solver)
-  @variable(ms, η)
-  @variable(ms, λ[1:nmult])
-  @objective(ms, Min, η)
+  # Master Model (generate only for cutting planes or bundle methods)
+  if update_method in [:cuttingplanes,:bundle]
+    ms = Model(solver=graph.solver)
+    @variable(ms, η)
+    @variable(ms, λ[1:nmult])
+    @objective(ms, Min, η)
+  end
 
   # Equality constraint the multiplier is unbounded in sign. For <= or >= need to set the lower or upper bound at 0
   # TODO ... only accepting equality constraints with rhs 0 by now.
 
-  # 3. Generate subproblem array
+  # Generate subproblem array
   # Assuming nodes are created in order
   SP = [graph.nodes[i].attributes[:model] for i in 1:length(graph.nodes)]
   for sp in SP
     JuMP.setsolver(sp,graph.solver)
   end
+  # Capture objectives
   SPObjectives = [graph.nodes[i].attributes[:model].obj for i in 1:length(graph.nodes)]
   sense = SP[1].objSense
-  # To update the multiplier in the suproblem, call @objective again
 
-  # 4. Initialize
-  λk = [0 for j in 1:nmult]
+  # Variables
+  θ = 0
+  Kprev = [0 for j in 1:nmult]
+  λk = [1.0 for j in 1:nmult]
+  λprev = [1.0 for j in 1:nmult]
   i = 0
 
+  # Solve realaxation
+  
   # 5. Solve subproblems
   for iter in 1:max_iterations
     debug("*********************")
     debug("*** ITERATION $iter  ***")
     debug("*********************")
+
+    # 10. Update objectives
+    # Restore initial objective
+    for (j,sp) in enumerate(SP)
+      sp.obj = SPObjectives[j]
+    end
+    # add dualized part
+    for l in 1:nmult
+      for j in 1:length(links[l].terms.vars)
+        var = links[l].terms.vars[j]
+        coeff = links[l].terms.coeffs[j]
+        var.m.obj += λk[l]*coeff*var
+      end
+    end
+
     Zprev = 0
     SPR = pmap(psolve,SP)
     Zk = 0
@@ -64,18 +88,7 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
       getmodel(nodedict[spd[:nodeindex]]).colVal = spd[:values]
     end
 
-    if iter > 1
-    ###ver esto!
-      i += Zk == Zprev ? 1 : -i
-      α *= i>2 ? 0.85 : 1
-    #=
-    if i > 2
-      a *= 0.85
-    else
-      a *= 1
-    end
-    =#
-    end
+
     Zprev = Zk
     debug("Zk = $Zk")
 
@@ -95,30 +108,81 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
 
     # 8. Update bounds and check bounds convergence
     # Minimization problem
+###
+    UBprev = UB
+###
+    LBprev = LB
+    improved = true
     if sense == :Min
+      if iter > 4
+        if LB == LBprev
+          i += 1
+          improved = false
+        else
+          i = 0
+          α = 2
+        end
+        if i > 2
+          α *= δ
+          i = 0
+        end
+      end
       LB = max(Zk,LB)
       UB = min(Hk,UB)
       graph.objVal = UB
-      (UB - LB)/UB < ϵ &&  break
+      gap = (UB - LB)/UB
+      gap < ϵ &&  break
     else
+      if iter > 1
+        if UB == UBprev
+          i += 1
+          improved = false
+        else
+          i = 0
+          α = 2
+        end
+        if i > 4
+          α *= δ
+          i = 0
+        end
+      end
       LB = max(Hk,LB)
       UB = min(Zk,UB)
       graph.objVal = LB
-      (UB - LB)/LB < ϵ &&  break
+      gap = (UB - LB)/LB
+      gap < ϵ &&  break
     end
+
+
+
+
+    #end
     res[:Objective] = sense == :Min ? UB : LB
     res[:BestBound] = sense == :Min ? LB : UB
     res[:Iterations] = iter
 
 
     # 9. Update λ
-    λprev = λk
+    if iter == 1
+      λprev = λk
+      println("Set λprev at iter 1")
+    end
+    if improved
+      λprev = λk
+      println("UPDATED λprev")
+    end
 
     # 9. Multipliers Update
     lval = [getvalue(links[j].terms) for j in 1:nmult]
-    step = α*(UB-LB)/norm(lval)^2
-    debug("Step = $step")
-    debug("α = $α")
+    dif = sense == :Max ? Zk-LB : UB - Zk
+    μ=lval+θ* Kprev
+#    if norm(Kprev)>0 && dot(lval,Kprev)<0
+    if  dot(lval,Kprev)<0
+        θ=norm(lval)/norm(Kprev)
+      else
+        θ=0
+      end
+
 
     # update multiplier bounds (Bundle method)
     if update_method == :bundle
@@ -136,26 +200,26 @@ function lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterati
     end
     # Subgradient
     if update_method == :subgradient
+      step = α*dif/dot(lval,μ)
+      λk = λprev - step*μ
+    end
+
+    if update_method == :subgradient_original
+      step = α*dif/norm(lval)^2
       λk = λprev - step*lval
     end
 
-    # 10. Update objectives
-    # Restore initial objective
-    for (j,sp) in enumerate(SP)
-      sp.obj = SPObjectives[j]
-    end
-    # add dualized part
-    for l in 1:nmult
-      for j in 1:length(links[l].terms.vars)
-        var = links[l].terms.vars[j]
-        coeff = links[l].terms.coeffs[j]
-        var.m.obj += λk[l]*coeff*var
-      end
-    end
+    debug("Step = $step")
+    debug("α = $α")
 
     debug("UB = $UB")
     debug("LB = $LB")
+    debug("gap = $gap")
+    push!(df,[iter,round(time()-starttime),α,step,UB,LB,Hk,Zk,gap])
+
+    α < 1e-8 && break
+    step < 1e-8 && break
   end
   res[:Time] = toc()
-  return res
+  return res, df
 end
