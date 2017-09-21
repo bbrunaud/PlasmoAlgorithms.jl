@@ -54,11 +54,21 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterat
   θ = 0
   Kprev = [0 for j in 1:nmult]
   λk = [1.0 for j in 1:nmult]
-  λprev = [1.0 for j in 1:nmult]
+  λprev = λk
   i = 0
 
   # Solve realaxation
-  
+  # Restore mflat sense
+  if sense == :Max
+    mflat.objSense = :Max
+    mflat.obj = -mflat.obj
+  end
+
+  solve(mflat,relaxation=true)
+  bestbound = getobjectivevalue(mflat)
+  λk = getdual()
+
+
   # 5. Solve subproblems
   for iter in 1:max_iterations
     debug("*********************")
