@@ -12,7 +12,35 @@ function psolve(m::JuMP.Model)
   return d
 end
 
-function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=100,ϵ=0.001,α=2,UB=5e5,LB=-1e5,δ=0.9,λinit=:relaxation)
+function fixbinaries(mflat,cat=[:Bin])
+  for j in 1:mflat.numCols
+    if mflat.colCat[j] in cat
+      mflat.colUpper[j] = mflat.colVal[j]
+      mflat.colLower[j] = mflat.colVal[j]
+    end
+  end
+  status = solve(mflat)
+  if status == :Optimal
+    return getobjectivevalue(mflat)
+  else
+    error("Heuristic model not infeasible or unbounded")
+  end
+end
+
+function fixbinariesandintegers(mflat)
+  fixbinaries(mflat,[:Bin,:Int])
+end
+
+function  lagrangesolve(graph::PlasmoGraph;
+  update_method=:subgradient,
+  max_iterations=100,
+  ϵ=0.001,
+  α=2,
+  UB=5e5,
+  LB=-1e5,
+  δ=0.9,
+  λinit=:relaxation,
+  solveheuristic=fixbinaries)
 
   ########## 1. Initialize ########
   tic()
@@ -102,20 +130,12 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterat
       getmodel(nodedict[spd[:nodeindex]]).colVal = spd[:values]
     end
 
-
     Zprev = Zk
     debug("Zk = $Zk")
 
-    # 7. Solve Lagrange heuristic (fix integers and binaries)
+    # 7. Solve Lagrange heuristic
     mflat.colVal = vcat([getmodel(n).colVal for n in values(nodedict)]...)
-    for j in 1:mflat.numCols
-      if mflat.colCat[j] in (:Bin,:Int)
-        mflat.colUpper[j] = mflat.colVal[j]
-        mflat.colLower[j] = mflat.colVal[j]
-      end
-    end
-    solve(mflat)
-    Hk = getobjectivevalue(mflat)
+    Hk = solveheuristic(mflat)
     debug("Hk = $Hk")
 
     # 8. Update bounds and check bounds convergence
