@@ -53,13 +53,6 @@ function  lagrangesolve(graph::PlasmoGraph;
   links = getlinkconstraints(graph)
   nmult = length(links)
 
-  # Master Model (generate only for cutting planes or bundle methods)
-  if update_method in [:cuttingplanes,:bundle]
-    ms = Model(solver=graph.solver)
-    @variable(ms, η)
-    @variable(ms, λ[1:nmult])
-    @objective(ms, Min, η)
-  end
 
   # Equality constraint the multiplier is unbounded in sign. For <= or >= need to set the lower or upper bound at 0
   # TODO ... only accepting equality constraints with rhs 0 by now.
@@ -100,6 +93,18 @@ function  lagrangesolve(graph::PlasmoGraph;
   # TODO handle NLP relaxation
   λk = λinit == :relaxation ? mflat.linconstrDuals[end-nmult+1:end] : λk = [1.0 for j in 1:nmult]
   λprev = λk
+
+  # Master Model (generate only for cutting planes or bundle methods)
+  if update_method in [:cuttingplanes,:bundle]
+    ms = Model(solver=graph.solver)
+    @variable(ms, η)
+    @variable(ms, λ[1:nmult])
+    mssense = :Min
+    if sense == :Min
+      mssense = :Max
+    end
+    @objective(ms, mssense, η)
+  end
 
   # 5. Solve subproblems
   for iter in 1:max_iterations
