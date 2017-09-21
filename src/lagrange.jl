@@ -12,7 +12,7 @@ function psolve(m::JuMP.Model)
   return d
 end
 
-function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=100,ϵ=0.001,α=2,UB=5e5,LB=-1e5,δ=0.9)
+function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterations=100,ϵ=0.001,α=2,UB=5e5,LB=-1e5,δ=0.9,λinit=:relaxation)
 
   ########## 1. Initialize ########
   tic()
@@ -21,11 +21,7 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterat
   df = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[])
   res = Dict()
 
-  # Generate model for heuristic
-  mflat = create_flat_graph_model(graph)
-  mflat.solver = graph.solver
-
-  # Get Linkings
+    # Get Linkings
   links = getlinkconstraints(graph)
   nmult = length(links)
 
@@ -53,21 +49,29 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterat
   # Variables
   θ = 0
   Kprev = [0 for j in 1:nmult]
-  λk = [1.0 for j in 1:nmult]
-  λprev = λk
   i = 0
 
-  # Solve realaxation
+  # Generate model for heuristic
+  mflat = create_flat_graph_model(graph)
+  mflat.solver = graph.solver
   # Restore mflat sense
   if sense == :Max
     mflat.objSense = :Max
     mflat.obj = -mflat.obj
   end
-
+  # Solve realaxation
   solve(mflat,relaxation=true)
   bestbound = getobjectivevalue(mflat)
-  λk = getdual()
-
+  if sense == :Max
+    UB = bestbound
+  else
+    LB = bestbound
+  end
+  debug("Solved LP relaxation with value $bestbound")
+  # Set starting λ to the duals of the LP relaxation
+  # TODO handle NLP relaxation
+  λk = λinit == :relaxation ? mflat.linconstrDuals[end-nmult+1:end] : λk = [1.0 for j in 1:nmult]
+  λprev = λk
 
   # 5. Solve subproblems
   for iter in 1:max_iterations
@@ -112,8 +116,6 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterat
     end
     solve(mflat)
     Hk = getobjectivevalue(mflat)
-    # While mflat switches from Max to Min
-    Hk *= sense==:Min ? 1 : -1
     debug("Hk = $Hk")
 
     # 8. Update bounds and check bounds convergence
@@ -193,6 +195,16 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterat
         θ=0
       end
 
+    # Subgradient
+    if update_method == :subgradient || update_method in [:cuttingplanes,:bundle]
+      step = α*dif/dot(lval,μ)
+      λk = λprev + step*μ
+    end
+
+    if update_method == :subgradient_original
+      step = α*dif/norm(lval)^2
+      λk = λprev + step*lval
+    end
 
     # update multiplier bounds (Bundle method)
     if update_method == :bundle
@@ -203,25 +215,21 @@ function  lagrangesolve(graph::PlasmoGraph;update_method=:subgradient,max_iterat
     end
     # Cutting planes or Bundle
     if update_method in (:cuttingplanes,:bundle)
-      @constraint(ms, η >= Zk + sum(λ[j]*lval[j] for j in 1:nmult))
+      if sense == :Max
+        @constraint(ms, η >= Zk + sum(λ[j]*lval[j] for j in 1:nmult))
+      else
+        @constraint(ms, η <= Zk + sum(λ[j]*lval[j] for j in 1:nmult))
+      end
       debug("Last cut = $(ms.linconstr[end])")
-      solve(ms)
-      λk = getvalue(λ)
-    end
-    # Subgradient
-    if update_method == :subgradient
-      step = α*dif/dot(lval,μ)
-      λk = λprev - step*μ
+      if iter > 10
+        solve(ms)
+        λk = getvalue(λ)
+      end
     end
 
-    if update_method == :subgradient_original
-      step = α*dif/norm(lval)^2
-      λk = λprev - step*lval
-    end
 
     debug("Step = $step")
     debug("α = $α")
-
     debug("UB = $UB")
     debug("LB = $LB")
     debug("gap = $gap")

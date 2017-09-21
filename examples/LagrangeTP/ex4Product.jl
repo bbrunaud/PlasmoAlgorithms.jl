@@ -29,7 +29,7 @@ methods = [:subgradient]
 #methods = [:subgradient_original]
 Δ = [0.9]
 #Δ = 0.95
-maxiter = 50
+maxiter = 30
 
 DF = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[],Example=[],Method=[],δ=[])
 for method in methods
