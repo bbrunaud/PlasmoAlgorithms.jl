@@ -46,7 +46,7 @@ function  lagrangesolve(graph::PlasmoGraph;
   tic()
   starttime = time()
   # Results outputs
-  df = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[])
+  df = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[],λ=[])
   res = Dict()
 
     # Get Linkings
@@ -258,7 +258,7 @@ function  lagrangesolve(graph::PlasmoGraph;
     debug("UB = $UB")
     debug("LB = $LB")
     debug("gap = $gap")
-    push!(df,[iter,round(time()-starttime),α,step,UB,LB,Hk,Zk,gap])
+    push!(df,[iter,round(time()-starttime),α,step,UB,LB,Hk,Zk,gap,λk])
 
     α < 1e-8 && break
     step < 1e-8 && break
