@@ -42,35 +42,27 @@ function  lagrangesolve(graph::PlasmoGraph;
   λinit=:relaxation,
   solveheuristic=fixbinaries)
 
-  ########## 1. Initialize ########
+  ########## 0. Initialize ########
+  # Start clock
   tic()
   starttime = time()
+
   # Results outputs
   df = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[])
   res = Dict()
 
-    # Get Linkings
+  # Get Linkings
   links = getlinkconstraints(graph)
   nmult = length(links)
 
-
-  # Equality constraint the multiplier is unbounded in sign. For <= or >= need to set the lower or upper bound at 0
-  # TODO ... only accepting equality constraints with rhs 0 by now.
-
   # Generate subproblem array
-  # Assuming nodes are created in order
-  SP = [graph.nodes[i].attributes[:model] for i in 1:length(graph.nodes)]
+  SP = [getmodel(graph.nodes[i]) for i in 1:length(graph.nodes)]
   for sp in SP
     JuMP.setsolver(sp,graph.solver)
   end
   # Capture objectives
-  SPObjectives = [graph.nodes[i].attributes[:model].obj for i in 1:length(graph.nodes)]
+  SPObjectives = [getmodel(graph.nodes[i]).obj for i in 1:length(graph.nodes)]
   sense = SP[1].objSense
-
-  # Variables
-  θ = 0
-  Kprev = [0 for j in 1:nmult]
-  i = 0
 
   # Generate model for heuristic
   mflat = create_flat_graph_model(graph)
@@ -94,6 +86,12 @@ function  lagrangesolve(graph::PlasmoGraph;
   λk = λinit == :relaxation ? mflat.linconstrDuals[end-nmult+1:end] : λk = [1.0 for j in 1:nmult]
   λprev = λk
 
+  # Variables
+  θ = 0
+  Kprev = [0 for j in 1:nmult]
+  i = 0
+  direction = nothing
+
   # Master Model (generate only for cutting planes or bundle methods)
   if update_method in [:cuttingplanes,:bundle]
     ms = Model(solver=graph.solver)
@@ -106,13 +104,19 @@ function  lagrangesolve(graph::PlasmoGraph;
     @objective(ms, mssense, η)
   end
 
-  # 5. Solve subproblems
+  ## <-- Begin Iterations --> ##
+
+  ########## 1. Solve Subproblems ########
   for iter in 1:max_iterations
     debug("*********************")
     debug("*** ITERATION $iter  ***")
     debug("*********************")
 
-    # 10. Update objectives
+    Zk = 0
+    Zprev = sense == :Max ? UB : LB
+    improved = false
+
+
     # Restore initial objective
     for (j,sp) in enumerate(SP)
       sp.obj = SPObjectives[j]
@@ -126,112 +130,90 @@ function  lagrangesolve(graph::PlasmoGraph;
       end
     end
 
-    Zprev = 0
-    SPR = pmap(psolve,SP)
-    Zk = 0
+    # Solve
+    SP_result = pmap(psolve,SP)
+    # Put values back in the graph
     nodedict = getnodes(graph)
-    for spd in SPR
+    for spd in SP_result
       Zk += spd[:objective]
       getmodel(nodedict[spd[:nodeindex]]).colVal = spd[:values]
     end
-
-    Zprev = Zk
     debug("Zk = $Zk")
 
-    # 7. Solve Lagrange heuristic
+
+    ########## 2. Solve Lagrangean Heuristic ########
     mflat.colVal = vcat([getmodel(n).colVal for n in values(nodedict)]...)
     Hk = solveheuristic(mflat)
     debug("Hk = $Hk")
 
-    # 8. Update bounds and check bounds convergence
-    # Minimization problem
-###
+
+    ########## 3. Check for Bounds Convergence ########
+    # Update Bounds
     UBprev = UB
-###
     LBprev = LB
-    improved = true
-    if sense == :Min
-      if iter > 4
-        if LB == LBprev
-          i += 1
-          improved = false
-        else
-          i = 0
-          α = 2
-        end
-        if i > 2
-          α *= δ
-          i = 0
-        end
-      end
-      LB = max(Zk,LB)
-      UB = min(Hk,UB)
-      graph.objVal = UB
-      gap = (UB - LB)/UB
-      gap < ϵ &&  break
-    else
-      if iter > 1
-        if UB == UBprev
-          i += 1
-          improved = false
-        else
-          i = 0
-          α = 2
-        end
-        if i > 4
-          α *= δ
-          i = 0
-        end
-      end
-      LB = max(Hk,LB)
-      UB = min(Zk,UB)
-      graph.objVal = LB
-      gap = (UB - LB)/LB
-      gap < ϵ &&  break
-    end
+    bestbound_prev = bestbound
+    UB = sense == :Max ? min(Zk,UB) : min(Hk,UB)
+    LB = sense == :Max ? max(Hk,LB) : max(Zk,LB)
 
+    # Update objective value and calculate gap
+    objective = sense == :Max ? LB : UB
+    bestbound = sense == :Max ? UB : LB
+    graph.objVal = objective
+    gap = (UB - LB)/objective
 
+    # Check
+    gap < ϵ && debug("Converged on bounds to $objective")  && break
 
+    # Increase or restore bestbound improvement counter
+    i += bestbound == bestbound_prev ? 1 : -i
+    debug("i = $i")
 
-    #end
-    res[:Objective] = sense == :Min ? UB : LB
-    res[:BestBound] = sense == :Min ? LB : UB
-    res[:Iterations] = iter
-
-
-    # 9. Update λ
+    ########## 3. Check for improvement and update λ ########
+    improved = sense == :Max ? Zk < Zprev*1.1 : Zk > Zprev*1.1
+    debug("Compared Zkprev + 10% = $(Zprev*1.1) with Zk = $Zk and improved is $improved")
+    # Force first step
     if iter == 1
-      λprev = λk
-      println("Set λprev at iter 1")
+      improved = true
     end
+
+    # Line search
+    # If improvement take step, else reduce α
     if improved
+      Zk < Zprev && debug("IMPROVED bound")
+      Zk = Zprev
+      direction = [getvalue(links[j].terms) for j in 1:nmult]
       λprev = λk
-      println("UPDATED λprev")
+      debug("STEP taken")
+    else
+      α *= 0.5
     end
 
-    # 9. Multipliers Update
-    lval = [getvalue(links[j].terms) for j in 1:nmult]
-    dif = sense == :Max ? Zk-LB : UB - Zk
-    μ=lval+θ* Kprev
-#    if norm(Kprev)>0 && dot(lval,Kprev)<0
-    if  dot(lval,Kprev)<0
-        θ=norm(lval)/norm(Kprev)
+    # Check convergence on α and direction
+    α < 1e-20 && debug("Converged on α = $α")  && break
+    normdirection = norm(direction)
+    norm(direction) == 0 && debug("Converged to feasible point")  && break
+
+    # Subgradient update
+    difference = sense == :Max ? Zk - LB : UB - Zk
+
+    # Direction correction method method
+    μ = direction + θ*Kprev
+    if update_method == :subgradient_correction
+      if  dot(direction,Kprev) < 0
+          θ = normdirection/norm(Kprev)
       else
-        θ=0
+        θ = 0
       end
-
-    # Subgradient
-    if update_method == :subgradient || update_method in [:cuttingplanes,:bundle]
-      step = α*dif/dot(lval,μ)
-      λk = λprev + step*μ
     end
+    # If the update method is without direction correction Θ = 0 and μ defaults to direction
+    step = α*difference/dot(direction,μ)
+    λk = λprev - step*μ
 
-    if update_method == :subgradient_original
-      step = α*dif/norm(lval)^2
-      λk = λprev + step*lval
-    end
+    # Check step convergence
+    step < 1e-20 && debug("Converged on step = $step")  && break
 
-    # update multiplier bounds (Bundle method)
+
+    # Update multiplier bounds (Bundle method)
     if update_method == :bundle
       for j in 1:nmult
         setupperbound(λ[j], λprev[j] + step*abs(lval[j]))
@@ -252,17 +234,23 @@ function  lagrangesolve(graph::PlasmoGraph;
       end
     end
 
-
+    # Report
     debug("Step = $step")
     debug("α = $α")
     debug("UB = $UB")
     debug("LB = $LB")
     debug("gap = $gap")
-    push!(df,[iter,round(time()-starttime),α,step,UB,LB,Hk,Zk,gap,λk])
+    push!(df,[iter,round(time()-starttime),α,step,UB,LB,Hk,Zk,gap])
 
-    α < 1e-8 && break
-    step < 1e-8 && break
-  end
+    res[:Iterations] = iter
+    res[:Gap] = gap
+
+  end # Iterations
+
+  # Report
+  res[:Objective] = sense == :Min ? UB : LB
+  res[:BestBound] = sense == :Min ? LB : UB
   res[:Time] = toc()
   return res, df
-end
+
+end # function
