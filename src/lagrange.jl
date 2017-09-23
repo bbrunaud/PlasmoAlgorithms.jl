@@ -180,12 +180,19 @@ function  lagrangesolve(graph::PlasmoGraph;
     # If improvement take step, else reduce α
     if improved
       Zk < Zprev && debug("IMPROVED bound")
-      Zk = Zprev
+      Zprev = Zk
       direction = [getvalue(links[j].terms) for j in 1:nmult]
       λprev = λk
       debug("STEP taken")
     else
       α *= 0.5
+    end
+
+    # Shrink α if stuck
+    if iter > 10 && i > 4
+      α *= 0.8
+      i = 0
+      debug("STUCK, shrink α")
     end
 
     # Check convergence on α and direction
@@ -216,16 +223,16 @@ function  lagrangesolve(graph::PlasmoGraph;
     # Update multiplier bounds (Bundle method)
     if update_method == :bundle
       for j in 1:nmult
-        setupperbound(λ[j], λprev[j] + step*abs(lval[j]))
-        setlowerbound(λ[j], λprev[j] - step*abs(lval[j]))
+        setupperbound(λ[j], λprev[j] + step*abs(direction[j]))
+        setlowerbound(λ[j], λprev[j] - step*abs(direction[j]))
       end
     end
     # Cutting planes or Bundle
     if update_method in (:cuttingplanes,:bundle)
       if sense == :Max
-        @constraint(ms, η >= Zk + sum(λ[j]*lval[j] for j in 1:nmult))
+        @constraint(ms, η >= Zk + sum(λ[j]*direction[j] for j in 1:nmult))
       else
-        @constraint(ms, η <= Zk + sum(λ[j]*lval[j] for j in 1:nmult))
+        @constraint(ms, η <= Zk + sum(λ[j]*direction[j] for j in 1:nmult))
       end
       debug("Last cut = $(ms.linconstr[end])")
       if iter > 10

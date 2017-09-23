@@ -1,4 +1,4 @@
-include("ex4Temporal.jl")
+include("ex4ProdTemp.jl")
 
 method = :subgradient
 δ = 0.9
@@ -10,7 +10,7 @@ df[:Example] = ["Example4 Temporal" for i in 1:iters]
 df[:Method] = [method for i in 1:iters]
 df[:δ] = [δ for i in 1:iters]
 
-result[:Example] = "Example4 Temporal"
+result[:Example] = "Example4 Product Temporal"
 result[:Method] = method
 result[:δ] = δ
 

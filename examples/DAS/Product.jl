@@ -31,8 +31,25 @@ end
 @linkconstraint(g, [j in warehouses, p in 1:(numproducts-1), t in periods], node[p][:y][j,t,products[p]] == node[p+1][:y][j,t,products[p+1]])
 @linkconstraint(g, [i in origins, j in destinations, p in 1:(numproducts-1), t in periods], node[p][:unf][i,j,products[p],t] == node[p+1][:uni][i,j,products[p+1],t])
 
-result = lagrangesolve(g)
+function fixwarehouses(mf)
+  y = getindex(mf,:y)
+  for j in warehouses
+    for t in perioods
+      maxy = maximum(getvalue(y[j,t,p]) for p in products)
+      for p in products
+        setlowerbound(y[j,t,p], maxy)
+      end
+    end
+  end
+  status = solve(mf)
+  if status == :Optimal
+    return getobjectivevalue(mf)
+  else
+    error("Heuristic model not infeasible or unbounded")
+  end
+end
+
+result = lagrangesolve(g,solveheuristic=fixwarehouses)
 
 display(result)
 println("")
-
