@@ -6,12 +6,13 @@ using Gurobi
 Logging.configure(level=DEBUG)
 
 g = PlasmoGraph()
-g.solver = GurobiSolver(MIPGap=0.01,OutputFlag=0)
+g.solver = GurobiSolver(MIPGap=0.01)
 
 include("ProductDecomposition.jl")
 
 customers = ["CUS$i" for i in 1:10]
-products = ["PROD$i" for i in 1:10]
+numproducts = 10
+products = ["PROD$i" for i in 1:numproducts]
 periods = 1:12
 
 numproducts = length(products)
@@ -32,13 +33,16 @@ end
 @linkconstraint(g, [i in origins, j in destinations, p in 1:(numproducts-1), t in periods], node[p][:unf][i,j,products[p],t] == node[p+1][:uni][i,j,products[p+1],t])
 
 function fixwarehouses(mf)
-  y = getindex(mf,:y)
   for j in warehouses
     for t in perioods
-      maxy = maximum(getvalue(y[j,t,p]) for p in products)
-      for p in products
-        setlowerbound(y[j,t,p], maxy)
+      vars = []
+      vals = []
+      for p in 1:numproducts
+        push!(vars,getindex(mf,Symbol("node$p.y[$j,$t,PROD$p]")))
+        push!(vals,getvalue(vars[p]))
       end
+      maxy = maximum(vals)
+      map(setlowerbound,vars,[maxy for k in 1:length(vars)])
     end
   end
   status = solve(mf)
