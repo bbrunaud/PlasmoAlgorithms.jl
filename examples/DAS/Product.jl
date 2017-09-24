@@ -10,10 +10,10 @@ g.solver = GurobiSolver(MIPGap=0.01)
 
 include("ProductDecomposition.jl")
 
-customers = ["CUS$i" for i in 1:10]
+customers = ["CUS$i" for i in 1:1]
 numproducts = 10
 products = ["PROD$i" for i in 1:numproducts]
-periods = 1:12
+periods = 1:3
 
 numproducts = length(products)
 origins = vcat(plants,warehouses)
@@ -34,7 +34,7 @@ end
 
 function fixwarehouses(mf)
   for j in warehouses
-    for t in perioods
+    for t in periods
       vars = []
       vals = []
       for p in 1:numproducts
@@ -53,7 +53,7 @@ function fixwarehouses(mf)
   end
 end
 
-result = lagrangesolve(g,solveheuristic=fixwarehouses)
+#result = lagrangesolve(g,solveheuristic=fixwarehouses)
 
-display(result)
-println("")
+#display(result)
+#println("")
