@@ -91,6 +91,7 @@ function  lagrangesolve(graph::PlasmoGraph;
   Kprev = [0 for j in 1:nmult]
   i = 0
   direction = nothing
+  Zprev = sense == :Max ? UB : LB
 
   # Master Model (generate only for cutting planes or bundle methods)
   if update_method in [:cuttingplanes,:bundle]
@@ -113,7 +114,6 @@ function  lagrangesolve(graph::PlasmoGraph;
     debug("*********************")
 
     Zk = 0
-    Zprev = sense == :Max ? UB : LB
     improved = false
 
 
@@ -174,6 +174,7 @@ function  lagrangesolve(graph::PlasmoGraph;
     # Force first step
     if iter == 1
       improved = true
+      Zprev = Zk
     end
 
     # Line search
