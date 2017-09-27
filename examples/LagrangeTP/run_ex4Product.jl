@@ -1,4 +1,4 @@
-include("ex4Product_aggmult.jl")
+include("ex4Product.jl")
 
 method = :subgradient
 δ = 0.9
