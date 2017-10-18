@@ -1,8 +1,8 @@
 using JuMP
 using Gurobi
 using Plasmo
+using PlasmoAlgorithms
 
-include("benders.jl")
 
 ##Place MP and SP into PlasmoGraph
 mp = Model(solver = GurobiSolver())
@@ -31,4 +31,4 @@ edge = Plasmo.add_edge(g,n1,n2)
 ## Linking constraints between MP and SP
 @linkconstraint(g, n1[:y] == n2[:y])
 
-print(bendersolve(g,20))
+bendersolve(g,max_iterations=20)
