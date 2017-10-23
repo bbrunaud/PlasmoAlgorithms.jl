@@ -36,6 +36,8 @@ function bendersetup(graph::PlasmoGraph)
     dict[graph.nodes[node]] = Set()
   end
 
+  @variable(sp, valbar[1:numLinks])
+
   for link in 1:numLinks
     var1 = links[link].terms.vars[1]
     var2 = links[link].terms.vars[2]
@@ -46,12 +48,14 @@ function bendersetup(graph::PlasmoGraph)
       sp = getmodel(nodeV1)
       linkIndex = dict[nodeV2]
       push!(linkIndex,link)
-      @variable(sp, valbar[1:numLinks])
+      valbar = getindex(sp,:valbar)
+      @constraint(sp, dual, valbar[link] - var1 == 0)
     elseif isChildNode(graph,nodeV2,nodeV1)
       sp = getmodel(nodeV2)
       linkIndex = dict[nodeV1]
       push!(linkIndex,link)
-      @variable(sp, valbar[1:numLinks])
+      valbar = getindex(sp,:valbar)
+      @constraint(sp, dual, valbar[link] - var2 == 0)
     end
   end
   return (graph,dict)
@@ -60,6 +64,7 @@ end
 function benderparent(graph::PlasmoGraph, dict::Dict, max_iterations::Int64, currentNode::PlasmoNode,nodeIndex)
   numParents = numParentNodes(graph, currentNode)
   if numParents == 0
+    println("Optimal Master Objective = ", getobjectivevalue(getmodel(currentNode)))
     return getobjectivevalue(getmodel(currentNode))
   end
 
@@ -77,9 +82,8 @@ function benderparent(graph::PlasmoGraph, dict::Dict, max_iterations::Int64, cur
   @constraint(mp,θ[nodeIndex]>=0)
   mp.obj += θ[nodeIndex]
 
-  for i in max_iterations
+  for i in 1:max_iterations
     solve(mp)
-
     links = getlinkconstraints(graph)
     nodelinks = dict[parentNode]
 
@@ -96,19 +100,18 @@ function benderparent(graph::PlasmoGraph, dict::Dict, max_iterations::Int64, cur
         var = var2
         valbar = getindex(sp, :valbar)
         fix(valbar[link],val)
-        @constraint(sp, dual, valbar[link] - var1 == 0)
       elseif isChildNode(graph,nodeV2,nodeV1)
         sp = getmodel(nodeV2)
         val = getvalue(var1)
         valbar = getindex(sp, :valbar)
         var = var1
-        println("*help")
-        #TODO ask Braulio why this doesn't recognize valbar as a variable
         fix(valbar[link],val)
-        @constraint(sp, dual, valbar[link] - var2 == 0)
       end
-
+      println(sp)
+      println(mp)
+      solve(mp)
       status = solve(sp)
+      dual = getindex(sp,:dual)
       λ = getdual(dual)
 
       if status != :Optimal
@@ -117,7 +120,7 @@ function benderparent(graph::PlasmoGraph, dict::Dict, max_iterations::Int64, cur
       else
         θk = getobjectivevalue(sp)
         if θk == getvalue(θ[nodeIndex])
-          benderparent(graph,dict,max_iterations, parentNode)
+          benderparent(graph,dict,max_iterations, parentNode, nodeIndex)
         end
         @constraint(mp, θ[nodeIndex] >= θk + λ*(getvalue(valbar[link])-var))
       end
@@ -140,6 +143,7 @@ function bendersrecursive(graph::PlasmoGraph, dict::Dict, max_iterations::Int64,
 end
 
 function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations = 10)
+    println("*START")
     g, dict =  bendersetup(graph)
     bendersrecursive(g,dict,max_iterations)
 end
