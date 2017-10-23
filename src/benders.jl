@@ -36,7 +36,7 @@ function bendersetup(graph::PlasmoGraph)
     dict[graph.nodes[node]] = Set()
   end
 
-  @variable(sp, valbar[1:numLinks])
+
 
   for link in 1:numLinks
     var1 = links[link].terms.vars[1]
@@ -48,18 +48,21 @@ function bendersetup(graph::PlasmoGraph)
       sp = getmodel(nodeV1)
       linkIndex = dict[nodeV2]
       push!(linkIndex,link)
+      @variable(sp, valbar[1:numLinks])
       valbar = getindex(sp,:valbar)
       @constraint(sp, dual, valbar[link] - var1 == 0)
     elseif isChildNode(graph,nodeV2,nodeV1)
       sp = getmodel(nodeV2)
       linkIndex = dict[nodeV1]
       push!(linkIndex,link)
+      @variable(sp, valbar[1:numLinks])
       valbar = getindex(sp,:valbar)
       @constraint(sp, dual, valbar[link] - var2 == 0)
     end
   end
   return (graph,dict)
 end
+
 
 function benderparent(graph::PlasmoGraph, dict::Dict, max_iterations::Int64, currentNode::PlasmoNode,nodeIndex)
   numParents = numParentNodes(graph, currentNode)
@@ -120,6 +123,7 @@ function benderparent(graph::PlasmoGraph, dict::Dict, max_iterations::Int64, cur
       else
         θk = getobjectivevalue(sp)
         if θk == getvalue(θ[nodeIndex])
+          debug("Converged to θ=$θk in $i iterations")
           benderparent(graph,dict,max_iterations, parentNode, nodeIndex)
         end
         @constraint(mp, θ[nodeIndex] >= θk + λ*(getvalue(valbar[link])-var))
