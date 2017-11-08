@@ -80,12 +80,7 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     end
   end
 
-<<<<<<< HEAD
   #Add dual constraint to child nodes using the linking constraints
-=======
-
-
->>>>>>> 73b4d939a779b28af82ba5839840ab349b4b03b0
   for link in 1:numLinks
     #Take the two variables of the constraint
     var1 = links[link].terms.vars[1]
@@ -95,7 +90,6 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     nodeV2 = getnode(var2)
     #Set the order of the nodes
     if isChildNode(graph,nodeV1,nodeV2)
-<<<<<<< HEAD
       childNode = nodeV1
       childvar = var1
       parentNode = nodeV2
@@ -103,21 +97,6 @@ function preProcess(graph::Plasmo.PlasmoGraph)
       childNode = nodeV2
       childvar = var2
       parentNode = nodeV1
-=======
-      sp = getmodel(nodeV1)
-      linkIndex = dict[nodeV2]
-      push!(linkIndex,link)
-      @variable(sp, valbar[1:numLinks])
-      valbar = getindex(sp,:valbar)
-      @constraint(sp, dual, valbar[link] - var1 == 0)
-    elseif isChildNode(graph,nodeV2,nodeV1)
-      sp = getmodel(nodeV2)
-      linkIndex = dict[nodeV1]
-      push!(linkIndex,link)
-      @variable(sp, valbar[1:numLinks])
-      valbar = getindex(sp,:valbar)
-      @constraint(sp, dual, valbar[link] - var2 == 0)
->>>>>>> 73b4d939a779b28af82ba5839840ab349b4b03b0
     end
     #Add theta[childNode] to the parent node objective
     mp = getmodel(parentNode)
@@ -134,10 +113,9 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     linkIndex = dict[parentNode]
     push!(linkIndex,link)
   end
-  return g, dict, levels
+  return dict, levels
 end
 
-<<<<<<< HEAD
 function forwardStep(graph::Plasmo.PlasmoGraph, dict::Dict, node::Plasmo.PlasmoNode)
   #If node has no children exit function; we have reached the end of the tree
   if numChildNodes(graph, node) == 0
@@ -165,73 +143,6 @@ function forwardStep(graph::Plasmo.PlasmoGraph, dict::Dict, node::Plasmo.PlasmoN
       childNode = nodeV2
       parentNode = nodeV1
       val = getvalue(var1)
-=======
-
-function benderparent(graph::PlasmoGraph, dict::Dict, max_iterations::Int64, currentNode::PlasmoNode,nodeIndex)
-  numParents = numParentNodes(graph, currentNode)
-  if numParents == 0
-    println("Optimal Master Objective = ", getobjectivevalue(getmodel(currentNode)))
-    return getobjectivevalue(getmodel(currentNode))
-  end
-
-  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,currentNode))
-  parentNodeIndex = parentNodes[1]
-  parentNode = graph.nodes[parentNodeIndex]
-
-  numNodes = length(graph.nodes)
-
-  mp = getmodel(parentNode)
-  sp = getmodel(currentNode)
-
-  #TODO change to flattening graph and adding bound
-  @variable(mp,θ[1:numNodes])
-  @constraint(mp,θ[nodeIndex]>=0)
-  mp.obj += θ[nodeIndex]
-
-  for i in 1:max_iterations
-    solve(mp)
-    links = getlinkconstraints(graph)
-    nodelinks = dict[parentNode]
-
-    for link in nodelinks
-      var1 = links[link].terms.vars[1]
-      var2 = links[link].terms.vars[2]
-
-      nodeV1 = getnode(var1)
-      nodeV2 = getnode(var2)
-
-      if isChildNode(graph,nodeV1,nodeV2)
-        sp = getmodel(nodeV1)
-        val = getvalue(var2)
-        var = var2
-        valbar = getindex(sp, :valbar)
-        fix(valbar[link],val)
-      elseif isChildNode(graph,nodeV2,nodeV1)
-        sp = getmodel(nodeV2)
-        val = getvalue(var1)
-        valbar = getindex(sp, :valbar)
-        var = var1
-        fix(valbar[link],val)
-      end
-      println(sp)
-      println(mp)
-      solve(mp)
-      status = solve(sp)
-      dual = getindex(sp,:dual)
-      λ = getdual(dual)
-
-      if status != :Optimal
-        @constraint(mp, 0 >= λ*(getupperbound(valbar[link])-var))
-        println(mp)
-      else
-        θk = getobjectivevalue(sp)
-        if θk == getvalue(θ[nodeIndex])
-          debug("Converged to θ=$θk in $i iterations")
-          benderparent(graph,dict,max_iterations, parentNode, nodeIndex)
-        end
-        @constraint(mp, θ[nodeIndex] >= θk + λ*(getvalue(valbar[link])-var))
-      end
->>>>>>> 73b4d939a779b28af82ba5839840ab349b4b03b0
     end
     #Set valbar in child node associated with link to variable value in parent
     sp = getmodel(childNode)
@@ -302,7 +213,7 @@ function backwardStep(graph::Plasmo.PlasmoGraph, levels::Dict, dict::Dict)
 end
 
 function bendersolve(graph::Plasmo.PlasmoGraph, max_iterations::Int64)
-    g, dict, levels = preProcess(graph)
+    dict, levels = preProcess(graph)
     numLevels = length(levels)
     for i in 1:max_iterations
       debug("Iteration $i")
