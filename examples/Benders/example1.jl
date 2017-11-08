@@ -31,4 +31,4 @@ edge = Plasmo.add_edge(g,n1,n2)
 ## Linking constraints between MP and SP
 @linkconstraint(g, n1[:y] == n2[:y])
 
-bendersolve(g,max_iterations=20)
+bendersolve(g,20)

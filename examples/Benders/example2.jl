@@ -55,8 +55,8 @@ edge1 = Plasmo.add_edge(g,n1,n2)
 edge2 = Plasmo.add_edge(g,n1,n3)
 edge3 = Plasmo.add_edge(g,n1,n4)
 
-@linkconstraint(g, n1[:x[1:3]] == n2[:x[1:3]])
-@linkconstraint(g, n1[:x[1:3]] == n3[:x[1:3]])
-@linkconstraint(g, n1[:x[1:3]] == n4[:x[1:3]])
+@linkconstraint(g,[i in 1:3], n1[:x][i] == n2[:x][i])
+@linkconstraint(g,[i in 1:3], n1[:x][i] == n3[:x][i])
+@linkconstraint(g,[i in 1:3], n1[:x][i] == n4[:x][i])
 
 bendersolve(g,max_iterations = 4)

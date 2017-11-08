@@ -62,6 +62,7 @@ function preProcess(graph::Plasmo.PlasmoGraph)
 
   #Create a dictionary for node relationships
   dict = Dict()
+  childDict = Dict()
 
   #Add each node as a key to the dictionary
   for index in 1:length(graph.nodes)
@@ -215,15 +216,16 @@ end
 
 function bendersolve(graph::Plasmo.PlasmoGraph, max_iterations::Int64)
     g, dict, levels = preProcess(graph)
+    numLevels = length(levels)
     for i in 1:max_iterations
-      #TODO define upper and lower bound
-      #UB = 
-      #LB =
+      forwardStep(graph, dict, graph.nodes[1])
+      LB = getobjectivevalue(getmodel(graph.nodes[1]))
+      backwardStep(graph, levels, dict)
+      ##TODO ask Braulio about where the UB needs to be
+      UB = 0
       if UB == LB
         break
       end
-      forwardStep(graph, dict, graph.nodes[1])
-      backwardStep(graph, levels, dict)
     end
     return getobjectivevalue(getmodel(graph.nodes[1]))
 end
