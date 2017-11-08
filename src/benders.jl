@@ -155,7 +155,6 @@ function forwardStep(graph::Plasmo.PlasmoGraph, dict::Dict, node::Plasmo.PlasmoN
   for index in 1:length(graph.nodes)
     testNode = graph.nodes[index]
     model = getmodel(testNode)
-    println(model)
   end
 end
 
@@ -168,12 +167,11 @@ function backwardStep(graph::Plasmo.PlasmoGraph, levels::Dict, dict::Dict)
         parentIndex = getindex(graph, parentNode)
         childIndex = getindex(graph, node)
         sp = getmodel(node)
-        println(sp)
         mp = getmodel(parentNode)
         status = solve(sp)
         dualCon = getindex(sp,:dual)
         λ = getdual(dualCon)
-        println(λ)
+        debug("Dual solution is found to be $λ")
 
         links = getlinkconstraints(graph)
         nodeLinks = dict[parentNode]
@@ -218,14 +216,16 @@ function bendersolve(graph::Plasmo.PlasmoGraph, max_iterations::Int64)
     g, dict, levels = preProcess(graph)
     numLevels = length(levels)
     for i in 1:max_iterations
+      debug("Iteration $i")
       forwardStep(graph, dict, graph.nodes[1])
       LB = getobjectivevalue(getmodel(graph.nodes[1]))
-      backwardStep(graph, levels, dict)
+      debug("Lowerbound = $LB")
       ##TODO ask Braulio about where the UB needs to be
       UB = 0
       if UB == LB
         break
       end
+      backwardStep(graph, levels, dict)
     end
     return getobjectivevalue(getmodel(graph.nodes[1]))
 end
