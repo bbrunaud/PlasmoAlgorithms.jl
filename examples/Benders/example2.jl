@@ -39,6 +39,20 @@ sp3 = Model(solver = GurobiSolver())
 @constraint(sp3, w[11]<=6000)
 @objective(sp3, Min, (-1/3)*(170w[9]-238y[5]+150w[10]-210y[6]+36w[11]+10w[12]))
 
+function farmers_sp(p)
+    sp = Model(solver=GurobiSolver())
+    @variable(sp,w[9:12]>=0)
+    @variable(sp,y[5:6]>=0)
+    @variable(sp, x[1:3]>=0)
+    @constraint(sp, p[1]*x[1]+y[5]-w[9]>=200)
+    @constraint(sp, p[2]*x[2]+y[6]-w[10]>=240)
+    @constraint(sp, w[11]+w[12]<=p[3]*x[3])
+    @constraint(sp, w[11]<=6000)
+    @objective(sp, Min, (-1/3)*(170w[9]-238y[5]+150w[10]-210y[6]+36w[11]+10w[12]))
+
+    return sp
+end
+
 g = PlasmoGraph()
 g.solver = GurobiSolver()
 n1 = add_node(g)
@@ -55,8 +69,14 @@ edge1 = Plasmo.add_edge(g,n1,n2)
 edge2 = Plasmo.add_edge(g,n1,n3)
 edge3 = Plasmo.add_edge(g,n1,n4)
 
+<<<<<<< HEAD
 @linkconstraint(g,[i in 1:3], n1[:x][i] == n2[:x][i])
 @linkconstraint(g,[i in 1:3], n1[:x][i] == n3[:x][i])
 @linkconstraint(g,[i in 1:3], n1[:x][i] == n4[:x][i])
+=======
+@linkconstraint(g, [i in 1:3], n1[:x][i] == n2[:x][i])
+@linkconstraint(g, [i in 1:3], n1[:x][i] == n3[:x][i])
+@linkconstraint(g, [i in 1:3], n1[:x][i] == n4[:x][i])
+>>>>>>> 73b4d939a779b28af82ba5839840ab349b4b03b0
 
-bendersolve(g,max_iterations = 4)
+#bendersolve(g,max_iterations = 4)

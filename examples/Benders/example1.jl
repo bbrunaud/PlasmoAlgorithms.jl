@@ -2,6 +2,10 @@ using JuMP
 using Gurobi
 using Plasmo
 using PlasmoAlgorithms
+using Logging
+
+Logging.configure(level=DEBUG)
+
 
 
 ##Place MP and SP into PlasmoGraph
