@@ -16,7 +16,7 @@ sp3 = Model(solver = GurobiSolver())
 @variable(sp1, y[1:2]>=0)
 @variable(sp1, x[1:3]>=0)
 @constraint(sp1, 3x[1]+y[1]-w[1]>=200)
-@constraint(sp1, 3.6x[2]+y[2]+w[2]>= 240)
+@constraint(sp1, 3.6x[2]+y[2]-w[2]>= 240)
 @constraint(sp1, w[3]+w[4]<=24x[3])
 @constraint(sp1, w[3]<=6000)
 @objective(sp1,Min,(-1/3)*(170w[1]-238y[1]+150w[2]-210y[2]+36w[3]+10w[4]))
@@ -69,14 +69,9 @@ edge1 = Plasmo.add_edge(g,n1,n2)
 edge2 = Plasmo.add_edge(g,n1,n3)
 edge3 = Plasmo.add_edge(g,n1,n4)
 
-<<<<<<< HEAD
+
 @linkconstraint(g,[i in 1:3], n1[:x][i] == n2[:x][i])
 @linkconstraint(g,[i in 1:3], n1[:x][i] == n3[:x][i])
 @linkconstraint(g,[i in 1:3], n1[:x][i] == n4[:x][i])
-=======
-@linkconstraint(g, [i in 1:3], n1[:x][i] == n2[:x][i])
-@linkconstraint(g, [i in 1:3], n1[:x][i] == n3[:x][i])
-@linkconstraint(g, [i in 1:3], n1[:x][i] == n4[:x][i])
->>>>>>> 73b4d939a779b28af82ba5839840ab349b4b03b0
 
-#bendersolve(g,max_iterations = 4)
+#bendersolve(g,max_iterations = 1)

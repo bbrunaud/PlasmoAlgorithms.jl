@@ -93,6 +93,7 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     #Add theta to parent nodes
     if numChildNodes(graph,node) != 0
       mp = getmodel(node)
+      mp.ext[:preobj] = mp.obj
       @variable(mp,θ[1:numNodes] >= 0)
     end
   end
@@ -162,7 +163,7 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
     currentLevel = levels[level]
     for node in currentLevel
       mp = getmodel(node)
-      solve(mp, relaxation = true)
+      solve(mp)
       #Get the constraints linked to this node from the dictionary
       nodelinks = linksMap[node]
       #Iterate through linking constraints
@@ -195,10 +196,12 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
   LB = 0
   UB = 0
   for root in roots
-    LB = LB + getobjectivevalue(getmodel(root))
+    rootmodel = getmodel(root)
+    LB = LB + getobjectivevalue(rootmodel)
+    UB += getvalue(rootmodel.ext[:preobj])
   end
   for leaf in leaves
-    solve(getmodel(leaf), relaxation = true)
+    solve(getmodel(leaf))
     UB = UB + getobjectivevalue(getmodel(leaf))
   end
   return LB,UB
@@ -242,6 +245,7 @@ function backwardStep(graph::Plasmo.PlasmoGraph)
 
       mp = getmodel(parentNode)
       θ = getindex(mp,:θ)
+      # TODO Different kinds of relaxations
       status = solve(getmodel(node), relaxation = true)
       rhs = 0
       for i in 1:length(variables)
@@ -251,13 +255,13 @@ function backwardStep(graph::Plasmo.PlasmoGraph)
         @constraint(mp, 0 >= rhs)
       else
         θk = getobjectivevalue(getmodel(node))
-        @constraint(mp, θ[getindex(g,node)] >= θk + rhs)
+        @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
       end
     end
   end
 end
 
-function bendersolve(graph::Plasmo.PlasmoGraph,max_iterations = 3)
+function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations = 3)
   preProcess(graph)
   ϵ = 10e-5
   UB = Inf
@@ -265,8 +269,10 @@ function bendersolve(graph::Plasmo.PlasmoGraph,max_iterations = 3)
 
   for i in 1:max_iterations
     LB,UB = forwardStep(graph)
-    println("UB",UB)
+    #println("*** UB = ",UB)
+    run(`cowsay "UB = $UB"`)
     if abs(UB - LB)<ϵ
+      run(`cowsay -f moofasa "Converged!"`)
       break
     end
     backwardStep(graph)
