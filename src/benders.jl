@@ -26,57 +26,72 @@ function numParentNodes(g::PlasmoGraph, n1::PlasmoNode)
   return length(LightGraphs.in_neighbors(g.graph,getindex(g,n1)))
 end
 
-function levelsRecursive(g::Plasmo.PlasmoGraph,n::PlasmoNode,level::Int64,levelDict::Dict)
-  if level in keys(levelDict)
-  else
-    levelDict[level] = Set()
+function levels(graph::Plasmo.PlasmoGraph)
+  #Create lists of root and leaf nodes in graph
+  graph.attributes[:roots] = []
+  graph.attributes[:leaves] = []
+  #Create dictionary to keep track of levels of nodes
+  graph.attributes[:levels] = Dict()
+  #Iterate through every node to check for root/leaf nodes
+  for nodeIndex in 1:length(graph.nodes)
+    node = graph.nodes[nodeIndex]
+    #If the node does not have parents it is a root node
+    if numParentNodes(graph,node)==0
+      push!(graph.attributes[:roots],node)
+      #Root nodes are the first level
+    end
+    #If the node does not have children it is a leaf node
+    if numChildNodes(graph,node)==0
+      push!(graph.attributes[:leaves],node)
+    end
   end
-  levelInv = levelDict[level]
-  push!(levelInv,n)
-  if numChildNodes(g,n) == 0
-    #lastLevel
-    return 1
-  end
-  for index in LightGraphs.out_neighbors(g.graph,getindex(g,n))
-    childNode = g.nodes[index]
-    levelsRecursive(g,childNode,level+1,levelDict)
-  end
-end
 
-function getLevels(g::Plasmo.PlasmoGraph)
-  levelDict = Dict()
-  levelCount = 1
-  currentNode = g.nodes[1]
-  levelsRecursive(g,currentNode,levelCount, levelDict)
-  return levelDict
+  #Start mapping level from the root nodes
+  currentNodes = graph.attributes[:roots]
+  levels = graph.attributes[:levels]
+  level = 1
+  while currentNodes != []
+    levels[level] = currentNodes
+    childrenNodes = []
+    for node in currentNodes
+      childNodeIndex = LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
+      for index in childNodeIndex
+        childNode = graph.nodes[index]
+        push!(childrenNodes,childNode)
+      end
+      level += 1
+      currentNodes = childrenNodes
+    end
+  end
 end
 
 function preProcess(graph::Plasmo.PlasmoGraph)
-  #Build a dictionary for the different levels of the tree and each node in it
-  levels = getLevels(graph)
+  levels(graph)
 
-  #Grab the linking constraints from the graph
   links = getlinkconstraints(graph)
   numLinks = length(links)
   numNodes = length(graph.nodes)
 
-  #Create a dictionary for node relationships
-  dict = Dict()
-  childDict = Dict()
+  graph.attributes[:links] = Dict()
+  graph.attributes[:childlinks] = Dict()
+  linkIndex = graph.attributes[:links]
+  childLinkIndex = graph.attributes[:childlinks]
 
   #Add each node as a key to the dictionary
   for index in 1:length(graph.nodes)
     node = graph.nodes[index]
-    dict[node] = Set()
+    linkIndex[node] = []
+    childLinkIndex[node] = []
     #Add valbar to child nodes
     if numParentNodes(graph,node) != 0
       sp = getmodel(node)
+      @constraintref dual[1:numLinks]
       @variable(sp, valbar[1:numLinks])
     end
     #Add theta to parent nodes
     if numChildNodes(graph,node) != 0
       mp = getmodel(node)
-      @variable(mp,θ[1:numNodes] >= 0)
+      @variable(mp,θ[1:numLinks] >= 0)
     end
   end
 
@@ -102,130 +117,140 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     mp = getmodel(parentNode)
     childNodeIndex = getindex(graph,childNode)
     θ = getindex(mp,:θ)
-    mp.obj += θ[childNodeIndex]
+    mp.obj += θ[link]
     #Add dual constraint to the child node model
     sp = getmodel(childNode)
     valbar = getindex(sp,:valbar)
     parentNodeIndex = getindex(graph,parentNode)
-    @constraint(sp, dual, valbar[link] - childvar == 0)
-    print(sp)
     #Add linking constraint to the parent node dictionary
-    linkIndex = dict[parentNode]
-    push!(linkIndex,link)
+    linkList = linkIndex[parentNode]
+    childLinkList = childLinkIndex[childNode]
+    push!(linkList,link)
+    push!(childLinkList,link)
   end
-  return dict, levels
+  for child in keys(childLinkIndex)
+    sp = getmodel(child)
+    @constraintref dual[1:length(childLinkList[child])]
+    for i in 1:length(childLinkList[child])
+      link = childLinkList
+      dual[i] =
+
 end
 
-function forwardStep(graph::Plasmo.PlasmoGraph, dict::Dict, node::Plasmo.PlasmoNode)
-  #If node has no children exit function; we have reached the end of the tree
-  if numChildNodes(graph, node) == 0
-    return 0
-  end
-  #Solve the current node
-  mp = getmodel(node)
-  solve(mp)
-  #Get the constraints linked to this node from the dictionary
+function forwardStep(graph::Plasmo.PlasmoGraph)
+  levels = graph.attributes[:levels]
   links = getlinkconstraints(graph)
-  nodelinks = dict[node]
-  #Iterate through linking constraints
-  for link in nodelinks
-    #Get the nodes and variables in the linked constraint
-    var1 = links[link].terms.vars[1]
-    var2 = links[link].terms.vars[2]
-    nodeV1 = getnode(var1)
-    nodeV2 = getnode(var2)
-    #Determine which nodes are parents and children
-    if isChildNode(graph,nodeV1,nodeV2)
-      childNode = nodeV1
-      parentNode = nodeV2
-      val = getvalue(var2)
-    elseif isChildNode(graph,nodeV2,nodeV1)
-      childNode = nodeV2
-      parentNode = nodeV1
-      val = getvalue(var1)
+  linksMap = graph.attributes[:links]
+  for level in 1:length(levels)
+    currentLevel = levels[level]
+    for node in currentLevel
+      mp = getmodel(node)
+      solve(mp, relaxation = true)
+      #Get the constraints linked to this node from the dictionary
+      nodelinks = linksMap[node]
+      #Iterate through linking constraints
+      for link in nodelinks
+        #Get the nodes and variables in the linked constraint
+        var1 = links[link].terms.vars[1]
+        var2 = links[link].terms.vars[2]
+        nodeV1 = getnode(var1)
+        nodeV2 = getnode(var2)
+        #Determine which nodes are parents and children
+        if isChildNode(graph,nodeV1,nodeV2)
+          childNode = nodeV1
+          parentNode = nodeV2
+          val = getvalue(var2)
+        elseif isChildNode(graph,nodeV2,nodeV1)
+          childNode = nodeV2
+          parentNode = nodeV1
+          val = getvalue(var1)
+        end
+        #Set valbar in child node associated with link to variable value in parent
+        sp = getmodel(childNode)
+        valbar = getindex(sp, :valbar)
+        fix(valbar[link], val)
+      end
     end
-    #Set valbar in child node associated with link to variable value in parent
-    sp = getmodel(childNode)
-    parentIndex = getindex(g,parentNode)
-    valbar = getindex(sp, :valbar)
-    fix(valbar[link], val)
-    #Repeat this step for the child node
-    forwardStep(graph, dict, childNode)
   end
-  for index in 1:length(graph.nodes)
-    testNode = graph.nodes[index]
-    model = getmodel(testNode)
+
+  leaves = graph.attributes[:leaves]
+  roots = graph.attributes[:roots]
+  LB = 0
+  UB = 0
+  for root in roots
+    LB = LB + getobjectivevalue(getmodel(root))
   end
+  for leaf in leaves
+    solve(getmodel(leaf), relaxation = true)
+    UB = UB + getobjectivevalue(getmodel(leaf))
+  end
+  return LB,UB
 end
 
-function backwardStep(graph::Plasmo.PlasmoGraph, levels::Dict, dict::Dict)
-  for key in length(keys(levels)):-1:1
-    for node in levels[key]
-      if numParentNodes(graph,node) != 0
-        parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
-        parentNode = graph.nodes[parentNodes[1]]
-        parentIndex = getindex(graph, parentNode)
-        childIndex = getindex(graph, node)
-        sp = getmodel(node)
-        mp = getmodel(parentNode)
-        status = solve(sp)
+function backwardStep(graph::Plasmo.PlasmoGraph)
+  levels = graph.attributes[:levels]
+  linkList= graph.attributes[:links]
+  childLinks = graph.attributes[:childlinks]
+  links = getlinkconstraints(graph)
+
+  for level in length(keys(levels)):-1:2
+    for node in levels[level]
+      sp = getmodel(node)
+      λs = []
+      valbars = []
+      variables = []
+      for childLink in childLinks[node]
         dualCon = getindex(sp,:dual)
-        λ = getdual(dualCon)
-        debug("Dual solution is found to be $λ")
+        println("yooo", childLink)
+        λs = getdual(dualCon)
+        valbar = getindex(sp,:valbar)
+        println("help pls", valbar)
+        println(sp)
+        push!(valbars,valbar[childLink])
 
-        links = getlinkconstraints(graph)
-        nodeLinks = dict[parentNode]
-        for link in nodeLinks
-          #Get the nodes and variables in the linked constraint
-          var1 = links[link].terms.vars[1]
-          var2 = links[link].terms.vars[2]
-          nodeV1 = getnode(var1)
-          nodeV2 = getnode(var2)
-          #Determine which nodes are parents and children
-          if isChildNode(graph,nodeV1,nodeV2)
-            childNode = nodeV1
-            parentNode = nodeV2
-            var = var2
-            val = getvalue(var2)
-          elseif isChildNode(graph,nodeV2,nodeV1)
-            childNode = nodeV2
-            parentNode = nodeV1
-            val = getvalue(var1)
-            var = var1
-          end
+        var1 = links[childLink].terms.vars[1]
+        var2 = links[childLink].terms.vars[2]
+        nodeV1 = getnode(var1)
+        nodeV2 = getnode(var2)
+        #Determine which nodes are parents and children
+        if isChildNode(graph,nodeV1,nodeV2)
+          var = var2
+        elseif isChildNode(graph,nodeV2,nodeV1)
+          var = var1
+        end
+        push!(variables,var)
+      end
+      parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+      parentNode = graph.nodes[parentNodes[1]]
 
-          if node == childNode
-            valbar = getindex(sp,:valbar)
-            θ = getindex(mp,:θ)
-            if status != :Optimal
-              @constraint(mp, 0 >= λ*(getupperbound(valbar[parentIndex])-var))
-              println(mp)
-            else
-              θk = getobjectivevalue(sp)
-              @constraint(mp, θ[childIndex] >= θk + λ*(getvalue(valbar[parentIndex])-var))
-            end
-          end
+      mp = getmodel(parentNode)
+      θ = getindex(mp,:θ)
+      status = solve(getmodel(node), relaxation = true)
+      for i in 1:length(variables)
+        if status != :Optimal
+          @constraint(mp, 0 >= λs[i]*(getupperbound(valbarsi[])-variables[i]))
+          println("wooo",mp)
+        else
+          θk = getobjectivevalue(getmodel(node))
+          @constraint(mp, θ[childLinks[node][i]] >= θk + λs[i]*(getvalue(valbars[i])-variables[i]))
         end
       end
     end
   end
-  print(mp)
 end
 
-function bendersolve(graph::Plasmo.PlasmoGraph, max_iterations::Int64)
-    dict, levels = preProcess(graph)
-    numLevels = length(levels)
-    for i in 1:max_iterations
-      debug("Iteration $i")
-      forwardStep(graph, dict, graph.nodes[1])
-      LB = getobjectivevalue(getmodel(graph.nodes[1]))
-      debug("Lowerbound = $LB")
-      ##TODO ask Braulio about where the UB needs to be
-      UB = 0
-      if UB == LB
-        break
-      end
-      backwardStep(graph, levels, dict)
+function bendersolve(graph::Plasmo.PlasmoGraph,max_iterations = 3)
+  preProcess(graph)
+  ϵ = 10e-5
+  UB = Inf
+  LB = -Inf
+
+  for i in 1:max_iterations
+    LB,UB = forwardStep(graph)
+    if abs(UB - LB)<ϵ
+      break
     end
-    return getobjectivevalue(getmodel(graph.nodes[1]))
+    backwardStep(graph)
+  end
+  return LB
 end
