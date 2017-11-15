@@ -74,6 +74,8 @@ function preProcess(graph::Plasmo.PlasmoGraph)
 
   graph.attributes[:links] = Dict()
   graph.attributes[:childlinks] = Dict()
+  graph.attributes[:duals] = Dict()
+  dualMap = graph.attributes[:duals]
   linkIndex = graph.attributes[:links]
   childLinkIndex = graph.attributes[:childlinks]
 
@@ -91,7 +93,7 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     #Add theta to parent nodes
     if numChildNodes(graph,node) != 0
       mp = getmodel(node)
-      @variable(mp,θ[1:numLinks] >= 0)
+      @variable(mp,θ[1:numNodes] >= 0)
     end
   end
 
@@ -117,11 +119,7 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     mp = getmodel(parentNode)
     childNodeIndex = getindex(graph,childNode)
     θ = getindex(mp,:θ)
-    mp.obj += θ[link]
-    #Add dual constraint to the child node model
-    sp = getmodel(childNode)
-    valbar = getindex(sp,:valbar)
-    parentNodeIndex = getindex(graph,parentNode)
+    mp.obj += θ[childNodeIndex]
     #Add linking constraint to the parent node dictionary
     linkList = linkIndex[parentNode]
     childLinkList = childLinkIndex[childNode]
@@ -130,11 +128,30 @@ function preProcess(graph::Plasmo.PlasmoGraph)
   end
   for child in keys(childLinkIndex)
     sp = getmodel(child)
-    @constraintref dual[1:length(childLinkList[child])]
-    for i in 1:length(childLinkList[child])
-      link = childLinkList
-      dual[i] =
-
+    childLinkList = childLinkIndex[child]
+    @constraintref dual[1:length(childLinkList)]
+    for i in 1:length(childLinkList)
+      link = childLinkList[i]
+      var1 = links[link].terms.vars[1]
+      var2 = links[link].terms.vars[2]
+      #Determine which nodes they belong to
+      nodeV1 = getnode(var1)
+      nodeV2 = getnode(var2)
+      #Set the order of the nodes
+      if isChildNode(graph,nodeV1,nodeV2)
+        childNode = nodeV1
+        childvar = var1
+        parentNode = nodeV2
+      elseif isChildNode(graph,nodeV2,nodeV1)
+        childNode = nodeV2
+        childvar = var2
+        parentNode = nodeV1
+      end
+      valbar = getindex(sp,:valbar)
+      dual[i] = @constraint(sp,valbar[link] - childvar == 0)
+    end
+    dualMap[child] = dual
+  end
 end
 
 function forwardStep(graph::Plasmo.PlasmoGraph)
@@ -190,6 +207,7 @@ end
 function backwardStep(graph::Plasmo.PlasmoGraph)
   levels = graph.attributes[:levels]
   linkList= graph.attributes[:links]
+  dualMap = graph.attributes[:duals]
   childLinks = graph.attributes[:childlinks]
   links = getlinkconstraints(graph)
 
@@ -200,11 +218,10 @@ function backwardStep(graph::Plasmo.PlasmoGraph)
       valbars = []
       variables = []
       for childLink in childLinks[node]
-        dualCon = getindex(sp,:dual)
-        println("yooo", childLink)
+        # dualCon = getindex(sp,:dual)
+        dualCon = dualMap[node]
         λs = getdual(dualCon)
         valbar = getindex(sp,:valbar)
-        println("help pls", valbar)
         println(sp)
         push!(valbars,valbar[childLink])
 
@@ -226,14 +243,15 @@ function backwardStep(graph::Plasmo.PlasmoGraph)
       mp = getmodel(parentNode)
       θ = getindex(mp,:θ)
       status = solve(getmodel(node), relaxation = true)
+      rhs = 0
       for i in 1:length(variables)
-        if status != :Optimal
-          @constraint(mp, 0 >= λs[i]*(getupperbound(valbarsi[])-variables[i]))
-          println("wooo",mp)
-        else
-          θk = getobjectivevalue(getmodel(node))
-          @constraint(mp, θ[childLinks[node][i]] >= θk + λs[i]*(getvalue(valbars[i])-variables[i]))
-        end
+        rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+      end
+      if status != :Optimal
+        @constraint(mp, 0 >= rhs)
+      else
+        θk = getobjectivevalue(getmodel(node))
+        @constraint(mp, θ[getindex(g,node)] >= θk + rhs)
       end
     end
   end
@@ -247,6 +265,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph,max_iterations = 3)
 
   for i in 1:max_iterations
     LB,UB = forwardStep(graph)
+    println("UB",UB)
     if abs(UB - LB)<ϵ
       break
     end
