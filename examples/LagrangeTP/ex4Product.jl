@@ -28,3 +28,8 @@ end
 function cheat6(mf)
   return 72827.587
 end
+
+function cheat20(mf)
+  return 515551.12
+end
+  

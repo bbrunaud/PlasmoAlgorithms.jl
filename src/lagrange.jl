@@ -42,7 +42,8 @@ function  lagrangesolve(graph::PlasmoGraph;
   ξ1=0.1,
   ξ2=0,
   λinit=:relaxation,
-  solveheuristic=fixbinaries)
+  solveheuristic=fixbinaries,
+  timelimit=360000)
 
   ########## 0. Initialize ########
   # Start clock
@@ -195,6 +196,12 @@ function  lagrangesolve(graph::PlasmoGraph;
       α *= 0.5
     end
 
+    # Restore α
+#    if iter % 100 == 0
+#       α = 2
+#    end
+       
+    
     # Shrink α if stuck
     if iter > 10 && i > 4
       α *= δ
@@ -264,11 +271,17 @@ function  lagrangesolve(graph::PlasmoGraph;
     debug("UB = $UB")
     debug("LB = $LB")
     debug("gap = $gap")
-    push!(df,[iter,round(time()-starttime),α,step,UB,LB,Hk,Zk,gap])
+    elapsed = round(time()-starttime)
+    push!(df,[iter,elapsed,α,step,UB,LB,Hk,Zk,gap])
 
     res[:Iterations] = iter
     res[:Gap] = gap
 
+    if elapsed > timelimit
+       debug("Time Limit exceeded, $elapsed seconds")
+       break
+    end
+    
   end # Iterations
 
   # Report

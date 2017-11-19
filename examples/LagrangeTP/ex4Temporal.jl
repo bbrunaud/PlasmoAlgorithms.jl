@@ -10,7 +10,7 @@ g = PlasmoGraph()
 g.solver = GurobiSolver(OutputFlag=0)
 
 include("modelgen4.jl")
-psize=20
+psize=6
 otime=1:psize
 oproducts=1:psize
 node = Dict()
@@ -26,4 +26,8 @@ end
 
 function cheat6(mf)
   return 72827.587
+end
+
+function cheat20(mf)
+  return 515551.12
 end
