@@ -59,9 +59,9 @@ function levels(graph::Plasmo.PlasmoGraph)
         childNode = graph.nodes[index]
         push!(childrenNodes,childNode)
       end
-      level += 1
-      currentNodes = childrenNodes
     end
+    level += 1
+    currentNodes = childrenNodes
   end
 end
 
@@ -95,6 +95,12 @@ function preProcess(graph::Plasmo.PlasmoGraph)
       mp = getmodel(node)
       mp.ext[:preobj] = mp.obj
       @variable(mp,θ[1:numNodes] >= 0)
+      for node in LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
+        childNode = graph.nodes[node]
+        childNodeIndex = getindex(graph,childNode)
+        θ = getindex(mp,:θ)
+        mp.obj += θ[childNodeIndex]
+      end
     end
   end
 
@@ -119,8 +125,8 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     #Add theta[childNode] to the parent node objective
     mp = getmodel(parentNode)
     childNodeIndex = getindex(graph,childNode)
-    θ = getindex(mp,:θ)
-    mp.obj += θ[childNodeIndex]
+    # θ = getindex(mp,:θ)
+    # mp.obj += θ[childNodeIndex]
     #Add linking constraint to the parent node dictionary
     linkList = linkIndex[parentNode]
     childLinkList = childLinkIndex[childNode]
@@ -163,6 +169,7 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
     currentLevel = levels[level]
     for node in currentLevel
       mp = getmodel(node)
+      print(mp)
       solve(mp)
       #Get the constraints linked to this node from the dictionary
       nodelinks = linksMap[node]
@@ -195,14 +202,20 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
   roots = graph.attributes[:roots]
   LB = 0
   UB = 0
+  # for root in roots
+  #   rootmodel = getmodel(root)
+  #   LB = LB + getobjectivevalue(rootmodel)
+  #   UB += getvalue(rootmodel.ext[:preobj])
+  # end
   for root in roots
-    rootmodel = getmodel(root)
-    LB = LB + getobjectivevalue(rootmodel)
-    UB += getvalue(rootmodel.ext[:preobj])
-  end
-  for leaf in leaves
-    solve(getmodel(leaf))
-    UB = UB + getobjectivevalue(getmodel(leaf))
+    for leaf in leaves
+      mp = getmodel(root)
+      solve(getmodel(leaf))
+      UB = UB + getobjectivevalue(getmodel(leaf))
+      leafIndex = getindex(graph,leaf)
+      θ = getindex(mp, :θ)
+      LB = LB + getvalue(θ[leafIndex])
+    end
   end
   return LB,UB
 end
@@ -214,13 +227,16 @@ function backwardStep(graph::Plasmo.PlasmoGraph)
   childLinks = graph.attributes[:childlinks]
   links = getlinkconstraints(graph)
 
+
   for level in length(keys(levels)):-1:2
     for node in levels[level]
       sp = getmodel(node)
       λs = []
       valbars = []
       variables = []
+      solve(sp)
       for childLink in childLinks[node]
+        println("*****", childLink)
         # dualCon = getindex(sp,:dual)
         dualCon = dualMap[node]
         λs = getdual(dualCon)
@@ -269,13 +285,13 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations = 3)
 
   for i in 1:max_iterations
     LB,UB = forwardStep(graph)
-    #println("*** UB = ",UB)
-    run(`cowsay "UB = $UB"`)
+    # run(`cowsay "UB = $UB"`)
     if abs(UB - LB)<ϵ
-      run(`cowsay -f moofasa "Converged!"`)
+      println("Converged!")
+      # run(`cowsay -f moofasa "Converged!"`)
       break
     end
     backwardStep(graph)
   end
-  return LB
+  return getobjectivevalue(getmodel(graph.nodes[1]))
 end
