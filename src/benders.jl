@@ -82,6 +82,8 @@ function preProcess(graph::Plasmo.PlasmoGraph)
   #Add each node as a key to the dictionary
   for index in 1:length(graph.nodes)
     node = graph.nodes[index]
+    nodeModel = getmodel(node)
+    nodeModel.ext[:preobj] = nodeModel.obj
     linkIndex[node] = []
     childLinkIndex[node] = []
     #Add valbar to child nodes
@@ -93,8 +95,10 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     #Add theta to parent nodes
     if numChildNodes(graph,node) != 0
       mp = getmodel(node)
-      mp.ext[:preobj] = mp.obj
-      @variable(mp,θ[1:numNodes] >= 0)
+      mflat = create_flat_graph_model(graph)
+      bound = getobjectivevalue(mflat)
+      println("BOUND = ", bound)
+      @variable(mp,θ[1:numNodes] >= -1e6)
       for node in LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
         childNode = graph.nodes[node]
         childNodeIndex = getindex(graph,childNode)
@@ -202,20 +206,15 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
   roots = graph.attributes[:roots]
   LB = 0
   UB = 0
-  # for root in roots
-  #   rootmodel = getmodel(root)
-  #   LB = LB + getobjectivevalue(rootmodel)
-  #   UB += getvalue(rootmodel.ext[:preobj])
-  # end
   for root in roots
-    for leaf in leaves
-      mp = getmodel(root)
-      solve(getmodel(leaf))
-      UB = UB + getobjectivevalue(getmodel(leaf))
-      leafIndex = getindex(graph,leaf)
-      θ = getindex(mp, :θ)
-      LB = LB + getvalue(θ[leafIndex])
-    end
+    rootmodel = getmodel(root)
+    LB = LB + getobjectivevalue(rootmodel)
+    # UB += getvalue(rootmodel.ext[:preobj])
+  end
+  for index in 1:length(graph.nodes)
+    node = graph.nodes[index]
+    nodeModel = getmodel(node)
+    UB += getvalue(nodeModel.ext[:preobj])
   end
   return LB,UB
 end
