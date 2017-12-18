@@ -97,7 +97,6 @@ function preProcess(graph::Plasmo.PlasmoGraph)
       mp = getmodel(node)
       mflat = create_flat_graph_model(graph)
       bound = getobjectivevalue(mflat)
-      println("BOUND = ", bound)
       @variable(mp,θ[1:numNodes] >= -1e6)
       for node in LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
         childNode = graph.nodes[node]
@@ -219,64 +218,16 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
   return LB,UB
 end
 
-function backwardStep(graph::Plasmo.PlasmoGraph)
+function backwardStep(cut::String,graph::Plasmo.PlasmoGraph)
   levels = graph.attributes[:levels]
-  linkList= graph.attributes[:links]
-  dualMap = graph.attributes[:duals]
-  childLinks = graph.attributes[:childlinks]
-  links = getlinkconstraints(graph)
-
-
   for level in length(keys(levels)):-1:2
     for node in levels[level]
-      sp = getmodel(node)
-      λs = []
-      valbars = []
-      variables = []
-      solve(sp)
-      for childLink in childLinks[node]
-        println("*****", childLink)
-        # dualCon = getindex(sp,:dual)
-        dualCon = dualMap[node]
-        λs = getdual(dualCon)
-        valbar = getindex(sp,:valbar)
-        println(sp)
-        push!(valbars,valbar[childLink])
-
-        var1 = links[childLink].terms.vars[1]
-        var2 = links[childLink].terms.vars[2]
-        nodeV1 = getnode(var1)
-        nodeV2 = getnode(var2)
-        #Determine which nodes are parents and children
-        if isChildNode(graph,nodeV1,nodeV2)
-          var = var2
-        elseif isChildNode(graph,nodeV2,nodeV1)
-          var = var1
-        end
-        push!(variables,var)
-      end
-      parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
-      parentNode = graph.nodes[parentNodes[1]]
-
-      mp = getmodel(parentNode)
-      θ = getindex(mp,:θ)
-      # TODO Different kinds of relaxations
-      status = solve(getmodel(node), relaxation = true)
-      rhs = 0
-      for i in 1:length(variables)
-        rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
-      end
-      if status != :Optimal
-        @constraint(mp, 0 >= rhs)
-      else
-        θk = getobjectivevalue(getmodel(node))
-        @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
-      end
+      cutGeneration(cut,graph,node)
     end
   end
 end
 
-function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations = 3)
+function bendersolve(cut::String, graph::Plasmo.PlasmoGraph; max_iterations = 3)
   preProcess(graph)
   ϵ = 10e-5
   UB = Inf
@@ -284,13 +235,73 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations = 3)
 
   for i in 1:max_iterations
     LB,UB = forwardStep(graph)
+    println("*** ",UB)
+    println("*** ",LB)
     # run(`cowsay "UB = $UB"`)
     if abs(UB - LB)<ϵ
       println("Converged!")
       # run(`cowsay -f moofasa "Converged!"`)
       break
     end
-    backwardStep(graph)
+    backwardStep(cut,graph)
   end
   return getobjectivevalue(getmodel(graph.nodes[1]))
+end
+
+function cutGeneration(cut::String, graph::PlasmoGraph, node::PlasmoNode)
+  if cut == "LP"
+    LPcut(graph,node)
+  end
+end
+
+function LPcut(graph::PlasmoGraph, node::PlasmoNode)
+  linkList= graph.attributes[:links]
+  dualMap = graph.attributes[:duals]
+  childLinks = graph.attributes[:childlinks]
+  links = getlinkconstraints(graph)
+
+  sp = getmodel(node)
+  λs = []
+  valbars = []
+  variables = []
+  solve(sp)
+  for childLink in childLinks[node]
+    # dualCon = getindex(sp,:dual)
+    dualCon = dualMap[node]
+    λs = getdual(dualCon)
+    valbar = getindex(sp,:valbar)
+    println(sp)
+    push!(valbars,valbar[childLink])
+
+    var1 = links[childLink].terms.vars[1]
+    var2 = links[childLink].terms.vars[2]
+    nodeV1 = getnode(var1)
+    nodeV2 = getnode(var2)
+    #Determine which nodes are parents and children
+    if isChildNode(graph,nodeV1,nodeV2)
+      var = var2
+    elseif isChildNode(graph,nodeV2,nodeV1)
+      var = var1
+    end
+    push!(variables,var)
+  end
+  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNode = graph.nodes[parentNodes[1]]
+
+  mp = getmodel(parentNode)
+  θ = getindex(mp,:θ)
+
+  status = solve(getmodel(node), relaxation = true)
+  rhs = 0
+
+  for i in 1:length(variables)
+    rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+  end
+  if status != :Optimal
+    @constraint(mp, 0 >= rhs)
+    println("HERE")
+  else
+    θk = getobjectivevalue(getmodel(node))
+    @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
+  end
 end

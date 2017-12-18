@@ -43,4 +43,4 @@ edge2 = Plasmo.add_edge(g,n2,n3)
 @linkconstraint(g,[i in 1:2], n1[:x][i] == n2[:x][i])
 @linkconstraint(g,[i in 1:2], n2[:y][i] == n3[:y][i])
 
-bendersolve(g,max_iterations =10)
+bendersolve("LP",g,max_iterations =10)
