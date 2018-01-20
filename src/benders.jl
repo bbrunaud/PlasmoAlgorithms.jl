@@ -66,6 +66,10 @@ function levels(graph::Plasmo.PlasmoGraph)
 end
 
 function preProcess(graph::Plasmo.PlasmoGraph)
+  if get(graph.attributes,:preprocessed,false)
+    return 0
+  end
+
   levels(graph)
 
   links = getlinkconstraints(graph)
@@ -162,6 +166,7 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     end
     dualMap[child] = dual
   end
+  graph.attributes[:preprocessed] = true
 end
 
 function forwardStep(graph::Plasmo.PlasmoGraph)
@@ -172,7 +177,6 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
     currentLevel = levels[level]
     for node in currentLevel
       mp = getmodel(node)
-      print(mp)
       solve(mp)
       #Get the constraints linked to this node from the dictionary
       nodelinks = linksMap[node]
@@ -218,16 +222,16 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
   return LB,UB
 end
 
-function backwardStep(cut::String,graph::Plasmo.PlasmoGraph)
+function backwardStep(graph::Plasmo.PlasmoGraph,cut::Symbol)
   levels = graph.attributes[:levels]
   for level in length(keys(levels)):-1:2
     for node in levels[level]
-      cutGeneration(cut,graph,node)
+      cutGeneration(graph,node,cut)
     end
   end
 end
 
-function bendersolve(cut::String, graph::Plasmo.PlasmoGraph; max_iterations = 3)
+function bendersolve(graph::Plasmo.PlasmoGraph, cut::Symbol=:LP; max_iterations = 3)
   preProcess(graph)
   ϵ = 10e-5
   UB = Inf
@@ -237,19 +241,17 @@ function bendersolve(cut::String, graph::Plasmo.PlasmoGraph; max_iterations = 3)
     LB,UB = forwardStep(graph)
     println("*** ",UB)
     println("*** ",LB)
-    # run(`cowsay "UB = $UB"`)
     if abs(UB - LB)<ϵ
       println("Converged!")
-      # run(`cowsay -f moofasa "Converged!"`)
       break
     end
-    backwardStep(cut,graph)
+    backwardStep(graph,cut)
   end
   return getobjectivevalue(getmodel(graph.nodes[1]))
 end
 
-function cutGeneration(cut::String, graph::PlasmoGraph, node::PlasmoNode)
-  if cut == "LP"
+function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol)
+  if cut == :LP
     LPcut(graph,node)
   end
 end
@@ -264,7 +266,8 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
   λs = []
   valbars = []
   variables = []
-  solve(sp)
+  #solve(sp,relaxation=true)
+  status = solve(sp, relaxation = true)
   for childLink in childLinks[node]
     # dualCon = getindex(sp,:dual)
     dualCon = dualMap[node]
@@ -291,15 +294,14 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
   mp = getmodel(parentNode)
   θ = getindex(mp,:θ)
 
-  status = solve(getmodel(node), relaxation = true)
+  # TODO: There are two solve calls in the function... there should be only one
   rhs = 0
-
   for i in 1:length(variables)
     rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
   end
   if status != :Optimal
     @constraint(mp, 0 >= rhs)
-    println("HERE")
+    debug("Infeasible Model, adding feasibility cut")
   else
     θk = getobjectivevalue(getmodel(node))
     @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
