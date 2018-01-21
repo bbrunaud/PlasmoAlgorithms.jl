@@ -239,10 +239,11 @@ function bendersolve(graph::Plasmo.PlasmoGraph, cut::Symbol=:LP; max_iterations 
 
   for i in 1:max_iterations
     LB,UB = forwardStep(graph)
-    println("*** ",UB)
-    println("*** ",LB)
+    debug("***** ITERATION $i ***********")
+    debug("*** UB = ",UB)
+    debug("*** LB = ",LB)
     if abs(UB - LB)<ϵ
-      println("Converged!")
+      debug("Converged!")
       break
     end
     backwardStep(graph,cut)
@@ -273,7 +274,6 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
     dualCon = dualMap[node]
     λs = getdual(dualCon)
     valbar = getindex(sp,:valbar)
-    println(sp)
     push!(valbars,valbar[childLink])
 
     var1 = links[childLink].terms.vars[1]
