@@ -106,3 +106,14 @@ function fitness(wv,solver)
         return -1e5
     end
 end
+
+function crossover(v1,v2,crosspoint)
+  v3 = vcat(v1[1:crosspoint],v2[crosspoint+1:end])
+  v4 = vcat(v2[1:crosspoint],v1[crosspoint+1:end])
+
+  return v3,v4
+end
+
+function mutation(v, mutationprobability=0.05)
+  
+end
