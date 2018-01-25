@@ -35,7 +35,6 @@ end
 
 # Objective value of each of the generated solutions
 fA = map(fitness,A,[solver for i in 1:length(A)])
-println("fA = $fA")
 
 # Graph
 g = PlasmoGraph()
@@ -50,5 +49,11 @@ n2 = add_node(g, m2)
 add_edge(g,n1,n2)
 
 @linkconstraint(g, [k in keys(wr)], n1[:w][k...] == n2[:w][k...])
+
+preProcess(g)
+initialCuts(g, A, fA)
+#bendersolve(g)
+
+#NOTE Reason there was NaN error was because the forwardStep was not completed
 
 # TODO: Idea... For each solution in A, generate a cut into the master. Test with and without initialization.

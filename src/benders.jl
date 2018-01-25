@@ -255,6 +255,15 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol)
   if cut == :LP
     LPcut(graph,node)
   end
+  if cut == :Bin
+    binarycut(graph,node)
+  end
+  if cut == :Superset
+    supersetcut(graph,node)
+  end
+  if cut == :Subset
+    subsetcut(graph,node)
+  end
 end
 
 function LPcut(graph::PlasmoGraph, node::PlasmoNode)
@@ -269,6 +278,7 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
   variables = []
   #solve(sp,relaxation=true)
   status = solve(sp, relaxation = true)
+
   for childLink in childLinks[node]
     # dualCon = getindex(sp,:dual)
     dualCon = dualMap[node]
@@ -297,7 +307,8 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
   # TODO: There are two solve calls in the function... there should be only one
   rhs = 0
   for i in 1:length(variables)
-    rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+      rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+      rhs2 = λs[i]*(getupperbound(valbars[i])-variables[i])
   end
   if status != :Optimal
     @constraint(mp, 0 >= rhs)
@@ -305,5 +316,190 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
   else
     θk = getobjectivevalue(getmodel(node))
     @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
+    i = getindex(graph,node)
+  end
+end
+
+function supersetcut(graph::PlasmoGraph, node::PlasmoNode)
+  linkList= graph.attributes[:links]
+  dualMap = graph.attributes[:duals]
+  childLinks = graph.attributes[:childlinks]
+  links = getlinkconstraints(graph)
+
+  sp = getmodel(node)
+  linkList= graph.attributes[:links]
+  childLinks = graph.attributes[:childlinks]
+  links = getlinkconstraints(graph)
+
+  sp = getmodel(node)
+  valbars = []
+  variables = []
+  Z1 = []
+  Z0 = []
+  status = solve(sp)
+
+  for childLink in childLinks[node]
+    valbar = getindex(sp,:valbar)
+    push!(valbars,valbar[childLink])
+
+    var1 = links[childLink].terms.vars[1]
+    var2 = links[childLink].terms.vars[2]
+    nodeV1 = getnode(var1)
+    nodeV2 = getnode(var2)
+    #Determine which nodes are parents and children
+    if isChildNode(graph,nodeV1,nodeV2)
+      var = var2
+    elseif isChildNode(graph,nodeV2,nodeV1)
+      var = var1
+    end
+    push!(variables,var)
+  end
+  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNode = graph.nodes[parentNodes[1]]
+
+  mp = getmodel(parentNode)
+  θ = getindex(mp,:θ)
+  rhs = 0
+
+  for i in 1:length(variables)
+      value = getupperbound(variables[i])
+      if value == 1
+        push!(Z0,variables[i])
+      else
+        push!(Z1,variables[i])
+      end
+  end
+  if status != :Optimal
+    debug("Infeasible Model")
+  else
+    for yi in 1:length(Z0)
+      constraint = Z0[yi]
+      for yn in 1:length(Z1)
+        constraint += Z1[yn]
+      end
+    @constraint(mp, constraint <= length(Z1))
+    end
+  end
+  end
+
+function subsetcut(graph::PlasmoGraph, node::PlasmoNode)
+  linkList= graph.attributes[:links]
+  childLinks = graph.attributes[:childlinks]
+  links = getlinkconstraints(graph)
+
+  sp = getmodel(node)
+  valbars = []
+  variables = []
+  Z1 = []
+  Z0 = []
+  status = solve(sp)
+
+  for childLink in childLinks[node]
+    valbar = getindex(sp,:valbar)
+    push!(valbars,valbar[childLink])
+
+    var1 = links[childLink].terms.vars[1]
+    var2 = links[childLink].terms.vars[2]
+    nodeV1 = getnode(var1)
+    nodeV2 = getnode(var2)
+    #Determine which nodes are parents and children
+    if isChildNode(graph,nodeV1,nodeV2)
+      var = var2
+    elseif isChildNode(graph,nodeV2,nodeV1)
+      var = var1
+    end
+    push!(variables,var)
+  end
+  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNode = graph.nodes[parentNodes[1]]
+
+  mp = getmodel(parentNode)
+  θ = getindex(mp,:θ)
+  rhs = 0
+
+  for i in 1:length(variables)
+      value = getupperbound(variables[i])
+      if value == 1
+        push!(Z0,variables[i])
+      else
+        push!(Z1,variables[i])
+      end
+  end
+  if status != :Optimal
+    debug("Infeasible Model")
+  else
+    len = length(Z1)
+    len2 = length(Z0)
+    for yi in 1:length(Z1)
+      constraint = Z1[yi]
+      for yn in 1:length(Z0)
+        constraint += Z0[yn]
+      end
+    @constraint(mp, constraint >= 1)
+    debug("****** constraint $constraint **********")
+    end
+  end
+end
+
+function binarycut(graph::PlasmoGraph, node::PlasmoNode)
+  #TODO check with Braulio how to do θlb
+  θlb = 0
+
+  linkList= graph.attributes[:links]
+  childLinks = graph.attributes[:childlinks]
+  links = getlinkconstraints(graph)
+
+  sp = getmodel(node)
+  valbars = []
+  variables = []
+  status = solve(sp)
+
+  for childLink in childLinks[node]
+    valbar = getindex(sp,:valbar)
+    push!(valbars,valbar[childLink])
+
+    var1 = links[childLink].terms.vars[1]
+    var2 = links[childLink].terms.vars[2]
+    nodeV1 = getnode(var1)
+    nodeV2 = getnode(var2)
+    #Determine which nodes are parents and children
+    if isChildNode(graph,nodeV1,nodeV2)
+      var = var2
+    elseif isChildNode(graph,nodeV2,nodeV1)
+      var = var1
+    end
+    push!(variables,var)
+  end
+  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNode = graph.nodes[parentNodes[1]]
+
+  mp = getmodel(parentNode)
+  θ = getindex(mp,:θ)
+  rhs = 0
+
+  for i in 1:length(variables)
+      value = getvalue(variables[i])
+      if value == 0
+        rhs += variables[i]
+      elseif value == 1
+        rhs += 1 - variables[i]
+      end
+  end
+  if status != :Optimal
+    debug("Infeasible Model")
+  else
+    θk = getobjectivevalue(getmodel(node))
+    @constraint(mp, θ[getindex(graph,node)] >= θk - (θk-θlb)*rhs)
+  end
+end
+
+function initialCuts(graph::PlasmoGraph, A::Array, fA::Array)
+  #TODO Confused on what types of cuts to make here?
+  len = length(A)
+  len2 = length(fA)
+  debug("length A $len and $len2")
+  for i in 1:length(A)
+    println("*", A[i])
+    println("**", fA[i])
   end
 end
