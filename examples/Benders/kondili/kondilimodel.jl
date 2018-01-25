@@ -66,7 +66,7 @@ function fullmodel(solver)
 end
 
 function diversemodel(A::Array{<:Any,1},solver)
-    m = batching(solver)
+    m = fullmodel(solver)
     w = getindex(m,:w)
 
     @objective(m, Max, sum(w[i...] for wk in A for i in keys(w) if wk[i...] == 0)
@@ -106,3 +106,52 @@ function fitness(wv,solver)
         return -1e5
     end
 end
+
+function crossover(v1,v2)
+  crosspoint = rand(1:length(v1))
+  v3 = vcat(v1[1:crosspoint],v2[crosspoint+1:end])
+  v4 = vcat(v2[1:crosspoint],v1[crosspoint+1:end])
+
+  return v3,v4
+end
+
+function mutation(v, mutationprobability=0.05)
+  v2 = []
+  for i in 1:length(v)
+    p = rand()
+    if p < mutationprobability
+      push!(v2,Int(!Bool(v[i])))
+    else
+      push!(v2,v[i])
+    end
+  end
+  v = v2
+  return v
+end
+
+function tovec(d)
+  v = []
+  for t in periods
+    for i in tasks
+      for j in UnitsForTask[i]
+        push!(v,d[i,j,t])
+      end
+    end
+  end
+  return v
+end
+
+function todict(v,d)
+  i = 1
+  for t in periods
+    for i in tasks
+      for j in UnitsForTask[i]
+        d[i,j,t] = v[i]
+        i += 1
+      end
+    end
+  end
+end
+
+sortpopulation(A,fA) = [A[i] for i in indexin(sort(fA,rev=true),fA)]
+popfitness(A,solver) = map(fitness,A,[solver for i in 1:length(A)])

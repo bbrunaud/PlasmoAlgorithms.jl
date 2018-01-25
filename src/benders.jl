@@ -251,12 +251,12 @@ function bendersolve(graph::Plasmo.PlasmoGraph, cut::Symbol=:LP; max_iterations 
   return getobjectivevalue(getmodel(graph.nodes[1]))
 end
 
-function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol)
+function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   if cut == :LP
     LPcut(graph,node)
   end
   if cut == :Bin
-    binarycut(graph,node)
+    binarycut(graph,node,θlb=θlb)
   end
   if cut == :Superset
     supersetcut(graph,node)
@@ -362,25 +362,21 @@ function supersetcut(graph::PlasmoGraph, node::PlasmoNode)
   rhs = 0
 
   for i in 1:length(variables)
-      value = getupperbound(variables[i])
+      value = getvalue(variables[i])
       if value == 1
-        push!(Z0,variables[i])
-      else
         push!(Z1,variables[i])
+      else
+        push!(Z0,variables[i])
       end
   end
   if status != :Optimal
     debug("Infeasible Model")
   else
-    for yi in 1:length(Z0)
-      constraint = Z0[yi]
-      for yn in 1:length(Z1)
-        constraint += Z1[yn]
-      end
-    @constraint(mp, constraint <= length(Z1))
-    end
+    debug("ADDED SUPERSET CUT")
+    @constraint(mp, [i in 1:length(Z0)], sum(Z1[n] for n in 1:length(Z1)) + Z0[i] <= length(Z1))
+    debug(mp.linconstr[end])
   end
-  end
+end
 
 function subsetcut(graph::PlasmoGraph, node::PlasmoNode)
   linkList= graph.attributes[:links]
@@ -418,7 +414,7 @@ function subsetcut(graph::PlasmoGraph, node::PlasmoNode)
   rhs = 0
 
   for i in 1:length(variables)
-      value = getupperbound(variables[i])
+      value = getvalue(variables[i])
       if value == 1
         push!(Z0,variables[i])
       else
@@ -428,22 +424,13 @@ function subsetcut(graph::PlasmoGraph, node::PlasmoNode)
   if status != :Optimal
     debug("Infeasible Model")
   else
-    len = length(Z1)
-    len2 = length(Z0)
-    for yi in 1:length(Z1)
-      constraint = Z1[yi]
-      for yn in 1:length(Z0)
-        constraint += Z0[yn]
-      end
-    @constraint(mp, constraint >= 1)
-    debug("****** constraint $constraint **********")
-    end
+    @constraint(mp, [i in 1:length(Z1)], sum(Z0[n] for n in 1:length(Z0)) + Z1[i] >= 1)
+    debug(mp.linconstr[end])
   end
 end
 
-function binarycut(graph::PlasmoGraph, node::PlasmoNode)
+function binarycut(graph::PlasmoGraph, node::PlasmoNode;θlb=0)
   #TODO check with Braulio how to do θlb
-  θlb = 0
 
   linkList= graph.attributes[:links]
   childLinks = graph.attributes[:childlinks]
@@ -490,6 +477,7 @@ function binarycut(graph::PlasmoGraph, node::PlasmoNode)
   else
     θk = getobjectivevalue(getmodel(node))
     @constraint(mp, θ[getindex(graph,node)] >= θk - (θk-θlb)*rhs)
+    debug(mp.linconstr[end])
   end
 end
 
