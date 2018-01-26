@@ -51,11 +51,15 @@ add_edge(g,n1,n2)
 
 @linkconstraint(g, [k in keys(wr)], n1[:w][k...] == n2[:w][k...])
 
-preProcess(g)
 ϵ = 10e-5
 UB = Inf
 LB = -Inf
 max_iterations=30
+
+preProcess(g)
+forwardStep(g)
+initialCuts(g,A)
+backwardStep(g,:LP)
 
 for i in 1:max_iterations
   LB,UB = forwardStep(g)

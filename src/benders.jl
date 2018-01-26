@@ -481,13 +481,37 @@ function binarycut(graph::PlasmoGraph, node::PlasmoNode;θlb=0)
   end
 end
 
-function initialCuts(graph::PlasmoGraph, A::Array, fA::Array)
-  #TODO Confused on what types of cuts to make here?
-  len = length(A)
-  len2 = length(fA)
-  debug("length A $len and $len2")
-  for i in 1:length(A)
-    println("*", A[i])
-    println("**", fA[i])
+function initialCuts(graph::PlasmoGraph, A::Array{JuMP.JuMPDict{Float64,3},1})
+  varUpdate = Dict()
+  vars = getindex(m2, :w)
+  for key in keys(vars)
+    a,b,c = key
+    var = vars[a,b,c]
+    for i in 1:length(A)
+      if key in keys(A[i])
+        d, e, f = key
+        typ = typeof(var)
+        val = getvalue(var)
+        varUpdate[var] = val
+      end
+    end
+  end
+
+  updateKeys = keys(varUpdate)
+  for k in updateKeys
+    typ = typeof(k)
+  end
+  links = getlinkconstraints(g)
+  linksMap = g.attributes[:links]
+  nodelinks = linksMap[n1]
+  #Iterate through linking constraints
+  for link in nodelinks
+    #Get the nodes and variables in the linked constraint
+    var = links[link].terms.vars[2]
+    updateVal = varUpdate[var]
+    #Set valbar in child node associated with link to variable value in parent
+    sp = getmodel(n2)
+    valbar = getindex(sp, :valbar)
+    fix(valbar[link], updateVal)
   end
 end
