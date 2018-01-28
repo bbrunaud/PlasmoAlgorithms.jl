@@ -11,15 +11,16 @@ include("kondilimodel.jl")
 solver = GurobiSolver(OutputFlag=0)
 m = fullmodel(solver)
 
-solve(m)
+#=solve(m)
 Objective = getobjectivevalue(m)
 SolveTime = getsolvetime(m)
 print("BASE Model \n
 Objective = $Objective \n
 Time = $SolveTime")
-
+=#
 # Get First Solution
 solve(m, relaxation = true)
+lprelax = getobjectivevalue(m)
 wr = getvalue(getindex(m,:w))
 wc = Dict(k => ceil(wr[k...]) for k in keys(wr))
 w1 = removeoverlaps(wc,solver)
@@ -27,15 +28,15 @@ w1 = removeoverlaps(wc,solver)
 # Get list of diverse solutions
 # A is an array of w vectors for the schedule
 A = [w1]
-numsolutions = 2
+numsolutions = 20
 
 for i in 1:numsolutions
   push!(A, diversify(A,solver))
 end
 
 # Objective value of each of the generated solutions
-fA = popfitness(A,solver)
-println("fA = $fA")
+#fA = popfitness(A,solver)
+#println("fA = $fA")
 
 # Graph
 g = PlasmoGraph()
@@ -58,10 +59,14 @@ max_iterations=30
 
 preProcess(g)
 forwardStep(g)
-initialCuts(g,A)
-backwardStep(g,:LP)
+for i in 1:length(A)
+  initialCuts(g,[A[i]])
+  backwardStep(g,:LP)
+#  cutGeneration(g,n2,:Bin,θlb=lprelax)
+end
 
-for i in 1:max_iterations
+bendersolve(g,max_iterations=10)
+#=for i in 1:max_iterations
   LB,UB = forwardStep(g)
   debug("***** ITERATION $i ***********")
   debug("*** UB = ",UB)
@@ -73,7 +78,7 @@ for i in 1:max_iterations
   backwardStep(g,:LP)
   cutGeneration(g,n2,:Bin,θlb=-2909)
 end
-
+=#
 # TODO: Idea... For each solution in A, generate a cut into the master. Test with and without initialization.
 
 

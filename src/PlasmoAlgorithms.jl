@@ -7,7 +7,7 @@ using DataFrames
 using LightGraphs
 
 export lagrangesolve, psolve, bendersolve,
-preProcess, forwardStep, backwardStep, cutGeneration
+preProcess, forwardStep, backwardStep, cutGeneration, initialCuts
 
 include("lagrange.jl")
 include("benders.jl")

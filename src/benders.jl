@@ -483,34 +483,27 @@ end
 
 function initialCuts(graph::PlasmoGraph, A::Array{JuMP.JuMPDict{Float64,3},1})
   varUpdate = Dict()
-  vars = getindex(m2, :w)
-  for key in keys(vars)
-    a,b,c = key
-    var = vars[a,b,c]
+  sp = getmodel(getnodes(graph)[2])
+  vars = getindex(sp, :w)
+  for k in keys(vars)
+    var = vars[k...]
     for i in 1:length(A)
-      if key in keys(A[i])
-        d, e, f = key
-        typ = typeof(var)
-        val = getvalue(var)
+      if k in keys(A[i])
+        val = A[i][k...]
         varUpdate[var] = val
       end
     end
   end
 
-  updateKeys = keys(varUpdate)
-  for k in updateKeys
-    typ = typeof(k)
-  end
-  links = getlinkconstraints(g)
-  linksMap = g.attributes[:links]
-  nodelinks = linksMap[n1]
+  links = getlinkconstraints(graph)
+  linksMap = graph.attributes[:links]
+  nodelinks = linksMap[getnodes(graph)[1]]
   #Iterate through linking constraints
   for link in nodelinks
     #Get the nodes and variables in the linked constraint
     var = links[link].terms.vars[2]
     updateVal = varUpdate[var]
     #Set valbar in child node associated with link to variable value in parent
-    sp = getmodel(n2)
     valbar = getindex(sp, :valbar)
     fix(valbar[link], updateVal)
   end
