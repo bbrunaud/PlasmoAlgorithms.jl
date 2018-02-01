@@ -33,9 +33,3 @@ edge = Plasmo.add_edge(g,n1,n2)
 
 ## Linking constraints between MP and SP
 @linkconstraint(g,[i in 1:2], n1[:x][i] == n2[:x][i])
-
-preProcess(g)
-for i in 1:20
-forwardStep(g)
-backwardStep(g,:binarycut)
-end

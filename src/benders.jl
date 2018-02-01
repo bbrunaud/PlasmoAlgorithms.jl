@@ -231,7 +231,7 @@ function backwardStep(graph::Plasmo.PlasmoGraph,cut::Symbol)
   end
 end
 
-function bendersolve(graph::Plasmo.PlasmoGraph, cut::Symbol=:LP; max_iterations = 3)
+function bendersolve(graph::Plasmo.PlasmoGraph, max_iterations::Int64, cut::Symbol=:LP;)
   preProcess(graph)
   ϵ = 10e-5
   UB = Inf
@@ -252,6 +252,45 @@ function bendersolve(graph::Plasmo.PlasmoGraph, cut::Symbol=:LP; max_iterations 
 end
 
 function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
+  linkList= graph.attributes[:links]
+  childLinks = graph.attributes[:childlinks]
+  dualMap = graph.attributes[:duals]
+  links = getlinkconstraints(graph)
+
+  sp = getmodel(node)
+  valbars = []
+  variables = []
+  λs = []
+  status = solve(sp, relaxation = true)
+  if status != :Optimal
+    debug("Infeasible Model")
+  end
+  status = solve(sp)
+  graph.attributes[:status] = status
+  for childLink in childLinks[node]
+    valbar = getindex(sp,:valbar)
+    push!(valbars,valbar[childLink])
+
+    var1 = links[childLink].terms.vars[1]
+    var2 = links[childLink].terms.vars[2]
+    nodeV1 = getnode(var1)
+    nodeV2 = getnode(var2)
+    #Determine which nodes are parents and children
+    if isChildNode(graph,nodeV1,nodeV2)
+      var = var2
+    elseif isChildNode(graph,nodeV2,nodeV1)
+      var = var1
+    end
+    push!(variables,var)
+    if cut == :LP
+      dualCon = dualMap[node]
+      λs = getdual(dualCon)
+      graph.attributes[:λs] = λs
+    end
+  end
+  graph.attributes[:variables] = variables
+  graph.attributes[:valbars] = valbars
+
   if cut == :LP
     LPcut(graph,node)
   end
@@ -267,37 +306,10 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
 end
 
 function LPcut(graph::PlasmoGraph, node::PlasmoNode)
-  linkList= graph.attributes[:links]
-  dualMap = graph.attributes[:duals]
-  childLinks = graph.attributes[:childlinks]
-  links = getlinkconstraints(graph)
-
-  sp = getmodel(node)
-  λs = []
-  valbars = []
-  variables = []
-  #solve(sp,relaxation=true)
-  status = solve(sp, relaxation = true)
-
-  for childLink in childLinks[node]
-    # dualCon = getindex(sp,:dual)
-    dualCon = dualMap[node]
-    λs = getdual(dualCon)
-    valbar = getindex(sp,:valbar)
-    push!(valbars,valbar[childLink])
-
-    var1 = links[childLink].terms.vars[1]
-    var2 = links[childLink].terms.vars[2]
-    nodeV1 = getnode(var1)
-    nodeV2 = getnode(var2)
-    #Determine which nodes are parents and children
-    if isChildNode(graph,nodeV1,nodeV2)
-      var = var2
-    elseif isChildNode(graph,nodeV2,nodeV1)
-      var = var1
-    end
-    push!(variables,var)
-  end
+  status = graph.attributes[:status]
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
+  λs = graph.attributes[:λs]
   parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
@@ -321,39 +333,11 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
 end
 
 function supersetcut(graph::PlasmoGraph, node::PlasmoNode)
-  linkList= graph.attributes[:links]
-  dualMap = graph.attributes[:duals]
-  childLinks = graph.attributes[:childlinks]
-  links = getlinkconstraints(graph)
-
-  sp = getmodel(node)
-  linkList= graph.attributes[:links]
-  childLinks = graph.attributes[:childlinks]
-  links = getlinkconstraints(graph)
-
-  sp = getmodel(node)
-  valbars = []
-  variables = []
+  status = graph.attributes[:status]
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
   Z1 = []
   Z0 = []
-  status = solve(sp)
-
-  for childLink in childLinks[node]
-    valbar = getindex(sp,:valbar)
-    push!(valbars,valbar[childLink])
-
-    var1 = links[childLink].terms.vars[1]
-    var2 = links[childLink].terms.vars[2]
-    nodeV1 = getnode(var1)
-    nodeV2 = getnode(var2)
-    #Determine which nodes are parents and children
-    if isChildNode(graph,nodeV1,nodeV2)
-      var = var2
-    elseif isChildNode(graph,nodeV2,nodeV1)
-      var = var1
-    end
-    push!(variables,var)
-  end
   parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
@@ -379,33 +363,12 @@ function supersetcut(graph::PlasmoGraph, node::PlasmoNode)
 end
 
 function subsetcut(graph::PlasmoGraph, node::PlasmoNode)
-  linkList= graph.attributes[:links]
-  childLinks = graph.attributes[:childlinks]
-  links = getlinkconstraints(graph)
-
-  sp = getmodel(node)
-  valbars = []
-  variables = []
+  status = graph.attributes[:status]
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
   Z1 = []
   Z0 = []
   status = solve(sp)
-
-  for childLink in childLinks[node]
-    valbar = getindex(sp,:valbar)
-    push!(valbars,valbar[childLink])
-
-    var1 = links[childLink].terms.vars[1]
-    var2 = links[childLink].terms.vars[2]
-    nodeV1 = getnode(var1)
-    nodeV2 = getnode(var2)
-    #Determine which nodes are parents and children
-    if isChildNode(graph,nodeV1,nodeV2)
-      var = var2
-    elseif isChildNode(graph,nodeV2,nodeV1)
-      var = var1
-    end
-    push!(variables,var)
-  end
   parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
@@ -430,33 +393,9 @@ function subsetcut(graph::PlasmoGraph, node::PlasmoNode)
 end
 
 function binarycut(graph::PlasmoGraph, node::PlasmoNode;θlb=0)
-  #TODO check with Braulio how to do θlb
-
-  linkList= graph.attributes[:links]
-  childLinks = graph.attributes[:childlinks]
-  links = getlinkconstraints(graph)
-
-  sp = getmodel(node)
-  valbars = []
-  variables = []
-  status = solve(sp)
-
-  for childLink in childLinks[node]
-    valbar = getindex(sp,:valbar)
-    push!(valbars,valbar[childLink])
-
-    var1 = links[childLink].terms.vars[1]
-    var2 = links[childLink].terms.vars[2]
-    nodeV1 = getnode(var1)
-    nodeV2 = getnode(var2)
-    #Determine which nodes are parents and children
-    if isChildNode(graph,nodeV1,nodeV2)
-      var = var2
-    elseif isChildNode(graph,nodeV2,nodeV1)
-      var = var1
-    end
-    push!(variables,var)
-  end
+  status = graph.attributes[:status]
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
   parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
