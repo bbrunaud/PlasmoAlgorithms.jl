@@ -231,7 +231,7 @@ function backwardStep(graph::Plasmo.PlasmoGraph,cut::Symbol)
   end
 end
 
-function bendersolve(graph::Plasmo.PlasmoGraph, max_iterations::Int64, cut::Symbol=:LP;)
+function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=3, cut::Symbol=:LP;)
   preProcess(graph)
   ϵ = 10e-5
   UB = Inf

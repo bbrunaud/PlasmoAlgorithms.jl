@@ -57,6 +57,7 @@ UB = Inf
 LB = -Inf
 max_iterations=30
 
+#=
 preProcess(g)
 forwardStep(g)
 for i in 1:length(A)
@@ -64,8 +65,9 @@ for i in 1:length(A)
   backwardStep(g,:LP)
 #  cutGeneration(g,n2,:Bin,θlb=lprelax)
 end
+=#
 
-bendersolve(g,max_iterations=10)
+bendersolve(g,max_iterations=25)
 #=for i in 1:max_iterations
   LB,UB = forwardStep(g)
   debug("***** ITERATION $i ***********")
