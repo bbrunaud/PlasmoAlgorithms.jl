@@ -45,3 +45,19 @@ setmodel(n2,m2)
 ## Linking
 # m1[x] = m2[x]  ∀i ∈ {1,2}
 @linkconstraint(g, [i in 1:2], n1[:x][i] == n2[:x][i])
+
+# Solve LP relaxation
+mf = create_flat_graph_model(g)
+mf.solver = g.solver
+solve(mf,relaxation=true)
+LPrel = getobjectivevalue(mf)
+
+#1. Add θ to master
+# Only on or one for each children if using multicuts
+masternode = getnodes(g)[1]
+subnode = getnodes(g)[2]
+
+ms = getmodel(masternode)
+@variable(ms, θ)
+ms.obj += θ
+@constraint(ms, ms.obj <= -LPrel)
