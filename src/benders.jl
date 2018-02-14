@@ -99,8 +99,6 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     #Add theta to parent nodes
     if numChildNodes(graph,node) != 0
       mp = getmodel(node)
-      mflat = create_flat_graph_model(graph)
-      bound = getobjectivevalue(mflat)
       @variable(mp,θ[1:numNodes] >= -1e6)
       for node in LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
         childNode = graph.nodes[node]
@@ -265,7 +263,7 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   if status != :Optimal
     debug("Infeasible Model")
   end
-  status = solve(sp)
+  #status = solve(sp)
   graph.attributes[:status] = status
   for childLink in childLinks[node]
     valbar = getindex(sp,:valbar)
