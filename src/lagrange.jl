@@ -38,9 +38,12 @@ function  lagrangesolve(graph::PlasmoGraph;
   α=2,
   UB=5e5,
   LB=-1e5,
-  δ=0.9,
-  λinit=:relaxation,
-  solveheuristic=fixbinaries)
+  δ=0.8,
+  ξ1=0.1,
+  ξ2=0,
+  λinit=:zero,
+  solveheuristic=fixbinaries,
+  timelimit=360000)
 
   ########## 0. Initialize ########
   # Start clock
@@ -83,7 +86,7 @@ function  lagrangesolve(graph::PlasmoGraph;
   debug("Solved LP relaxation with value $bestbound")
   # Set starting λ to the duals of the LP relaxation
   # TODO handle NLP relaxation
-  λk = λinit == :relaxation ? mflat.linconstrDuals[end-nmult+1:end] : λk = [1.0 for j in 1:nmult]
+  λk = λinit == :relaxation ? mflat.linconstrDuals[end-nmult+1:end] : λk = [0.0 for j in 1:nmult]
   λprev = λk
 
   # Variables
@@ -159,18 +162,22 @@ function  lagrangesolve(graph::PlasmoGraph;
     objective = sense == :Max ? LB : UB
     bestbound = sense == :Max ? UB : LB
     graph.objVal = objective
-    gap = (UB - LB)/objective
+    gap = abs(UB - LB)/abs(objective)
 
     # Check
-    gap < ϵ && debug("Converged on bounds to $objective")  && break
+    if gap < ϵ
+      debug("Converged on bounds to $objective")
+      break
+    end
 
     # Increase or restore bestbound improvement counter
     i += bestbound == bestbound_prev ? 1 : -i
     debug("i = $i")
 
     ########## 3. Check for improvement and update λ ########
-    improved = sense == :Max ? Zk < Zprev*1.1 : Zk > Zprev*1.1
-    debug("Compared Zkprev + 10% = $(Zprev*1.1) with Zk = $Zk and improved is $improved")
+    ξ = min(0.1, ξ1 + ξ2*gap)
+    improved = sense == :Max ? Zk < Zprev*(1+ξ) : Zk > Zprev*(1+ ξ)
+    debug("Compared Zkprev + $(round(ξ*100,1))% = $(Zprev*(1+ξ)) with Zk = $Zk and improved is $improved")
     # Force first step
     if iter == 1
       improved = true
@@ -189,17 +196,30 @@ function  lagrangesolve(graph::PlasmoGraph;
       α *= 0.5
     end
 
+    # Restore α
+#    if iter % 100 == 0
+#       α = 2
+#    end
+
+
     # Shrink α if stuck
     if iter > 10 && i > 4
-      α *= 0.8
+      α *= δ
       i = 0
       debug("STUCK, shrink α")
     end
 
     # Check convergence on α and direction
-    α < 1e-20 && debug("Converged on α = $α")  && break
+    if α < 1e-12
+      debug("Converged on α = $α")
+      break
+    end
+
     normdirection = norm(direction)
-    norm(direction) == 0 && debug("Converged to feasible point")  && break
+    if norm(direction) == 0
+      debug("Converged to feasible point")
+      break
+    end
 
     # Subgradient update
     difference = sense == :Max ? Zk - LB : UB - Zk
@@ -215,10 +235,13 @@ function  lagrangesolve(graph::PlasmoGraph;
     end
     # If the update method is without direction correction Θ = 0 and μ defaults to direction
     step = α*difference/dot(direction,μ)
-    λk = λprev - step*μ
+    λk = λprev + step*μ
 
     # Check step convergence
-    step < 1e-20 && debug("Converged on step = $step")  && break
+    if step < 1e-20
+      debug("Converged on step = $step")
+      break
+    end
 
 
     # Update multiplier bounds (Bundle method)
@@ -248,10 +271,17 @@ function  lagrangesolve(graph::PlasmoGraph;
     debug("UB = $UB")
     debug("LB = $LB")
     debug("gap = $gap")
-    push!(df,[iter,round(time()-starttime),α,step,UB,LB,Hk,Zk,gap])
+    debug("λ = $λk")
+    elapsed = round(time()-starttime)
+    push!(df,[iter,elapsed,α,step,UB,LB,Hk,Zk,gap])
 
     res[:Iterations] = iter
     res[:Gap] = gap
+
+    if elapsed > timelimit
+       debug("Time Limit exceeded, $elapsed seconds")
+       break
+    end
 
   end # Iterations
 
