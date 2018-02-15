@@ -41,7 +41,7 @@ function  lagrangesolve(graph::PlasmoGraph;
   δ=0.8,
   ξ1=0.1,
   ξ2=0,
-  λinit=:relaxation,
+  λinit=:zero,
   solveheuristic=fixbinaries,
   timelimit=360000)
 
@@ -162,7 +162,7 @@ function  lagrangesolve(graph::PlasmoGraph;
     objective = sense == :Max ? LB : UB
     bestbound = sense == :Max ? UB : LB
     graph.objVal = objective
-    gap = (UB - LB)/objective
+    gap = abs(UB - LB)/abs(objective)
 
     # Check
     if gap < ϵ
@@ -200,8 +200,8 @@ function  lagrangesolve(graph::PlasmoGraph;
 #    if iter % 100 == 0
 #       α = 2
 #    end
-       
-    
+
+
     # Shrink α if stuck
     if iter > 10 && i > 4
       α *= δ
@@ -235,7 +235,7 @@ function  lagrangesolve(graph::PlasmoGraph;
     end
     # If the update method is without direction correction Θ = 0 and μ defaults to direction
     step = α*difference/dot(direction,μ)
-    λk = λprev - step*μ
+    λk = λprev + step*μ
 
     # Check step convergence
     if step < 1e-20
@@ -271,6 +271,7 @@ function  lagrangesolve(graph::PlasmoGraph;
     debug("UB = $UB")
     debug("LB = $LB")
     debug("gap = $gap")
+    debug("λ = $λk")
     elapsed = round(time()-starttime)
     push!(df,[iter,elapsed,α,step,UB,LB,Hk,Zk,gap])
 
@@ -281,7 +282,7 @@ function  lagrangesolve(graph::PlasmoGraph;
        debug("Time Limit exceeded, $elapsed seconds")
        break
     end
-    
+
   end # Iterations
 
   # Report
