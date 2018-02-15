@@ -12,7 +12,9 @@ function psolve(m::JuMP.Model)
   return d
 end
 
-function fixbinaries(mflat,cat=[:Bin])
+# Lagrangean Heuristics
+function fixbinaries(graph::PlasmoGraph,cat=[:Bin])
+  mflat = graph.attributes[:mflat]
   for j in 1:mflat.numCols
     if mflat.colCat[j] in cat
       mflat.colUpper[j] = mflat.colVal[j]
@@ -27,10 +29,11 @@ function fixbinaries(mflat,cat=[:Bin])
   end
 end
 
-function fixbinariesandintegers(mflat)
-  fixbinaries(mflat,[:Bin,:Int])
+function fixintegers(graph::PlasmoGraph)
+  fixbinaries(graph,[:Bin,:Int])
 end
 
+# Main Function
 function  lagrangesolve(graph::PlasmoGraph;
   update_method=:subgradient,
   max_iterations=100,
@@ -42,7 +45,7 @@ function  lagrangesolve(graph::PlasmoGraph;
   ξ1=0.1,
   ξ2=0,
   λinit=:relaxation,
-  solveheuristic=fixbinaries,
+  lagrangeheuristic=fixbinaries,
   timelimit=360000)
 
   ########## 0. Initialize ########
@@ -146,7 +149,7 @@ function  lagrangesolve(graph::PlasmoGraph;
 
     ########## 2. Solve Lagrangean Heuristic ########
     mflat.colVal = vcat([getmodel(n).colVal for n in values(nodedict)]...)
-    Hk = solveheuristic(mflat)
+    Hk = lagrangeheuristic(mflat)
     debug("Hk = $Hk")
 
 
@@ -200,8 +203,8 @@ function  lagrangesolve(graph::PlasmoGraph;
 #    if iter % 100 == 0
 #       α = 2
 #    end
-       
-    
+
+
     # Shrink α if stuck
     if iter > 10 && i > 4
       α *= δ
@@ -271,6 +274,7 @@ function  lagrangesolve(graph::PlasmoGraph;
     debug("UB = $UB")
     debug("LB = $LB")
     debug("gap = $gap")
+    debug("λ = $λk")
     elapsed = round(time()-starttime)
     push!(df,[iter,elapsed,α,step,UB,LB,Hk,Zk,gap])
 
@@ -281,7 +285,7 @@ function  lagrangesolve(graph::PlasmoGraph;
        debug("Time Limit exceeded, $elapsed seconds")
        break
     end
-    
+
   end # Iterations
 
   # Report
