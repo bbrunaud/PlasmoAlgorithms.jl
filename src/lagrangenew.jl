@@ -1,20 +1,182 @@
-# Parallel model solve function, returns an array of objective values with dimension equal to of elements in the collection for which pmap was applied
-function psolve(m::JuMP.Model)
-  solve(m)
-  d = Dict()
-  d[:objective] = getobjectivevalue(m)
-  d[:values] = m.colVal
-  node = getnode(m)
-  for v in values(node.index)
-    d[:nodeindex] = v
+"""
+  lagrangesolve(graph)
+  solve graph using lagrange decomposition
+"""
+function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.1,timelimit=3600,α=2,lagrangeheuristic=fixbinaries)
+  lgprepare(graph)
+  n = graph.attributes[:normalized]
+
+  starttime = time()
+  s = Solution(method=:dual_decomposition)
+
+  nmult = graph.attributes[:numlinks]
+  λ = zeros(nmult) # Array{Float64}(nmult)
+  x = zeros(nmult,2) # Linking variables values
+  res = zeros(nmult) # Residuals
+  nodes = [node for node in values(getnodes(graph))]
+  graph.attributes[:α] = α
+  iterval = 0
+
+  for iter in 1:max_iterations
+    iterstart = time()
+    # Solve subproblems
+    Zk = 0
+    for node in nodes
+       (x,Zkn) = solvenode(node,λ,x)
+       Zk += Zkn
+    end
+    Zk *= n
+    graph.attributes[:Zk] = Zk
+
+    # Update residuals
+    res = x[:,1] - x[:,2]
+
+    itertime = time() - iterstart
+    tstamp = time() - starttime
+    saveiteration(s,tstamp,[iterval,Zk,itertime],n)
+
+    # Check convergence
+    if norm(res) < ϵ
+      s.termination = "Optimal"
+      break
+    end
+
+    # Update multipliers
+    (λ, iterval) = updatemultipliers(graph,λ,res,update_method,lagrangeheuristic)
+
+    # Save summary
   end
-  #println("Solved node $(d[:nodeindex]) on $(gethostname())")
-  return d
+  s.termination = "Max Iterations"
+  return s
+end
+
+# Preprocess function
+"""
+  lgprepare(graph::PlasmoGraph)
+  Prepares the graph to apply lagrange decomposition algorithm
+"""
+function lgprepare(graph::PlasmoGraph)
+  if haskey(graph.attributes,:preprocessed)
+    return true
+  end
+  n = normalizegraph(graph)
+  links = getlinkconstraints(graph)
+  nmult = length(links) # Number of multipliers
+  graph.attributes[:numlinks] = nmult
+  graph.attributes[:sense] = getmodel(getnodes(graph)[1]).objSense
+  sense = graph.attributes[:sense]
+#  graph.attributes[:mflat] = create_flat_graph_model(graph)
+  graph.attributes[:cuts] = []
+
+  # Create Lagrange Master
+  ms = Model(solver=graph.solver)
+  @variable(ms, η, upperbound=1e-6)
+  @variable(ms, λ[1:nmult])
+  @objective(ms, Max, η)
+
+  graph.attributes[:lgmaster] = ms
+
+  # Each node most save its initial objective
+  for n in values(getnodes(graph))
+    mn = getmodel(n)
+    mn.ext[:preobj] = mn.obj
+    mn.ext[:multmap] = Dict()
+    mn.ext[:varmap] = Dict()
+  end
+
+  # Maps
+  # Multiplier map to know which component of λ to take
+  # Varmap knows what values to post where
+  for (i,lc) in enumerate(links)
+    for j in 1:length(lc.terms.vars)
+      var = lc.terms.vars[j]
+      var.m.ext[:multmap][i] = (lc.terms.coeffs[j],lc.terms.vars[j])
+      var.m.ext[:varmap][var] = (i,j)
+    end
+  end
+
+  graph.attributes[:preprocessed] = true
+end
+
+# Solve a single subproblem
+function solvenode(node,λ,x)
+  m = getmodel(node)
+  m.obj = m.ext[:preobj]
+  # Add dualized part to objective function
+  for k in keys(m.ext[:multmap])
+    m.obj += λ[k]*m.ext[:multmap][k][1]*m.ext[:multmap][k][2]
+  end
+
+  # Optional: If my residuals are zero, do nothing
+
+  solve(m)
+  for v in keys(m.ext[:varmap])
+    val = getvalue(v)
+    x[m.ext[:varmap][v]...] = val
+  end
+
+  objval = getobjectivevalue(m)
+  node.attributes[:objective] = objval
+  node.attributes[:solvetime] = getsolvetime(m)
+
+  return x, objval
+end
+
+function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
+  if method == :subgradient
+    subgradient(graph,λ,res,lagrangeheuristic)
+  elseif method == :cuttingplanes
+    cuttingplanes(graph,λ,res)
+  elseif method == :bundle
+    bundle(graph,λ,res,lagrangeheuristic)
+  end
+end
+
+function subgradient(graph,λ,res,lagrangeheuristic)
+  α = graph.attributes[:α]
+  bound = lagrangeheuristic(graph)
+  Zk = graph.attributes[:Zk]
+  step = α*abs(Zk-bound)/(norm(res)^2)
+  λ += step*res
+  return λ,bound
+end
+
+function cuttingplanes(graph,λ,res)
+  ms = graph.attributes[:lgmaster]
+  Zk = graph.attributes[:Zk]
+  nmult = graph.attributes[:numlinks]
+
+  λvar = getindex(ms, :λ)
+  η = getindex(ms,:η)
+
+  cut = @constraint(ms, η <= Zk + sum(λvar[j]*res[j] for j in 1:nmult))
+  push!(graph.attributes[:cuts], cut)
+
+  solve(ms)
+  return getvalue(λvar), getobjectivevalue(ms)
+end
+
+function bundle(graph,λ,res,lagrangeheuristic)
+  α = graph.attributes[:α]
+  bound = lagrangeheuristic(graph)
+  Zk = graph.attributes[:Zk]
+  ms = graph.attributes[:lgmaster]
+  λvar = getindex(ms, :λ)
+  step = α*abs(Zk-bound)/(norm(res)^2)
+  setlowerbound.(λvar,λ-step*abs.(res))
+  setupperbound.(λvar,λ+step*abs.(res))
+
+  cuttingplanes(graph,λ,res)
 end
 
 # Lagrangean Heuristics
 function fixbinaries(graph::PlasmoGraph,cat=[:Bin])
+  if !haskey(graph.attributes,:mflat)
+    graph.attributes[:mflat] = create_flat_graph_model(graph)
+  end
+  n = graph.attributes[:normalized]
   mflat = graph.attributes[:mflat]
+  mflat.solver = graph.solver
   for j in 1:mflat.numCols
     if mflat.colCat[j] in cat
       mflat.colUpper[j] = mflat.colVal[j]
@@ -23,7 +185,7 @@ function fixbinaries(graph::PlasmoGraph,cat=[:Bin])
   end
   status = solve(mflat)
   if status == :Optimal
-    return getobjectivevalue(mflat)
+    return n*getobjectivevalue(mflat)
   else
     error("Heuristic model not infeasible or unbounded")
   end
@@ -34,7 +196,7 @@ function fixintegers(graph::PlasmoGraph)
 end
 
 # Main Function
-function  lagrangesolve(graph::PlasmoGraph;
+function  lagrangesolveold(graph::PlasmoGraph;
   update_method=:subgradient,
   max_iterations=100,
   ϵ=0.001,
@@ -44,13 +206,8 @@ function  lagrangesolve(graph::PlasmoGraph;
   δ=0.8,
   ξ1=0.1,
   ξ2=0,
-<<<<<<< HEAD
-  λinit=:zero,
-  solveheuristic=fixbinaries,
-=======
   λinit=:relaxation,
-  lagrangeheuristic=fixbinaries,
->>>>>>> cfa874f14a995ffaa61ec90c0ed0001b2f7b6d4d
+  solveheuristic=fixbinaries,
   timelimit=360000)
 
   ########## 0. Initialize ########
@@ -104,7 +261,7 @@ function  lagrangesolve(graph::PlasmoGraph;
   direction = nothing
   Zprev = sense == :Max ? UB : LB
 
-  # Master Model (generate only for cutting planes or bundle methods)
+  # Master Model (generate only for  planes or bundle methods)
   if update_method in [:cuttingplanes,:bundle]
     ms = Model(solver=graph.solver)
     @variable(ms, η)
@@ -129,7 +286,7 @@ function  lagrangesolve(graph::PlasmoGraph;
 
 
     # Restore initial objective
-    for (j,sp) in enumerate(SP)osi
+    for (j,sp) in enumerate(SP)
       sp.obj = SPObjectives[j]
     end
     # add dualized part
@@ -141,7 +298,7 @@ function  lagrangesolve(graph::PlasmoGraph;
       end
     end
 
-    # Solveosi
+    # Solve
     SP_result = pmap(psolve,SP)
     # Put values back in the graph
     nodedict = getnodes(graph)
@@ -154,7 +311,7 @@ function  lagrangesolve(graph::PlasmoGraph;
 
     ########## 2. Solve Lagrangean Heuristic ########
     mflat.colVal = vcat([getmodel(n).colVal for n in values(nodedict)]...)
-    Hk = lagrangeheuristic(mflat)
+    Hk = solveheuristic(mflat)
     debug("Hk = $Hk")
 
 
@@ -170,7 +327,7 @@ function  lagrangesolve(graph::PlasmoGraph;
     objective = sense == :Max ? LB : UB
     bestbound = sense == :Max ? UB : LB
     graph.objVal = objective
-    gap = abs(UB - LB)/abs(objective)
+    gap = (UB - LB)/objective
 
     # Check
     if gap < ϵ
@@ -208,8 +365,6 @@ function  lagrangesolve(graph::PlasmoGraph;
 #    if iter % 100 == 0
 #       α = 2
 #    end
-
-
     # Shrink α if stuck
     if iter > 10 && i > 4
       α *= δ
@@ -243,7 +398,7 @@ function  lagrangesolve(graph::PlasmoGraph;
     end
     # If the update method is without direction correction Θ = 0 and μ defaults to direction
     step = α*difference/dot(direction,μ)
-    λk = λprev + step*μ
+    λk = λprev - step*μ
 
     # Check step convergence
     if step < 1e-20
@@ -279,7 +434,6 @@ function  lagrangesolve(graph::PlasmoGraph;
     debug("UB = $UB")
     debug("LB = $LB")
     debug("gap = $gap")
-    debug("λ = $λk")
     elapsed = round(time()-starttime)
     push!(df,[iter,elapsed,α,step,UB,LB,Hk,Zk,gap])
 
@@ -300,3 +454,17 @@ function  lagrangesolve(graph::PlasmoGraph;
   return res, df
 
 end # function
+
+# Parallel model solve function, returns an array of objective values with dimension equal to of elements in the collection for which pmap was applied
+function psolve(m::JuMP.Model)
+  solve(m)
+  d = Dict()
+  d[:objective] = getobjectivevalue(m)
+  d[:values] = m.colVal
+  node = getnode(m)
+  for v in values(node.index)
+    d[:nodeindex] = v
+  end
+  #println("Solved node $(d[:nodeindex]) on $(gethostname())")
+  return d
+end
