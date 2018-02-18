@@ -2,34 +2,38 @@
   lagrangesolve(graph)
   solve graph using lagrange decomposition
 """
-function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.1,timelimit=3600,α=2,lagrangeheuristic=fixbinaries)
+function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.001,timelimit=3600,α=2,lagrangeheuristic=fixbinaries)
   lgprepare(graph)
   n = graph.attributes[:normalized]
 
   starttime = time()
   s = Solution(method=:dual_decomposition)
-
+  λ = graph.attributes[:λ]
+  x = graph.attributes[:x]
+  res = graph.attributes[:res]
   nmult = graph.attributes[:numlinks]
-  λ = zeros(nmult) # Array{Float64}(nmult)
-  x = zeros(nmult,2) # Linking variables values
-  res = zeros(nmult) # Residuals
   nodes = [node for node in values(getnodes(graph))]
   graph.attributes[:α] = α
   iterval = 0
 
   for iter in 1:max_iterations
+    variant = iter == 1 ? :default : update_method # Use default version in the first iteration
+
     iterstart = time()
     # Solve subproblems
     Zk = 0
     for node in nodes
-       (x,Zkn) = solvenode(node,λ,x)
+       (x,Zkn) = solvenode(node,λ,x,variant)
        Zk += Zkn
     end
     Zk *= n
     graph.attributes[:Zk] = Zk
+    graph.attributes[:x] = x
+
 
     # Update residuals
     res = x[:,1] - x[:,2]
+    graph.attributes[:res] = res
 
     itertime = time() - iterstart
     tstamp = time() - starttime
@@ -38,12 +42,12 @@ function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.1
     # Check convergence
     if norm(res) < ϵ
       s.termination = "Optimal"
-      break
+      return s
     end
 
     # Update multipliers
     (λ, iterval) = updatemultipliers(graph,λ,res,update_method,lagrangeheuristic)
-
+    graph.attributes[:λ] = λ
     # Save summary
   end
   s.termination = "Max Iterations"
@@ -63,9 +67,12 @@ function lgprepare(graph::PlasmoGraph)
   links = getlinkconstraints(graph)
   nmult = length(links) # Number of multipliers
   graph.attributes[:numlinks] = nmult
+  graph.attributes[:λ] = zeros(nmult) # Array{Float64}(nmult)
+  graph.attributes[:x] = zeros(nmult,2) # Linking variables values
+  graph.attributes[:res] = zeros(nmult) # Residuals
   graph.attributes[:sense] = getmodel(getnodes(graph)[1]).objSense
   sense = graph.attributes[:sense]
-#  graph.attributes[:mflat] = create_flat_graph_model(graph)
+  graph.attributes[:mflat] = create_flat_graph_model(graph)
   graph.attributes[:cuts] = []
 
   # Create Lagrange Master
@@ -99,12 +106,20 @@ function lgprepare(graph::PlasmoGraph)
 end
 
 # Solve a single subproblem
-function solvenode(node,λ,x)
+function solvenode(node,λ,x,variant=:default)
   m = getmodel(node)
   m.obj = m.ext[:preobj]
+  m.ext[:lgobj] = m.ext[:preobj]
   # Add dualized part to objective function
   for k in keys(m.ext[:multmap])
-    m.obj += λ[k]*m.ext[:multmap][k][1]*m.ext[:multmap][k][2]
+    coef = m.ext[:multmap][k][1]
+    var = m.ext[:multmap][k][2]
+    m.ext[:lgobj] += λ[k]*coef*var
+    m.obj += λ[k]*coef*var
+    if variant == :ADMM
+      j = 3 - m.ext[:varmap][var][2]
+      m.obj += 1/2*(coef*var - coef*x[k,j])^2
+    end
   end
 
   # Optional: If my residuals are zero, do nothing
@@ -115,7 +130,7 @@ function solvenode(node,λ,x)
     x[m.ext[:varmap][v]...] = val
   end
 
-  objval = getobjectivevalue(m)
+  objval = getvalue(m.ext[:lgobj])
   node.attributes[:objective] = objval
   node.attributes[:solvetime] = getsolvetime(m)
 
@@ -125,6 +140,8 @@ end
 function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   if method == :subgradient
     subgradient(graph,λ,res,lagrangeheuristic)
+  elseif method == :ADMM
+    ADMM(graph,λ,res,lagrangeheuristic)
   elseif method == :cuttingplanes
     cuttingplanes(graph,λ,res)
   elseif method == :bundle
@@ -132,12 +149,19 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   end
 end
 
+# Update functions
 function subgradient(graph,λ,res,lagrangeheuristic)
   α = graph.attributes[:α]
   bound = lagrangeheuristic(graph)
   Zk = graph.attributes[:Zk]
   step = α*abs(Zk-bound)/(norm(res)^2)
   λ += step*res
+  return λ,bound
+end
+
+function ADMM(graph,λ,res,lagrangeheuristic)
+  bound = lagrangeheuristic(graph)
+  λ += res
   return λ,bound
 end
 

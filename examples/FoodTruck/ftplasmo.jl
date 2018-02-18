@@ -1,32 +1,20 @@
-using JuMP
-using Gurobi
 using Plasmo
 using PlasmoAlgorithms
 
-F = [500,300,200]
-D = [200,160,120]
-B = 600
-M = 200
-P = 10
+include("ftbase.jl")
 
-m = Model(solver=GurobiSolver())
+m1 = Model(solver=GurobiSolver())
+@variable(m1, BM >= 0, upperbound=600)
+@objective(m1, Min, 1.5BM)
 
-@variable(m, x[1:3] >= 0)
-@variable(m, y[1:3], Bin)
-@variable(m, B >= 0, upperbound=600)
-@constraint(m, sum(F[i]*y[i] for i in 1:3) <= B)
-@constraint(m, bm[i = 1:3], x[i] <= M*y[i])
-@constraint(m, dem[i = 1:3], x[i] <= D[i])
 @objective(m, Min, sum(F[i]*y[i] - P*x[i] for i in 1:3))
 
-ms = Model(solver=GurobiSolver())
-@variable(ms, B >= 0, upperbound=600)
-@objective(ms, Min, B)
+m2 = deepcopy(m)
 
 g = PlasmoGraph()
-n1 = add_node(g, ms)
+n1 = add_node(g, m1)
 n2 = add_node(g, m)
 
 add_edge(g, n1,n2)
 
-@linkconstraint(g, n1[:B] == n2[:B])
+@linkconstraint(g, n1[:BM] == n2[:B])
