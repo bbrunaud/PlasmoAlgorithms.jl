@@ -259,12 +259,6 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   valbars = []
   variables = []
   λs = []
-  status = solve(sp, relaxation = true)
-  if status != :Optimal
-    debug("Infeasible Model")
-  end
-  #status = solve(sp)
-  graph.attributes[:status] = status
   for childLink in childLinks[node]
     valbar = getindex(sp,:valbar)
     push!(valbars,valbar[childLink])
@@ -280,7 +274,19 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
       var = var1
     end
     push!(variables,var)
+    if cut == :NLP
+      nlp = sp.ext[:nlp]
+      nlp.colVal = sp.colVal
+      nlp.colUpper[end] = nlp.colLower[end] = nlp.colVal[end]
+      status = solve(nlp)
+      dualCon = getindex(nlp,:dualcon)
+      println("dcon = $dualCon")
+      λs = getdual(dualCon)
+      println("lambda = $λs")
+      graph.attributes[:λs] = λs
+    end
     if cut == :LP
+      status = solve(sp, relaxation = true)
       dualCon = dualMap[node]
       λs = getdual(dualCon)
       graph.attributes[:λs] = λs
@@ -289,6 +295,9 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   graph.attributes[:variables] = variables
   graph.attributes[:valbars] = valbars
 
+  if cut == :NLP
+    LPcut(graph,node)
+  end
   if cut == :LP
     LPcut(graph,node)
   end
@@ -304,7 +313,7 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
 end
 
 function LPcut(graph::PlasmoGraph, node::PlasmoNode)
-  status = graph.attributes[:status]
+  status = :Optimal
   variables = graph.attributes[:variables]
   valbars = graph.attributes[:valbars]
   λs = graph.attributes[:λs]
@@ -324,7 +333,11 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
     @constraint(mp, 0 >= rhs)
     debug("Infeasible Model, adding feasibility cut")
   else
-    θk = getobjectivevalue(getmodel(node))
+    if haskey(getmodel(node).ext,:nlp)
+      θk = getobjectivevalue(getmodel(node).ext[:nlp])
+    else
+      θk = getobjectivevalue(getmodel(node))
+    end
     @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
     i = getindex(graph,node)
   end
