@@ -8,6 +8,8 @@ using LightGraphs
 
 export lagrangesolve, psolve, bendersolve,
 
+lgprepare, solvenode,
+
 # Solution
 saveiteration,
 

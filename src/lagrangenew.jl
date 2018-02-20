@@ -70,8 +70,6 @@ function lgprepare(graph::PlasmoGraph)
   graph.attributes[:λ] = zeros(nmult) # Array{Float64}(nmult)
   graph.attributes[:x] = zeros(nmult,2) # Linking variables values
   graph.attributes[:res] = zeros(nmult) # Residuals
-  graph.attributes[:sense] = getmodel(getnodes(graph)[1]).objSense
-  sense = graph.attributes[:sense]
   graph.attributes[:mflat] = create_flat_graph_model(graph)
   graph.attributes[:cuts] = []
 
@@ -159,9 +157,39 @@ function subgradient(graph,λ,res,lagrangeheuristic)
   return λ,bound
 end
 
+function optimalsubgradient(graph,λ,res,lagrangeheuristic)
+  n = graph.attributes[:normalized]
+  α = graph.attributes[:α]
+  bound = lagrangeheuristic(graph)
+  nodes = [node for node in values(getnodes(graph))]
+  Zk = graph.attributes[:Zk]
+  αa = 0
+  za = Zk
+  αb = 2
+  zb = 0
+  function lameval(αv)
+    xv = deepcopy(x)
+    zk = 0
+    stepv = αv*abs(Zk-bound)/(norm(res)^2)
+    for node in nodes
+       (xv,Zkn) = solvenode(node,λ+αv[8,0],xv,variant)
+       zk += Zkn
+    end
+    zk *= n
+    return zk
+  end
+
+  αp = (αa + αb)/2
+  zp = lameval(αp)
+  if zp > 1
+  end
+  λ += step*res
+  return λ,bound
+end
+
 function ADMM(graph,λ,res,lagrangeheuristic)
   bound = lagrangeheuristic(graph)
-  λ += res
+  λ += res/norm(res)
   return λ,bound
 end
 
@@ -201,6 +229,7 @@ function fixbinaries(graph::PlasmoGraph,cat=[:Bin])
   n = graph.attributes[:normalized]
   mflat = graph.attributes[:mflat]
   mflat.solver = graph.solver
+  mflat.colVal = vcat([getmodel(n).colVal for n in values(getnodes(g))]...)
   for j in 1:mflat.numCols
     if mflat.colCat[j] in cat
       mflat.colUpper[j] = mflat.colVal[j]
