@@ -2,9 +2,13 @@
   lagrangesolve(graph)
   solve graph using lagrange decomposition
 """
-function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.001,timelimit=3600,α=2,lagrangeheuristic=fixbinaries)
+function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.001,timelimit=3600,α=2,lagrangeheuristic=fixbinaries,initialmultipliers=:zero)
   lgprepare(graph)
   n = graph.attributes[:normalized]
+
+  if initialmultipliers == :relaxation
+    initialrelaxation(graph)
+  end
 
   starttime = time()
   s = Solution(method=:dual_decomposition)
@@ -15,6 +19,8 @@ function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.0
   nodes = [node for node in values(getnodes(graph))]
   graph.attributes[:α] = α
   iterval = 0
+
+
 
   for iter in 1:max_iterations
     variant = iter == 1 ? :default : update_method # Use default version in the first iteration
@@ -71,6 +77,7 @@ function lgprepare(graph::PlasmoGraph)
   graph.attributes[:x] = zeros(nmult,2) # Linking variables values
   graph.attributes[:res] = zeros(nmult) # Residuals
   graph.attributes[:mflat] = create_flat_graph_model(graph)
+  graph.attributes[:mflat].solver = graph.solver
   graph.attributes[:cuts] = []
 
   # Create Lagrange Master
@@ -135,9 +142,25 @@ function solvenode(node,λ,x,variant=:default)
   return x, objval
 end
 
+# Multiplier Initialization
+function initialrelaxation(graph)
+  if !haskey(graph.attributes,:mflat)
+    graph.attributes[:mflat] = create_flat_graph_model(graph)
+    graph.attributes[:mflat].solver = graph.solver
+  end
+  n = graph.attributes[:normalized]
+  nmult = graph.attributes[:numlinks]
+  mf = graph.attributes[:mflat]
+  solve(mf,relaxation=true)
+  graph.attributes[:λ] = n*mf.linconstrDuals[end-nmult+1:end]
+  return getobjectivevalue(mf)
+end
+
 function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   if method == :subgradient
     subgradient(graph,λ,res,lagrangeheuristic)
+  elseif method == :optimalstep
+    optimalstep(graph,λ,res,lagrangeheuristic)
   elseif method == :ADMM
     ADMM(graph,λ,res,lagrangeheuristic)
   elseif method == :cuttingplanes
@@ -157,33 +180,49 @@ function subgradient(graph,λ,res,lagrangeheuristic)
   return λ,bound
 end
 
-function optimalsubgradient(graph,λ,res,lagrangeheuristic)
-  n = graph.attributes[:normalized]
-  α = graph.attributes[:α]
-  bound = lagrangeheuristic(graph)
-  nodes = [node for node in values(getnodes(graph))]
+function αeval(αv,graph,bound)
+  xv = deepcopy(graph.attributes[:x])
+  res = graph.attributes[:res]
   Zk = graph.attributes[:Zk]
-  αa = 0
-  za = Zk
-  αb = 2
-  zb = 0
-  function lameval(αv)
-    xv = deepcopy(x)
-    zk = 0
-    stepv = αv*abs(Zk-bound)/(norm(res)^2)
-    for node in nodes
-       (xv,Zkn) = solvenode(node,λ+αv[8,0],xv,variant)
-       zk += Zkn
-    end
-    zk *= n
-    return zk
+  n = graph.attributes[:normalized]
+  λ = graph.attributes[:λ]
+  nodes = [node for node in values(getnodes(graph))]
+  step = abs(Zk-bound)/(norm(res)^2)
+  zk = 0
+  for node in nodes
+     (xv,Zkn) = solvenode(node,λ+αv*step*res,xv,:default)
+     zk += Zkn
   end
+  zk *= n
+  return zk
+end
 
-  αp = (αa + αb)/2
-  zp = lameval(αp)
-  if zp > 1
+function optimalstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α])
+  res = graph.attributes[:res]
+  Zk = graph.attributes[:Zk]
+  bound = lagrangeheuristic(graph)
+  step = abs(Zk-bound)/(norm(res)^2)
+  # First curve
+  αa0 = 0
+  za0 = graph.attributes[:Zk]
+  αa1 = 0.01
+  za1 = αeval(αa1,graph,bound)
+  ma = (za1 - za0)/(αa1 - αa0)
+  # Second curve
+  αb0 = α
+  zb0 = αeval(αb0,graph,bound)
+  αb1 = αb0 - 0.01
+  zb1 = αeval(αb1,graph,bound)
+  mb = (zb1 - zb0)/(αb1 - αb0)
+  println("ma = $ma")
+  println("mb = $mb")
+  # Check different Sign
+  if sign(ma)<0 && sign(mb)<0
+    optimalstep(graph,λ,res,lagrangeheuristic,2α)
   end
-  λ += step*res
+  # Find intersection
+  αinter = (za0 - zb0 + αb0*mb)/(mb - ma)
+  λ += αinter*step*res
   return λ,bound
 end
 
