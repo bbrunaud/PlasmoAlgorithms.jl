@@ -2,8 +2,18 @@
   lagrangesolve(graph)
   solve graph using lagrange decomposition
 """
-function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.001,timelimit=3600,α=2,lagrangeheuristic=fixbinaries,initialmultipliers=:zero)
-  lgprepare(graph)
+function lagrangesolve(graph;
+  max_iterations=10,
+  update_method=:subgradient, # :intersectionstep, :ADMM, :cuttingplanes, :bundle
+  ϵ=0.001, # ϵ-convergence tolerance
+  timelimit=3600,
+  α=2, # default subgradient step
+  lagrangeheuristic=fixbinaries, # function to calculate the upper bound
+  initialmultipliers=:zero, # :relaxation for LP relaxation
+  δ = 0.5, # Factor to shrink step when subgradient stuck
+  maxnoimprove = 3) # Amount of iterations that no improvement is allowed before shrinking step
+
+  lgprepare(graph,δ,maxnoimprove)
   n = graph.attributes[:normalized]
 
   if initialmultipliers == :relaxation
@@ -21,7 +31,6 @@ function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.0
   iterval = 0
 
 
-
   for iter in 1:max_iterations
     variant = iter == 1 ? :default : update_method # Use default version in the first iteration
 
@@ -33,6 +42,9 @@ function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.0
        Zk += Zkn
     end
     Zk *= n
+    if Zk > graph.attributes[:Zk]
+      graph.attributes[:noimprove] += 1
+    end
     graph.attributes[:Zk] = Zk
     graph.attributes[:x] = x
 
@@ -43,7 +55,8 @@ function lagrangesolve(graph;max_iterations=10,update_method=:subgradient,ϵ=0.0
 
     itertime = time() - iterstart
     tstamp = time() - starttime
-    saveiteration(s,tstamp,[iterval,Zk,itertime],n)
+    saveiteration(s,tstamp,[iterval,Zk,itertime,tstamp],n)
+    iterationsummary(s)
 
     # Check convergence
     if norm(res) < ϵ
@@ -65,7 +78,7 @@ end
   lgprepare(graph::PlasmoGraph)
   Prepares the graph to apply lagrange decomposition algorithm
 """
-function lgprepare(graph::PlasmoGraph)
+function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3)
   if haskey(graph.attributes,:preprocessed)
     return true
   end
@@ -76,9 +89,13 @@ function lgprepare(graph::PlasmoGraph)
   graph.attributes[:λ] = zeros(nmult) # Array{Float64}(nmult)
   graph.attributes[:x] = zeros(nmult,2) # Linking variables values
   graph.attributes[:res] = zeros(nmult) # Residuals
+  graph.attributes[:Zk] = 0 # Residuals
   graph.attributes[:mflat] = create_flat_graph_model(graph)
   graph.attributes[:mflat].solver = graph.solver
   graph.attributes[:cuts] = []
+  graph.attributes[:δ] = δ
+  graph.attributes[:noimprove] = 0
+  graph.attributes[:maxnoimprove] = maxnoimprove
 
   # Create Lagrange Master
   ms = Model(solver=graph.solver)
@@ -159,8 +176,8 @@ end
 function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   if method == :subgradient
     subgradient(graph,λ,res,lagrangeheuristic)
-  elseif method == :optimalstep
-    optimalstep(graph,λ,res,lagrangeheuristic)
+  elseif method == :intersectionstep
+    intersectionstep(graph,λ,res,lagrangeheuristic)
   elseif method == :ADMM
     ADMM(graph,λ,res,lagrangeheuristic)
   elseif method == :cuttingplanes
@@ -172,6 +189,10 @@ end
 
 # Update functions
 function subgradient(graph,λ,res,lagrangeheuristic)
+  if graph.attributes[:noimprove] >= graph.attributes[:maxnoimprove]
+    graph.attributes[:noimprove] = 0
+    graph.attributes[:α] *= graph.attributes[:δ]
+  end
   α = graph.attributes[:α]
   bound = lagrangeheuristic(graph)
   Zk = graph.attributes[:Zk]
@@ -197,7 +218,7 @@ function αeval(αv,graph,bound)
   return zk
 end
 
-function optimalstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α])
+function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α],Δ=0.01,ϵ=0.001)
   res = graph.attributes[:res]
   Zk = graph.attributes[:Zk]
   bound = lagrangeheuristic(graph)
@@ -205,20 +226,31 @@ function optimalstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α])
   # First curve
   αa0 = 0
   za0 = graph.attributes[:Zk]
-  αa1 = 0.01
+  αa1 = Δ
   za1 = αeval(αa1,graph,bound)
   ma = (za1 - za0)/(αa1 - αa0)
+  if abs(ma) < ϵ
+    return λ,bound
+  elseif ma > 0
+    #return λ - α*step*res, bound #
+    α = -α
+    Δ = -Δ
+  end
+
   # Second curve
   αb0 = α
   zb0 = αeval(αb0,graph,bound)
-  αb1 = αb0 - 0.01
+  αb1 = αb0 - Δ
   zb1 = αeval(αb1,graph,bound)
   mb = (zb1 - zb0)/(αb1 - αb0)
   println("ma = $ma")
   println("mb = $mb")
+  if abs(mb) < ϵ
+    return λ + α*step*res, bound
+  end
   # Check different Sign
   if sign(ma)<0 && sign(mb)<0
-    optimalstep(graph,λ,res,lagrangeheuristic,2α)
+    return λ + α*step*res, bound
   end
   # Find intersection
   αinter = (za0 - zb0 + αb0*mb)/(mb - ma)
