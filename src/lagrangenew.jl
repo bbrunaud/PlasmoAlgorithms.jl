@@ -96,6 +96,7 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3)
   graph.attributes[:δ] = δ
   graph.attributes[:noimprove] = 0
   graph.attributes[:maxnoimprove] = maxnoimprove
+  graph.attributes[:df] = []
 
   # Create Lagrange Master
   ms = Model(solver=graph.solver)
@@ -196,6 +197,7 @@ function subgradient(graph,λ,res,lagrangeheuristic)
   α = graph.attributes[:α]
   bound = lagrangeheuristic(graph)
   Zk = graph.attributes[:Zk]
+  αexplore(graph,bound)
   step = α*abs(Zk-bound)/(norm(res)^2)
   λ += step*res
   return λ,bound
@@ -218,11 +220,22 @@ function αeval(αv,graph,bound)
   return zk
 end
 
+function αexplore(graph,bound)
+  df = graph.attributes[:df]
+  z = []
+  for α in -2:0.1:2
+    push!(z,αeval(α,graph,bound))
+  end
+  push!(df,z)
+end
+
+
 function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α],Δ=0.01,ϵ=0.001)
   res = graph.attributes[:res]
   Zk = graph.attributes[:Zk]
   bound = lagrangeheuristic(graph)
   step = abs(Zk-bound)/(norm(res)^2)
+  αexplore(graph,bound)
   # First curve
   αa0 = 0
   za0 = graph.attributes[:Zk]
