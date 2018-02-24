@@ -11,7 +11,8 @@ function lagrangesolve(graph;
   lagrangeheuristic=fixbinaries, # function to calculate the upper bound
   initialmultipliers=:zero, # :relaxation for LP relaxation
   δ = 0.5, # Factor to shrink step when subgradient stuck
-  maxnoimprove = 3) # Amount of iterations that no improvement is allowed before shrinking step
+  maxnoimprove = 3,
+  combinationdef=[]) # Amount of iterations that no improvement is allowed before shrinking step
 
   lgprepare(graph,δ,maxnoimprove)
   n = graph.attributes[:normalized]
@@ -22,12 +23,12 @@ function lagrangesolve(graph;
 
   starttime = time()
   s = Solution(method=:dual_decomposition)
-  λ = graph.attributes[:λ]
-  x = graph.attributes[:x]
-  res = graph.attributes[:res]
+  λ = graph.attributes[:λ][end]
+  x = graph.attributes[:x][end]
+  res = graph.attributes[:res][end]
   nmult = graph.attributes[:numlinks]
   nodes = [node for node in values(getnodes(graph))]
-  graph.attributes[:α] = α
+  graph.attributes[:α] = [1.0α]
   iterval = 0
 
 
@@ -42,16 +43,20 @@ function lagrangesolve(graph;
        Zk += Zkn
     end
     Zk *= n
-    if Zk > graph.attributes[:Zk]
+    if Zk > graph.attributes[:Zk][end]
       graph.attributes[:noimprove] += 1
     end
-    graph.attributes[:Zk] = Zk
-    graph.attributes[:x] = x
+    if graph.attributes[:noimprove] >= graph.attributes[:maxnoimprove]
+      graph.attributes[:noimprove] = 0
+      graph.attributes[:α][end] *= graph.attributes[:δ]
+    end
+    push!(graph.attributes[:Zk],Zk)
+    push!(graph.attributes[:x],x)
 
 
     # Update residuals
     res = x[:,1] - x[:,2]
-    graph.attributes[:res] = res
+    push!(graph.attributes[:res],res)
 
     itertime = time() - iterstart
     tstamp = time() - starttime
@@ -65,8 +70,9 @@ function lagrangesolve(graph;
     end
 
     # Update multipliers
+    push!(graph.attributes[:α], α)
     (λ, iterval) = updatemultipliers(graph,λ,res,update_method,lagrangeheuristic)
-    graph.attributes[:λ] = λ
+    push!(graph.attributes[:λ], λ)
     # Save summary
   end
   s.termination = "Max Iterations"
@@ -86,10 +92,10 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3)
   links = getlinkconstraints(graph)
   nmult = length(links) # Number of multipliers
   graph.attributes[:numlinks] = nmult
-  graph.attributes[:λ] = zeros(nmult) # Array{Float64}(nmult)
-  graph.attributes[:x] = zeros(nmult,2) # Linking variables values
-  graph.attributes[:res] = zeros(nmult) # Residuals
-  graph.attributes[:Zk] = 0 # Residuals
+  graph.attributes[:λ] = [zeros(nmult)] # Array{Float64}(nmult)
+  graph.attributes[:x] = [zeros(nmult,2)] # Linking variables values
+  graph.attributes[:res] = [zeros(nmult)] # Residuals
+  graph.attributes[:Zk] = [0.0] # Residuals
   graph.attributes[:mflat] = create_flat_graph_model(graph)
   graph.attributes[:mflat].solver = graph.solver
   graph.attributes[:cuts] = []
@@ -170,7 +176,7 @@ function initialrelaxation(graph)
   nmult = graph.attributes[:numlinks]
   mf = graph.attributes[:mflat]
   solve(mf,relaxation=true)
-  graph.attributes[:λ] = n*mf.linconstrDuals[end-nmult+1:end]
+  graph.attributes[:λ][end] = n*mf.linconstrDuals[end-nmult+1:end]
   return getobjectivevalue(mf)
 end
 
@@ -179,6 +185,12 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
     subgradient(graph,λ,res,lagrangeheuristic)
   elseif method == :intersectionstep
     intersectionstep(graph,λ,res,lagrangeheuristic)
+  elseif method == :bettersubgradient
+    bettersubgradient(graph,λ,res,lagrangeheuristic)
+  elseif method == :fastsubgradient
+    fastsubgradient(graph,λ,res,lagrangeheuristic)
+  elseif method == :marchingstep
+    marchingstep(graph,λ,res,lagrangeheuristic)
   elseif method == :ADMM
     ADMM(graph,λ,res,lagrangeheuristic)
   elseif method == :cuttingplanes
@@ -190,13 +202,9 @@ end
 
 # Update functions
 function subgradient(graph,λ,res,lagrangeheuristic)
-  if graph.attributes[:noimprove] >= graph.attributes[:maxnoimprove]
-    graph.attributes[:noimprove] = 0
-    graph.attributes[:α] *= graph.attributes[:δ]
-  end
-  α = graph.attributes[:α]
+  α = graph.attributes[:α][end]
   bound = lagrangeheuristic(graph)
-  Zk = graph.attributes[:Zk]
+  Zk = graph.attributes[:Zk][end]
   αexplore(graph,bound)
   step = α*abs(Zk-bound)/(norm(res)^2)
   λ += step*res
@@ -204,11 +212,11 @@ function subgradient(graph,λ,res,lagrangeheuristic)
 end
 
 function αeval(αv,graph,bound)
-  xv = deepcopy(graph.attributes[:x])
-  res = graph.attributes[:res]
-  Zk = graph.attributes[:Zk]
+  xv = deepcopy(graph.attributes[:x][end])
+  res = graph.attributes[:res][end]
+  Zk = graph.attributes[:Zk][end]
   n = graph.attributes[:normalized]
-  λ = graph.attributes[:λ]
+  λ = graph.attributes[:λ][end]
   nodes = [node for node in values(getnodes(graph))]
   step = abs(Zk-bound)/(norm(res)^2)
   zk = 0
@@ -230,15 +238,15 @@ function αexplore(graph,bound)
 end
 
 
-function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α],Δ=0.01,ϵ=0.001)
-  res = graph.attributes[:res]
-  Zk = graph.attributes[:Zk]
+function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01,ϵ=0.001)
+  res = graph.attributes[:res][end]
+  Zk = graph.attributes[:Zk][end]
   bound = lagrangeheuristic(graph)
   step = abs(Zk-bound)/(norm(res)^2)
   αexplore(graph,bound)
   # First curve
   αa0 = 0
-  za0 = graph.attributes[:Zk]
+  za0 = Zk
   αa1 = Δ
   za1 = αeval(αa1,graph,bound)
   ma = (za1 - za0)/(αa1 - αa0)
@@ -271,6 +279,90 @@ function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α
   return λ,bound
 end
 
+function fastsubgradient(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01)
+  res = graph.attributes[:res][end]
+  Zk = graph.attributes[:Zk][end]
+  bound = lagrangeheuristic(graph)
+  step = abs(Zk-bound)/(norm(res)^2)
+  # First point
+  α1 = 0
+  z1 = Zk
+
+  # Second point
+  α2 = α
+  debug("α = $α")
+  z2 = αeval(α2,graph,bound)
+
+  if (z1 - z2)/z1 > Δ
+    # If second point gives a decrease of more than Δ%, take it.
+    return (λ += α2*step*res), bound
+  elseif abs((z1 - z2)/z1) < Δ
+    # If second point is similar to the first one, take the midpoint
+    return (λ += α2/2*step*res), bound
+  else
+    # If second point is larger than first, take quarter-step
+    return (λ += α2/4*step*res), bound
+  end
+end
+
+function bettersubgradient(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01)
+  res = graph.attributes[:res][end]
+  Zk = graph.attributes[:Zk][end]
+  bound = lagrangeheuristic(graph)
+  step = abs(Zk-bound)/(norm(res)^2)
+  # First point
+  α1 = 0
+  z1 = Zk
+
+  # Second point
+  α2 = α
+  debug("α = $α")
+  z2 = αeval(α2,graph,bound)
+
+  if (z1 - z2)/z1 > Δ
+    # If second point gives a decrease of more than Δ%, take it.
+    return (λ += α2*step*res), bound
+  elseif abs((z1 - z2)/z1) < Δ
+    # If second point is similar to the first one, take the midpoint
+    return (λ += α2/2*step*res), bound
+  end
+
+  # Third point
+  α3 = α/4
+  z3 = αeval(α3,graph,bound)
+  if z3 < z1
+    # If the third point gives decrease, take the step.
+    return (λ += α3*step*res), bound
+  else
+    # If the third point does not give decrease, take a midpoint between them
+    return (λ += α3/2*step*res), bound
+  end
+end
+
+function marchingstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.1α)
+  res = graph.attributes[:res][end]
+  Zk = graph.attributes[:Zk][end]
+  bound = lagrangeheuristic(graph)
+  step = abs(Zk-bound)/(norm(res)^2)
+  # First point
+  α1 = 0
+  z1 = Zk
+  zs_1 = z1
+  αs_1 = α1
+
+  for αs in α1+Δ:Δ:α
+    zs = αeval(αs,graph,bound)
+    if zs > zs_1
+      return (λ += αs_1*step*res), bound
+    end
+    zs_1 = zs
+    αs_1 = αs
+  end
+
+  return (λ += α*step*res), bound
+end
+
+
 function ADMM(graph,λ,res,lagrangeheuristic)
   bound = lagrangeheuristic(graph)
   λ += res/norm(res)
@@ -279,7 +371,7 @@ end
 
 function cuttingplanes(graph,λ,res)
   ms = graph.attributes[:lgmaster]
-  Zk = graph.attributes[:Zk]
+  Zk = graph.attributes[:Zk][end]
   nmult = graph.attributes[:numlinks]
 
   λvar = getindex(ms, :λ)
@@ -293,9 +385,9 @@ function cuttingplanes(graph,λ,res)
 end
 
 function bundle(graph,λ,res,lagrangeheuristic)
-  α = graph.attributes[:α]
+  α = graph.attributes[:α][end]
   bound = lagrangeheuristic(graph)
-  Zk = graph.attributes[:Zk]
+  Zk = graph.attributes[:Zk][end]
   ms = graph.attributes[:lgmaster]
   λvar = getindex(ms, :λ)
   step = α*abs(Zk-bound)/(norm(res)^2)
@@ -332,265 +424,6 @@ function fixintegers(graph::PlasmoGraph)
   fixbinaries(graph,[:Bin,:Int])
 end
 
-# Main Function
-function  lagrangesolveold(graph::PlasmoGraph;
-  update_method=:subgradient,
-  max_iterations=100,
-  ϵ=0.001,
-  α=2,
-  UB=5e5,
-  LB=-1e5,
-  δ=0.8,
-  ξ1=0.1,
-  ξ2=0,
-  λinit=:relaxation,
-  solveheuristic=fixbinaries,
-  timelimit=360000)
-
-  ########## 0. Initialize ########
-  # Start clock
-  tic()
-  starttime = time()
-
-  # Results outputs
-  df = DataFrame(Iter=[],Time=[],α=[],step=[],UB=[],LB=[],Hk=[],Zk=[],Gap=[])
-  res = Dict()
-
-  # Get Linkings
-  links = getlinkconstraints(graph)
-  nmult = length(links)
-
-  # Generate subproblem array
-  SP = [getmodel(graph.nodes[i]) for i in 1:length(graph.nodes)]
-  for sp in SP
-    JuMP.setsolver(sp,graph.solver)
-  end
-  # Capture objectives
-  SPObjectives = [getmodel(graph.nodes[i]).obj for i in 1:length(graph.nodes)]
-  sense = SP[1].objSense
-
-  # Generate model for heuristic
-  mflat = create_flat_graph_model(graph)
-  mflat.solver = graph.solver
-  # Restore mflat sense
-  if sense == :Max
-    mflat.objSense = :Max
-    mflat.obj = -mflat.obj
-  end
-  # Solve realaxation
-  solve(mflat,relaxation=true)
-  bestbound = getobjectivevalue(mflat)
-  if sense == :Max
-    UB = bestbound
-  else
-    LB = bestbound
-  end
-  debug("Solved LP relaxation with value $bestbound")
-  # Set starting λ to the duals of the LP relaxation
-  # TODO handle NLP relaxation
-  λk = λinit == :relaxation ? mflat.linconstrDuals[end-nmult+1:end] : λk = [0.0 for j in 1:nmult]
-  λprev = λk
-
-  # Variables
-  θ = 0
-  Kprev = [0 for j in 1:nmult]
-  i = 0
-  direction = nothing
-  Zprev = sense == :Max ? UB : LB
-
-  # Master Model (generate only for  planes or bundle methods)
-  if update_method in [:cuttingplanes,:bundle]
-    ms = Model(solver=graph.solver)
-    @variable(ms, η)
-    @variable(ms, λ[1:nmult])
-    mssense = :Min
-    if sense == :Min
-      mssense = :Max
-    end
-    @objective(ms, mssense, η)
-  end
-
-  ## <-- Begin Iterations --> ##
-
-  ########## 1. Solve Subproblems ########
-  for iter in 1:max_iterations
-    debug("*********************")
-    debug("*** ITERATION $iter  ***")
-    debug("*********************")
-
-    Zk = 0
-    improved = false
-
-
-    # Restore initial objective
-    for (j,sp) in enumerate(SP)
-      sp.obj = SPObjectives[j]
-    end
-    # add dualized part
-    for l in 1:nmult
-      for j in 1:length(links[l].terms.vars)
-        var = links[l].terms.vars[j]
-        coeff = links[l].terms.coeffs[j]
-        var.m.obj += λk[l]*coeff*var
-      end
-    end
-
-    # Solve
-    SP_result = pmap(psolve,SP)
-    # Put values back in the graph
-    nodedict = getnodes(graph)
-    for spd in SP_result
-      Zk += spd[:objective]
-      getmodel(nodedict[spd[:nodeindex]]).colVal = spd[:values]
-    end
-    debug("Zk = $Zk")
-
-
-    ########## 2. Solve Lagrangean Heuristic ########
-    mflat.colVal = vcat([getmodel(n).colVal for n in values(nodedict)]...)
-    Hk = solveheuristic(mflat)
-    debug("Hk = $Hk")
-
-
-    ########## 3. Check for Bounds Convergence ########
-    # Update Bounds
-    UBprev = UB
-    LBprev = LB
-    bestbound_prev = bestbound
-    UB = sense == :Max ? min(Zk,UB) : min(Hk,UB)
-    LB = sense == :Max ? max(Hk,LB) : max(Zk,LB)
-
-    # Update objective value and calculate gap
-    objective = sense == :Max ? LB : UB
-    bestbound = sense == :Max ? UB : LB
-    graph.objVal = objective
-    gap = (UB - LB)/objective
-
-    # Check
-    if gap < ϵ
-      debug("Converged on bounds to $objective")
-      break
-    end
-
-    # Increase or restore bestbound improvement counter
-    i += bestbound == bestbound_prev ? 1 : -i
-    debug("i = $i")
-
-    ########## 3. Check for improvement and update λ ########
-    ξ = min(0.1, ξ1 + ξ2*gap)
-    improved = sense == :Max ? Zk < Zprev*(1+ξ) : Zk > Zprev*(1+ ξ)
-    debug("Compared Zkprev + $(round(ξ*100,1))% = $(Zprev*(1+ξ)) with Zk = $Zk and improved is $improved")
-    # Force first step
-    if iter == 1
-      improved = true
-      Zprev = Zk
-    end
-
-    # Line search
-    # If improvement take step, else reduce α
-    if improved
-      Zk < Zprev && debug("IMPROVED bound")
-      Zprev = Zk
-      direction = [getvalue(links[j].terms) for j in 1:nmult]
-      λprev = λk
-      debug("STEP taken")
-    else
-      α *= 0.5
-    end
-
-    # Restore α
-#    if iter % 100 == 0
-#       α = 2
-#    end
-    # Shrink α if stuck
-    if iter > 10 && i > 4
-      α *= δ
-      i = 0
-      debug("STUCK, shrink α")
-    end
-
-    # Check convergence on α and direction
-    if α < 1e-12
-      debug("Converged on α = $α")
-      break
-    end
-
-    normdirection = norm(direction)
-    if norm(direction) == 0
-      debug("Converged to feasible point")
-      break
-    end
-
-    # Subgradient update
-    difference = sense == :Max ? Zk - LB : UB - Zk
-
-    # Direction correction method method
-    μ = direction + θ*Kprev
-    if update_method == :subgradient_correction
-      if  dot(direction,Kprev) < 0
-          θ = normdirection/norm(Kprev)
-      else
-        θ = 0
-      end
-    end
-    # If the update method is without direction correction Θ = 0 and μ defaults to direction
-    step = α*difference/dot(direction,μ)
-    λk = λprev - step*μ
-
-    # Check step convergence
-    if step < 1e-20
-      debug("Converged on step = $step")
-      break
-    end
-
-
-    # Update multiplier bounds (Bundle method)
-    if update_method == :bundle
-      for j in 1:nmult
-        setupperbound(λ[j], λprev[j] + step*abs(direction[j]))
-        setlowerbound(λ[j], λprev[j] - step*abs(direction[j]))
-      end
-    end
-    # Cutting planes or Bundle
-    if update_method in (:cuttingplanes,:bundle)
-      if sense == :Max
-        @constraint(ms, η >= Zk + sum(λ[j]*direction[j] for j in 1:nmult))
-      else
-        @constraint(ms, η <= Zk + sum(λ[j]*direction[j] for j in 1:nmult))
-      end
-      debug("Last cut = $(ms.linconstr[end])")
-      if iter > 10
-        solve(ms)
-        λk = getvalue(λ)
-      end
-    end
-
-    # Report
-    debug("Step = $step")
-    debug("α = $α")
-    debug("UB = $UB")
-    debug("LB = $LB")
-    debug("gap = $gap")
-    elapsed = round(time()-starttime)
-    push!(df,[iter,elapsed,α,step,UB,LB,Hk,Zk,gap])
-
-    res[:Iterations] = iter
-    res[:Gap] = gap
-
-    if elapsed > timelimit
-       debug("Time Limit exceeded, $elapsed seconds")
-       break
-    end
-
-  end # Iterations
-
-  # Report
-  res[:Objective] = sense == :Min ? UB : LB
-  res[:BestBound] = sense == :Min ? LB : UB
-  res[:Time] = toc()
-  return res, df
-
-end # function
 
 # Parallel model solve function, returns an array of objective values with dimension equal to of elements in the collection for which pmap was applied
 function psolve(m::JuMP.Model)
