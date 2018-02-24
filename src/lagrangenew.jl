@@ -205,7 +205,7 @@ function subgradient(graph,λ,res,lagrangeheuristic)
   α = graph.attributes[:α][end]
   bound = lagrangeheuristic(graph)
   Zk = graph.attributes[:Zk][end]
-  αexplore(graph,bound)
+  #αexplore(graph,bound)
   step = α*abs(Zk-bound)/(norm(res)^2)
   λ += step*res
   return λ,bound
@@ -243,7 +243,7 @@ function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α
   Zk = graph.attributes[:Zk][end]
   bound = lagrangeheuristic(graph)
   step = abs(Zk-bound)/(norm(res)^2)
-  αexplore(graph,bound)
+  #αexplore(graph,bound)
   # First curve
   αa0 = 0
   za0 = Zk
