@@ -6,7 +6,7 @@ using Logging
 using DataFrames
 using LightGraphs
 
-export lagrangesolve, psolve, bendersolve,
+export Solution, lagrangesolve, psolve, bendersolve,
 
 lgprepare, solvenode,
 

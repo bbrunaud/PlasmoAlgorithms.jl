@@ -290,7 +290,6 @@ function fastsubgradient(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α]
 
   # Second point
   α2 = α
-  debug("α = $α")
   z2 = αeval(α2,graph,bound)
 
   if (z1 - z2)/z1 > Δ
