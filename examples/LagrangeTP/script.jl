@@ -4,7 +4,7 @@ using Gurobi
 using JLD
 using DataFrames
 
-n = 6
+n = 20
 
 files = ["T$n.jl",
         "P$n.jl",
