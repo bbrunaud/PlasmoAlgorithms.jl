@@ -167,9 +167,45 @@ function preProcess(graph::Plasmo.PlasmoGraph)
   graph.attributes[:preprocessed] = true
 end
 
+function getLinkingVars(graph::Plasmo.PlasmoGraph,link::Any)
+    #Get the nodes and variables in the linked constraint
+    links = getlinkconstraints(graph)
+    var1 = links[link].terms.vars[1]
+    var2 = links[link].terms.vars[2]
+    nodeV1 = getnode(var1)
+    nodeV2 = getnode(var2)
+    return var1, var2, nodeV1, nodeV2
+end
+
+function setRelationship(graph::Plasmo.PlasmoGraph, nodeV1::Plasmo.PlasmoNode, nodeV2::Plasmo.PlasmoNode)
+    #Determine which nodes are parents and children
+    if isChildNode(graph,nodeV1,nodeV2)
+      childNode = nodeV1
+      parentNode = nodeV2
+    elseif isChildNode(graph,nodeV2,nodeV1)
+      childNode = nodeV2
+      parentNode = nodeV1
+    end
+    return childNode, parentNode
+end
+
+function getValBar(parentNode::Plasmo.PlasmoNode, nodeV1::Plasmo.PlasmoNode, var1::Any, var2::Any)
+    if parentNode == nodeV1
+        val = getvalue(var1)
+        var = var1
+    else
+        val = getvalue(var2)
+        var = var1
+    end
+    return var, val
+end
+
+function getParentNodes(graph::Plasmo.PlasmoGraph, node::Plasmo.PlasmoNode)
+    return LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+end
+
 function forwardStep(graph::Plasmo.PlasmoGraph)
   levels = graph.attributes[:levels]
-  links = getlinkconstraints(graph)
   linksMap = graph.attributes[:links]
   for level in 1:length(levels)
     currentLevel = levels[level]
@@ -180,21 +216,10 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
       nodelinks = linksMap[node]
       #Iterate through linking constraints
       for link in nodelinks
-        #Get the nodes and variables in the linked constraint
-        var1 = links[link].terms.vars[1]
-        var2 = links[link].terms.vars[2]
-        nodeV1 = getnode(var1)
-        nodeV2 = getnode(var2)
-        #Determine which nodes are parents and children
-        if isChildNode(graph,nodeV1,nodeV2)
-          childNode = nodeV1
-          parentNode = nodeV2
-          val = getvalue(var2)
-        elseif isChildNode(graph,nodeV2,nodeV1)
-          childNode = nodeV2
-          parentNode = nodeV1
-          val = getvalue(var1)
-        end
+        var1, var2, nodeV1, nodeV2 = getLinkingVars(graph,link)
+        childNode, parentNode = setRelationship(graph, nodeV1, nodeV2)
+        var, val = getValBar(parentNode, nodeV1, var1, var2)
+
         #Set valbar in child node associated with link to variable value in parent
         sp = getmodel(childNode)
         valbar = getindex(sp, :valbar)
@@ -253,7 +278,6 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   linkList= graph.attributes[:links]
   childLinks = graph.attributes[:childlinks]
   dualMap = graph.attributes[:duals]
-  links = getlinkconstraints(graph)
 
   sp = getmodel(node)
   valbars = []
@@ -269,17 +293,11 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
     valbar = getindex(sp,:valbar)
     push!(valbars,valbar[childLink])
 
-    var1 = links[childLink].terms.vars[1]
-    var2 = links[childLink].terms.vars[2]
-    nodeV1 = getnode(var1)
-    nodeV2 = getnode(var2)
-    #Determine which nodes are parents and children
-    if isChildNode(graph,nodeV1,nodeV2)
-      var = var2
-    elseif isChildNode(graph,nodeV2,nodeV1)
-      var = var1
-    end
+    var1, var2, nodeV1, nodeV2 = getLinkingVars(graph,link)
+    childNode, parentNode = setRelationship(graph, nodeV1, nodeV2)
+    var, val = getValBar(parentNode, nodeV1, var1, var2)
     push!(variables,var)
+
     if cut == :LP
       dualCon = dualMap[node]
       λs = getdual(dualCon)
@@ -308,7 +326,7 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
   variables = graph.attributes[:variables]
   valbars = graph.attributes[:valbars]
   λs = graph.attributes[:λs]
-  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNodes = getParentNodes(graph,node)
   parentNode = graph.nodes[parentNodes[1]]
 
   mp = getmodel(parentNode)
