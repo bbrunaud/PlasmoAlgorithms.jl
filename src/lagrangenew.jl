@@ -43,6 +43,7 @@ function lagrangesolve(graph;
        Zk += Zkn
     end
     Zk *= n
+    graph.attributes[:steptaken] = true
     if Zk > graph.attributes[:Zk][end]
       graph.attributes[:noimprove] += 1
     end
@@ -52,7 +53,7 @@ function lagrangesolve(graph;
     end
     push!(graph.attributes[:Zk],Zk)
     push!(graph.attributes[:x],x)
-
+    α = graph.attributes[:α][end]
 
     # Update residuals
     res = x[:,1] - x[:,2]
@@ -69,7 +70,14 @@ function lagrangesolve(graph;
       return s
     end
 
+    # Check time limit
+    if tstamp > timelimit
+      s.termination = "Time Limit"
+      return s
+    end
+    
     # Update multipliers
+    println("α = $α")
     push!(graph.attributes[:α], α)
     (λ, iterval) = updatemultipliers(graph,λ,res,update_method,lagrangeheuristic)
     push!(graph.attributes[:λ], λ)
@@ -103,6 +111,7 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3)
   graph.attributes[:noimprove] = 0
   graph.attributes[:maxnoimprove] = maxnoimprove
   graph.attributes[:df] = []
+  graph.attributes[:steptaken] = false
 
   # Create Lagrange Master
   ms = Model(solver=graph.solver)
