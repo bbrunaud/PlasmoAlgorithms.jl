@@ -3,6 +3,7 @@ using PlasmoAlgorithms
 using Logging
 using Gurobi
 using DataFrames
+using JLD
 
 Logging.configure(level=DEBUG)
 srand(1)
@@ -19,7 +20,7 @@ end
 orders = []
 gaps =[]
 
-for k in 1:3
+for k in 1:200
 
 pord = vcat([1],shuffle(2:6))
 
@@ -46,4 +47,6 @@ println("Order = $pord")
 
 r = lagrangesolve(g, max_iterations=20, lagrangeheuristic=heur, initialmultipliers=:relaxation)
 push!(gaps,r.gap)
+save("productorder.jld","gaps",gaps)
+
 end

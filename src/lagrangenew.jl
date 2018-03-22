@@ -75,7 +75,7 @@ function lagrangesolve(graph;
       s.termination = "Time Limit"
       return s
     end
-    
+
     # Update multipliers
     println("α = $α")
     push!(graph.attributes[:α], α)
