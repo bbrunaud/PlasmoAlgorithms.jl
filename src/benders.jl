@@ -99,8 +99,6 @@ function preProcess(graph::Plasmo.PlasmoGraph)
     #Add theta to parent nodes
     if numChildNodes(graph,node) != 0
       mp = getmodel(node)
-      mflat = create_flat_graph_model(graph)
-      bound = getobjectivevalue(mflat)
       @variable(mp,θ[1:numNodes] >= -1e6)
       for node in LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
         childNode = graph.nodes[node]
@@ -231,7 +229,7 @@ function backwardStep(graph::Plasmo.PlasmoGraph,cut::Symbol)
   end
 end
 
-function bendersolve(graph::Plasmo.PlasmoGraph, cut::Symbol=:LP; max_iterations = 3)
+function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=3, cut::Symbol=:LP;)
   preProcess(graph)
   ϵ = 10e-5
   UB = Inf
@@ -251,28 +249,17 @@ function bendersolve(graph::Plasmo.PlasmoGraph, cut::Symbol=:LP; max_iterations 
   return getobjectivevalue(getmodel(graph.nodes[1]))
 end
 
-function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol)
-  if cut == :LP
-    LPcut(graph,node)
-  end
-end
-
-function LPcut(graph::PlasmoGraph, node::PlasmoNode)
+function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   linkList= graph.attributes[:links]
-  dualMap = graph.attributes[:duals]
   childLinks = graph.attributes[:childlinks]
+  dualMap = graph.attributes[:duals]
   links = getlinkconstraints(graph)
 
   sp = getmodel(node)
-  λs = []
   valbars = []
   variables = []
-  #solve(sp,relaxation=true)
-  status = solve(sp, relaxation = true)
+  λs = []
   for childLink in childLinks[node]
-    # dualCon = getindex(sp,:dual)
-    dualCon = dualMap[node]
-    λs = getdual(dualCon)
     valbar = getindex(sp,:valbar)
     push!(valbars,valbar[childLink])
 
@@ -287,7 +274,49 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
       var = var1
     end
     push!(variables,var)
+    if cut == :NLP
+      nlp = sp.ext[:nlp]
+      nlp.colVal = sp.colVal
+      nlp.colUpper[end] = nlp.colLower[end] = nlp.colVal[end]
+      status = solve(nlp)
+      dualCon = getindex(nlp,:dualcon)
+      println("dcon = $dualCon")
+      λs = getdual(dualCon)
+      println("lambda = $λs")
+      graph.attributes[:λs] = λs
+    end
+    if cut == :LP
+      status = solve(sp, relaxation = true)
+      dualCon = dualMap[node]
+      λs = getdual(dualCon)
+      graph.attributes[:λs] = λs
+    end
   end
+  graph.attributes[:variables] = variables
+  graph.attributes[:valbars] = valbars
+
+  if cut == :NLP
+    LPcut(graph,node)
+  end
+  if cut == :LP
+    LPcut(graph,node)
+  end
+  if cut == :Bin
+    binarycut(graph,node,θlb=θlb)
+  end
+  if cut == :Superset
+    supersetcut(graph,node)
+  end
+  if cut == :Subset
+    subsetcut(graph,node)
+  end
+end
+
+function LPcut(graph::PlasmoGraph, node::PlasmoNode)
+  status = :Optimal
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
+  λs = graph.attributes[:λs]
   parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
@@ -297,13 +326,135 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
   # TODO: There are two solve calls in the function... there should be only one
   rhs = 0
   for i in 1:length(variables)
-    rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+      rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+      rhs2 = λs[i]*(getupperbound(valbars[i])-variables[i])
   end
   if status != :Optimal
     @constraint(mp, 0 >= rhs)
     debug("Infeasible Model, adding feasibility cut")
   else
-    θk = getobjectivevalue(getmodel(node))
+    if haskey(getmodel(node).ext,:nlp)
+      θk = getobjectivevalue(getmodel(node).ext[:nlp])
+    else
+      θk = getobjectivevalue(getmodel(node))
+    end
     @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
+    i = getindex(graph,node)
+  end
+end
+
+function supersetcut(graph::PlasmoGraph, node::PlasmoNode)
+  status = graph.attributes[:status]
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
+  Z1 = []
+  Z0 = []
+  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNode = graph.nodes[parentNodes[1]]
+
+  mp = getmodel(parentNode)
+  θ = getindex(mp,:θ)
+  rhs = 0
+
+  for i in 1:length(variables)
+      value = getvalue(variables[i])
+      if value == 1
+        push!(Z1,variables[i])
+      else
+        push!(Z0,variables[i])
+      end
+  end
+  if status != :Optimal
+    debug("Infeasible Model")
+  else
+    debug("ADDED SUPERSET CUT")
+    @constraint(mp, [i in 1:length(Z0)], sum(Z1[n] for n in 1:length(Z1)) + Z0[i] <= length(Z1))
+    debug(mp.linconstr[end])
+  end
+end
+
+function subsetcut(graph::PlasmoGraph, node::PlasmoNode)
+  status = graph.attributes[:status]
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
+  Z1 = []
+  Z0 = []
+  status = solve(sp)
+  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNode = graph.nodes[parentNodes[1]]
+
+  mp = getmodel(parentNode)
+  θ = getindex(mp,:θ)
+  rhs = 0
+
+  for i in 1:length(variables)
+      value = getvalue(variables[i])
+      if value == 1
+        push!(Z0,variables[i])
+      else
+        push!(Z1,variables[i])
+      end
+  end
+  if status != :Optimal
+    debug("Infeasible Model")
+  else
+    @constraint(mp, [i in 1:length(Z1)], sum(Z0[n] for n in 1:length(Z0)) + Z1[i] >= 1)
+    debug(mp.linconstr[end])
+  end
+end
+
+function binarycut(graph::PlasmoGraph, node::PlasmoNode;θlb=0)
+  status = graph.attributes[:status]
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
+  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNode = graph.nodes[parentNodes[1]]
+
+  mp = getmodel(parentNode)
+  θ = getindex(mp,:θ)
+  rhs = 0
+
+  for i in 1:length(variables)
+      value = getvalue(variables[i])
+      if value == 0
+        rhs += variables[i]
+      elseif value == 1
+        rhs += 1 - variables[i]
+      end
+  end
+  if status != :Optimal
+    debug("Infeasible Model")
+  else
+    θk = getobjectivevalue(getmodel(node))
+    @constraint(mp, θ[getindex(graph,node)] >= θk - (θk-θlb)*rhs)
+    debug(mp.linconstr[end])
+  end
+end
+
+function initialCuts(graph::PlasmoGraph, A::Array{JuMP.JuMPDict{Float64,3},1})
+  varUpdate = Dict()
+  sp = getmodel(getnodes(graph)[2])
+  vars = getindex(sp, :w)
+  for k in keys(vars)
+    var = vars[k...]
+    for i in 1:length(A)
+      if k in keys(A[i])
+        val = A[i][k...]
+        varUpdate[var] = val
+      end
+    end
+  end
+
+  links = getlinkconstraints(graph)
+  linksMap = graph.attributes[:links]
+  nodelinks = linksMap[getnodes(graph)[1]]
+  #Iterate through linking constraints
+  for link in nodelinks
+    #Get the nodes and variables in the linked constraint
+    var = links[link].terms.vars[2]
+    updateVal = varUpdate[var]
+    #Set valbar in child node associated with link to variable value in parent
+    valbar = getindex(sp, :valbar)
+    fix(valbar[link], updateVal)
   end
 end

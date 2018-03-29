@@ -3,6 +3,7 @@ using Gurobi
 using Plasmo
 using PlasmoAlgorithms
 using Logging
+using Ipopt
 
 Logging.configure(level=DEBUG)
 
@@ -16,9 +17,11 @@ sp = Model(solver = GurobiSolver())
 @variable(sp,x[1:2]>=0)
 @variable(sp,y>=0)
 @variable(sp, z[1:2], Bin)
+@variable(sp, zm[1:2] <=0, lowerbound=-1)
 @constraint(sp,c1,2x[1]-x[2]+3y>=4)
 @constraint(sp,x[1]+2x[2]+y>=3)
 @constraint(sp, bm[i=1:2], x[i] <= 10z[i])
+@constraint(sp, mirror[i=1:2], zm[i] == -z[i])
 @constraint(sp, one[i=1:2], z[1] + z[2] <= 1)
 @objective(sp,Min,2x[1]+3x[2])
 
@@ -37,18 +40,26 @@ edge = Plasmo.add_edge(g,n1,n2)
 ## Linking constraints between MP and SP
 @linkconstraint(g, n1[:y] == n2[:y])
 
-bendersolve(g, max_iterations=5)
 
 
-nlp = Model(solver = IpoptSolver())
+
+nlp = Model(solver = IpoptSolver(print_level=0))
 
 @variable(nlp,x[1:2]>=0, upperbound=10)
 @variable(nlp,y>=0)
 @variable(nlp, z[1:2] >=0, upperbound=1)
-@variable(nlp, yt >=0)
+@variable(nlp, zm[1:2] <=0, lowerbound=-1)
+@variable(nlp, valbar[1:1] >=0)
 @constraint(nlp,c1,2x[1]-x[2]+3y>=4)
 @constraint(nlp,x[1]+2x[2]+y>=3)
-@NLconstraint(nlp, bm[i=1:2], 1-exp(-x[i]/0.01) <= z[i])
+@NLconstraint(nlp, bm[i=1:2], -tanh(x[i]) >= zm[i])
+@constraint(nlp, mirror[i=1:2], zm[i] == -z[i])
 @constraint(nlp, one[i=1:2], z[1] + z[2] <= 1)
-@constraint(nlp, dualcon, yt - y == 0)
+@constraint(nlp, dualcon, valbar[1] - y == 0)
 @objective(nlp,Min,2x[1]+3x[2])
+
+#bendersolve(g, max_iterations=1,cut=:LP)
+
+sp.ext[:nlp] = nlp
+
+bendersolve(g, max_iterations=10,cut=:NLP)
