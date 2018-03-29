@@ -2,13 +2,17 @@ using Plasmo
 using PlasmoAlgorithms
 using Logging
 using Gurobi
+using DataFrames
 
 Logging.configure(level=DEBUG)
 
 g = PlasmoGraph()
 g.solver = GurobiSolver(OutputFlag=0)
 
-include("modelgen.jl")
+include("modelgen4.jl")
+psize=6
+otime=1:psize
+oproducts=1:psize
 node = Dict()
 for t in otime
   n = add_node(g)
@@ -19,3 +23,11 @@ end
 
 
 @linkconstraint(g, [s in sites, i in oproducts, t in 1:otime[end-1]],node[t][:vf][s,i,t] == node[t+1][:vi][s,i,t+1])
+
+function heur(mf)
+  return 72827.587
+end
+
+function cheat20(mf)
+  return 515551.12
+end

@@ -12,7 +12,9 @@ function psolve(m::JuMP.Model)
   return d
 end
 
-function fixbinaries(mflat,cat=[:Bin])
+# Lagrangean Heuristics
+function fixbinaries(graph::PlasmoGraph,cat=[:Bin])
+  mflat = graph.attributes[:mflat]
   for j in 1:mflat.numCols
     if mflat.colCat[j] in cat
       mflat.colUpper[j] = mflat.colVal[j]
@@ -27,10 +29,11 @@ function fixbinaries(mflat,cat=[:Bin])
   end
 end
 
-function fixbinariesandintegers(mflat)
-  fixbinaries(mflat,[:Bin,:Int])
+function fixintegers(graph::PlasmoGraph)
+  fixbinaries(graph,[:Bin,:Int])
 end
 
+# Main Function
 function  lagrangesolve(graph::PlasmoGraph;
   update_method=:subgradient,
   max_iterations=100,
@@ -41,8 +44,13 @@ function  lagrangesolve(graph::PlasmoGraph;
   δ=0.8,
   ξ1=0.1,
   ξ2=0,
+<<<<<<< HEAD
   λinit=:zero,
   solveheuristic=fixbinaries,
+=======
+  λinit=:relaxation,
+  lagrangeheuristic=fixbinaries,
+>>>>>>> cfa874f14a995ffaa61ec90c0ed0001b2f7b6d4d
   timelimit=360000)
 
   ########## 0. Initialize ########
@@ -121,7 +129,7 @@ function  lagrangesolve(graph::PlasmoGraph;
 
 
     # Restore initial objective
-    for (j,sp) in enumerate(SP)
+    for (j,sp) in enumerate(SP)osi
       sp.obj = SPObjectives[j]
     end
     # add dualized part
@@ -133,7 +141,7 @@ function  lagrangesolve(graph::PlasmoGraph;
       end
     end
 
-    # Solve
+    # Solveosi
     SP_result = pmap(psolve,SP)
     # Put values back in the graph
     nodedict = getnodes(graph)
@@ -146,7 +154,7 @@ function  lagrangesolve(graph::PlasmoGraph;
 
     ########## 2. Solve Lagrangean Heuristic ########
     mflat.colVal = vcat([getmodel(n).colVal for n in values(nodedict)]...)
-    Hk = solveheuristic(mflat)
+    Hk = lagrangeheuristic(mflat)
     debug("Hk = $Hk")
 
 

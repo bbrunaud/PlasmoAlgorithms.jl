@@ -6,9 +6,19 @@ using Logging
 using DataFrames
 using LightGraphs
 
-export lagrangesolve, psolve, bendersolve
+export Solution, lagrangesolve, psolve, bendersolve,
 
-include("lagrange.jl")
+lgprepare, solvenode,
+
+# Solution
+saveiteration,
+
+# Utils
+normalizegraph
+
+include("lagrangenew.jl")
 include("benders.jl")
+include("solution.jl")
+include("utils.jl")
 
 end
