@@ -194,9 +194,7 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
     subgradient(graph,λ,res,lagrangeheuristic)
   elseif method == :intersectionstep
     intersectionstep(graph,λ,res,lagrangeheuristic)
-  elseif method == :bettersubgradient
-    bettersubgradient(graph,λ,res,lagrangeheuristic)
-  elseif method == :fastsubgradient
+  elseif method == :probingsubgradient
     fastsubgradient(graph,λ,res,lagrangeheuristic)
   elseif method == :marchingstep
     marchingstep(graph,λ,res,lagrangeheuristic)
@@ -288,7 +286,7 @@ function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α
   return λ,bound
 end
 
-function fastsubgradient(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01)
+function probingsubgradient(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01)
   res = graph.attributes[:res][end]
   Zk = graph.attributes[:Zk][end]
   bound = lagrangeheuristic(graph)
@@ -310,40 +308,6 @@ function fastsubgradient(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α]
   else
     # If second point is larger than first, take quarter-step
     return (λ += α2/4*step*res), bound
-  end
-end
-
-function bettersubgradient(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01)
-  res = graph.attributes[:res][end]
-  Zk = graph.attributes[:Zk][end]
-  bound = lagrangeheuristic(graph)
-  step = abs(Zk-bound)/(norm(res)^2)
-  # First point
-  α1 = 0
-  z1 = Zk
-
-  # Second point
-  α2 = α
-  debug("α = $α")
-  z2 = αeval(α2,graph,bound)
-
-  if (z1 - z2)/z1 > Δ
-    # If second point gives a decrease of more than Δ%, take it.
-    return (λ += α2*step*res), bound
-  elseif abs((z1 - z2)/z1) < Δ
-    # If second point is similar to the first one, take the midpoint
-    return (λ += α2/2*step*res), bound
-  end
-
-  # Third point
-  α3 = α/4
-  z3 = αeval(α3,graph,bound)
-  if z3 < z1
-    # If the third point gives decrease, take the step.
-    return (λ += α3*step*res), bound
-  else
-    # If the third point does not give decrease, take a midpoint between them
-    return (λ += α3/2*step*res), bound
   end
 end
 
