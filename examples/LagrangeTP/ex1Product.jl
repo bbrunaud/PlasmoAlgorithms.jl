@@ -18,8 +18,3 @@ for i in oproducts
 end
 
 @linkconstraint(g, [s in sites, i in 1:oproducts[end-1], t in otime],node[i][:hf][s,i,t] == node[i+1][:hi][s,i+1,t])
-
-result, df = lagrangesolve(g)
-
-display(result)
-println("")

@@ -311,7 +311,6 @@ fcast0[:,20,:] = [
 ]
 
 fcast = cat(3,[i*fcast0 for i in 1.0:0.1:1.3]...)
-println(fcast)
 
 ###################################COST#####################################
 #Production cost of product i in production site s during time period t
