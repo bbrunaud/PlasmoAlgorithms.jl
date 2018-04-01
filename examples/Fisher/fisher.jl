@@ -6,7 +6,7 @@ using Plasmo
 # Max 16x[1] + 10x[2] + 4y[2]
 # s.t. x[1] + x[2] <= 1
 #      y[1] + y[2] <= 1
-#      8x[1] + 2x[2] + y[2] + 4y[2] <= 10
+#      8x[1] + 2x[2] + y[1] + 4y[2] <= 10
 #      x, y ∈ {0,1}
 
 ## Model on x
@@ -22,7 +22,7 @@ m1 = Model(solver=GurobiSolver(OutputFlag=0))
 ## Model on y`
 # Max  4y[2]
 # s.t. y[1] + y[2] <= 1
-#      8x[1] + 2x[2] + y[2] + 4y[2] <= 10
+#      8x[1] + 2x[2] + y[1] + 4y[2] <= 10
 #      x, y ∈ {0,1}
 
 m2 = Model(solver=GurobiSolver(OutputFlag=0))
@@ -30,7 +30,7 @@ m2 = Model(solver=GurobiSolver(OutputFlag=0))
 @variable(m2, xs[i in 1:2],Bin)
 @variable(m2, y[i in 1:2], Bin)
 @constraint(m2, y[1] + y[2] <= 1)
-@constraint(m2, 8xs[1] + 2xs[2] + y[2] + 4y[2] <= 10)
+@constraint(m2, 8xs[1] + 2xs[2] + y[1] + 4y[2] <= 10)
 @objective(m2, Max, 4y[2])
 
 ## Plasmo Graph
