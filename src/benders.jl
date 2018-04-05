@@ -1,6 +1,8 @@
 using JuMP
 using Gurobi
 using Plasmo
+using Logging
+using DataFrames
 
 function fix(var,value)
   ##Sets value for constraint variable
@@ -223,7 +225,10 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
         #Set valbar in child node associated with link to variable value in parent
         sp = getmodel(childNode)
         valbar = getindex(sp, :valbar)
-        fix(valbar[link], val)
+        if isnan(val) == false
+          debug(val, val== NaN)
+          fix(valbar[link], val)
+        end
       end
     end
   end
@@ -255,10 +260,18 @@ function backwardStep(graph::Plasmo.PlasmoGraph,cut::Symbol)
 end
 
 function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=3, cut::Symbol=:LP;)
+  tic()
+  starttime = time()
+
+  # Results outputs
+  df = DataFrame(Iter=[],Time=[],UB=[],LB=[],Obj=[])
+  res = Dict()
+
   preProcess(graph)
   ϵ = 10e-5
   UB = Inf
   LB = -Inf
+  iter = 0
 
   for i in 1:max_iterations
     LB,UB = forwardStep(graph)
@@ -267,11 +280,15 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=3, cut::Sy
     debug("*** LB = ",LB)
     if abs(UB - LB)<ϵ
       debug("Converged!")
+      iter = i
       break
     end
     backwardStep(graph,cut)
   end
-  return getobjectivevalue(getmodel(graph.nodes[1]))
+  push!(df,[iter,round(time()-starttime,5),UB,LB,getobjectivevalue(getmodel(g.nodes[1]))])
+
+  res[:Iterations] = iter
+  return res, df
 end
 
 function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
@@ -293,7 +310,7 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
     valbar = getindex(sp,:valbar)
     push!(valbars,valbar[childLink])
 
-    var1, var2, nodeV1, nodeV2 = getLinkingVars(graph,link)
+    var1, var2, nodeV1, nodeV2 = getLinkingVars(graph,childLink)
     childNode, parentNode = setRelationship(graph, nodeV1, nodeV2)
     var, val = getValBar(parentNode, nodeV1, var1, var2)
     push!(variables,var)
@@ -334,14 +351,30 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
 
   # TODO: There are two solve calls in the function... there should be only one
   rhs = 0
-  for i in 1:length(variables)
-      rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
-      rhs2 = λs[i]*(getupperbound(valbars[i])-variables[i])
-  end
+  rhs2 = 0
+
   if status != :Optimal
+    for i in 1:length(variables)
+        sp = getmodel(node)
+        for j in 1:length(sp.linconstr)
+            if getindex(sp, Symbol(variables[i])) in sp.linconstr[j].terms.vars
+            ind = findin(getindex(sp, Symbol(variables[i])), sp.linconstr[j].terms.vars)
+            if sp.linconstr[j].lb == -Inf
+              rhs2 = rhs2 + λs[i]*(sp.linconstr[j].ub - (sp.linconstr[j].terms.coeffs[ind])*variables[i])
+            elseif sp.linconstr[j].ub == Inf
+                rhs2 = rhs2 + λs[i]*(sp.linconstr[j].lb)
+            end
+          end
+        end
+        print(rhs2)
+        @constraint(mp, 0 .>= rhs2)
+    end
     @constraint(mp, 0 >= rhs)
     debug("Infeasible Model, adding feasibility cut")
   else
+    for i in 1:length(variables)
+        rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+    end
     θk = getobjectivevalue(getmodel(node))
     @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
     i = getindex(graph,node)
