@@ -6,8 +6,10 @@ using Logging
 using DataFrames
 using LightGraphs
 
+import Plasmo.solve
+
 export Solution, lagrangesolve, psolve, bendersolve,
-lgprepare, solvenode,
+lgprepare, solvenode, 
 
 # Solution
 saveiteration,

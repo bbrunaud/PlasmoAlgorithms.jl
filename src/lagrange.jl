@@ -31,7 +31,7 @@ function lagrangesolve(graph;
   graph.attributes[:α] = [1.0α]
   iterval = 0
 
-
+  #iterationheader()
   for iter in 1:max_iterations
     variant = iter == 1 ? :default : update_method # Use default version in the first iteration
 
@@ -62,7 +62,7 @@ function lagrangesolve(graph;
     itertime = time() - iterstart
     tstamp = time() - starttime
     saveiteration(s,tstamp,[iterval,Zk,itertime,tstamp],n)
-    iterationsummary(s)
+    iterationsummary(s,singleline=false)
 
     # Check convergence
     if norm(res) < ϵ
@@ -124,6 +124,9 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3)
   # Each node most save its initial objective
   for n in values(getnodes(graph))
     mn = getmodel(n)
+    if mn.solver == JuMP.UnsetSolver()
+      mn.solver = graph.solver
+    end
     mn.ext[:preobj] = mn.obj
     mn.ext[:multmap] = Dict()
     mn.ext[:varmap] = Dict()
@@ -195,7 +198,7 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   elseif method == :intersectionstep
     intersectionstep(graph,λ,res,lagrangeheuristic)
   elseif method == :probingsubgradient
-    fastsubgradient(graph,λ,res,lagrangeheuristic)
+    probingsubgradient(graph,λ,res,lagrangeheuristic)
   elseif method == :marchingstep
     marchingstep(graph,λ,res,lagrangeheuristic)
   elseif method == :ADMM
@@ -377,7 +380,7 @@ function fixbinaries(graph::PlasmoGraph,cat=[:Bin])
   n = graph.attributes[:normalized]
   mflat = graph.attributes[:mflat]
   mflat.solver = graph.solver
-  mflat.colVal = vcat([getmodel(n).colVal for n in values(getnodes(g))]...)
+  mflat.colVal = vcat([getmodel(n).colVal for n in values(getnodes(graph))]...)
   for j in 1:mflat.numCols
     if mflat.colCat[j] in cat
       mflat.colUpper[j] = mflat.colVal[j]
