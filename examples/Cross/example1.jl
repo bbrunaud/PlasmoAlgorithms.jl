@@ -37,4 +37,5 @@ edge = Plasmo.add_edge(g, n1, n3)
 @linkconstraint(g, [i in 1:2], n1[:x][i] == n2[:x][i])
 @linkconstraint(g, [i in 1:2], n1[:x][i] == n3[:x][i])
 
-test = crossSolve(g,5)
+test = lagrangePrep(g, [0,0])
+#test = crossSolve(g,5)

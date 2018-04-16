@@ -258,16 +258,25 @@ function lagrangePrep(graph::PlasmoGraph, τ)
       push!(graph.attributes[:LSPs],node)
     end
   end
-    numLSPs = length(graph.attributes[:LSPs])
-    origModel = getmodel(graph.attributes[:LMP][1])
-    origObj = origModel.obj
-    LMPmodel = Model(solver = GurobiSolver())
-    @variable(LMPmodel, κ[1:numLSPs]>=0)
-    @variable(LMPmodel, η)
-    @constraint(LMPmodel, η<=sum(κ))
-    @objective(LMPmodel, Max, η)
-    setmodel(graph.nodes[1], LMPmodel)
-
+  numLSPs = length(graph.attributes[:LSPs])
+  origModel = getmodel(graph.attributes[:LMP][1])
+  origObj = origModel.obj
+  numNodes = length(graph.nodes)
+  LMPmodel = Model(solver = GurobiSolver())
+  @variable(LMPmodel, κ[1:numLSPs]>=0)
+  @variable(LMPmodel, η)
+  @constraint(LMPmodel, η<=sum(κ))
+  @objective(LMPmodel, Max, η)
+  setmodel(graph.nodes[1], LMPmodel)
+  println("****SOS*****")
+  for nodeIndex = 2:numNodes
+        m = getmodel(graph.nodes[nodeIndex])
+        println("********", nodeIndex)
+        println(1/(numNodes-1)*origObj)
+        m.obj += 1/(numNodes-1)*origObj
+        print(m)
+  end
+  return graph
 end
 
 function preProcess(graph::PlasmoGraph)
@@ -276,9 +285,9 @@ function preProcess(graph::PlasmoGraph)
     return 0
   end
   bendersPrep(graph)
-  lagrangePrep(lGraph)
+  lGraph = lagrangePrep(lGraph)
   BMP, BSPs = graph.attributes[:BMP][1], graph.attributes[:BSPs]
-  return lGraph
+  return graph, lGraph
 end
 
 function initialize(BSPs, LSPs, H)
