@@ -125,7 +125,7 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
 
   # Create Lagrange Master
   ms = Model(solver=graph.solver)
-  @variable(ms, η, upperbound=cpbound)
+  @variable(ms, η, upperbound=n*cpbound)
   @variable(ms, λ[1:nmult])
   @objective(ms, Max, η)
 
