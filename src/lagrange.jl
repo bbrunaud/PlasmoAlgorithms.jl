@@ -12,7 +12,6 @@ function lagrangesolve(graph;
   initialmultipliers=:zero, # :relaxation for LP relaxation
   δ = 0.5, # Factor to shrink step when subgradient stuck
   maxnoimprove = 3,
-  combinationdef=[],
   cpbound=1e6) # Amount of iterations that no improvement is allowed before shrinking step
 
   ### INITIALIZATION ###
