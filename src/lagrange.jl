@@ -12,10 +12,11 @@ function lagrangesolve(graph;
   initialmultipliers=:zero, # :relaxation for LP relaxation
   δ = 0.5, # Factor to shrink step when subgradient stuck
   maxnoimprove = 3,
-  combinationdef=[]) # Amount of iterations that no improvement is allowed before shrinking step
+  combinationdef=[],
+  cpbound=1e6) # Amount of iterations that no improvement is allowed before shrinking step
 
   ### INITIALIZATION ###
-  lgprepare(graph,δ,maxnoimprove)
+  lgprepare(graph,δ,maxnoimprove,cpbound)
   n = graph.attributes[:normalized]
 
   if initialmultipliers == :relaxation
@@ -101,7 +102,7 @@ end
   lgprepare(graph::PlasmoGraph)
   Prepares the graph to apply lagrange decomposition algorithm
 """
-function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3)
+function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   if haskey(graph.attributes,:preprocessed)
     return true
   end
@@ -124,7 +125,7 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3)
 
   # Create Lagrange Master
   ms = Model(solver=graph.solver)
-  @variable(ms, η, upperbound=1e10)
+  @variable(ms, η, upperbound=cpbound)
   @variable(ms, λ[1:nmult])
   @objective(ms, Max, η)
 
