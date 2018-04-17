@@ -5,11 +5,12 @@ using JuMP
 using Logging
 using DataFrames
 using LightGraphs
+using Gaston
 
 import Plasmo.solve
 
 export Solution, lagrangesolve, psolve, bendersolve,
-lgprepare, solvenode, 
+lgprepare, solvenode,
 
 # Solution
 saveiteration,

@@ -55,7 +55,7 @@ function Base.show(io::IO,s::Solution)
     println("Termination : $(s.termination)")
 end
 
-function iterationsummary(s::Solution; singleline=false)
+function printiterationsummary(s::Solution; singleline=false)
     if singleline
         print("$(s.numiterations)  ")
         print("| $(round(s.iterval[end],4)) \t")
