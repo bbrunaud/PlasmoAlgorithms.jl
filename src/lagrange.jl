@@ -214,7 +214,7 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   elseif method == :ADMM
     ADMM(graph,λ,res,lagrangeheuristic)
   elseif method == :cuttingplanes
-    cuttingplanes(graph,λ,res)
+    cuttingplanes(graph,λ,res,lagrangeheuristic)
   elseif method == :bundle
     bundle(graph,λ,res,lagrangeheuristic)
   elseif  method == :interactive
@@ -366,10 +366,11 @@ function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α
   return λ,bound
 end
 
-function cuttingplanes(graph,λ,res)
+function cuttingplanes(graph,λ,res,lagrangeheuristic)
   ms = graph.attributes[:lgmaster]
   Zk = graph.attributes[:Zk][end]
   nmult = graph.attributes[:numlinks]
+  n = graph.attributes[:normalized]
 
   λvar = getindex(ms, :λ)
   η = getindex(ms,:η)
@@ -378,7 +379,8 @@ function cuttingplanes(graph,λ,res)
   push!(graph.attributes[:cuts], cut)
 
   solve(ms)
-  return getvalue(λvar), getobjectivevalue(ms)
+  bound = n*lagrangeheuristic(graph)
+  return getvalue(λvar), bound
 end
 
 function bundle(graph,λ,res,lagrangeheuristic)
