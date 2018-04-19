@@ -66,7 +66,7 @@ function fullmodel(solver)
 end
 
 function diversemodel(A::Array{<:Any,1},solver)
-    m = batching(solver)
+    m = fullmodel(solver)
     w = getindex(m,:w)
 
     @objective(m, Max, sum(w[i...] for wk in A for i in keys(w) if wk[i...] == 0)

@@ -1,10 +1,15 @@
-@everywhere using Plasmo
-@everywhere using JuMP
-@everywhere using Logging
+using Plasmo
+using JuMP
+using Logging
+using PlasmoAlgorithms
+
+using OhMyREPL
 
 include("fisher.jl")
 
 
 Logging.configure(level=DEBUG)
 
-#r = lagrangesolve(g,update_method=:subgradient,max_iterations=10)
+
+heur(g) = 16
+#r = lagrangesolve(g,update_method=:subgradient,max_iterations=30,lagrangeheuristic=heur)

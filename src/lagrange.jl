@@ -12,7 +12,6 @@ function lagrangesolve(graph;
   initialmultipliers=:zero, # :relaxation for LP relaxation
   δ = 0.5, # Factor to shrink step when subgradient stuck
   maxnoimprove = 3,
-  combinationdef=[],
   cpbound=1e6) # Amount of iterations that no improvement is allowed before shrinking step
 
   ### INITIALIZATION ###
@@ -125,7 +124,7 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
 
   # Create Lagrange Master
   ms = Model(solver=graph.solver)
-  @variable(ms, η, upperbound=n*cpbound)
+  @variable(ms, η, upperbound=cpbound)
   @variable(ms, λ[1:nmult])
   @objective(ms, Max, η)
 
@@ -214,7 +213,7 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   elseif method == :ADMM
     ADMM(graph,λ,res,lagrangeheuristic)
   elseif method == :cuttingplanes
-    cuttingplanes(graph,λ,res,lagrangeheuristic)
+    cuttingplanes(graph,λ,res)
   elseif method == :bundle
     bundle(graph,λ,res,lagrangeheuristic)
   elseif  method == :interactive
@@ -366,11 +365,10 @@ function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α
   return λ,bound
 end
 
-function cuttingplanes(graph,λ,res,lagrangeheuristic)
+function cuttingplanes(graph,λ,res)
   ms = graph.attributes[:lgmaster]
   Zk = graph.attributes[:Zk][end]
   nmult = graph.attributes[:numlinks]
-  n = graph.attributes[:normalized]
 
   λvar = getindex(ms, :λ)
   η = getindex(ms,:η)
@@ -379,8 +377,7 @@ function cuttingplanes(graph,λ,res,lagrangeheuristic)
   push!(graph.attributes[:cuts], cut)
 
   solve(ms)
-  lagrangeheuristic(graph)
-  return getvalue(λvar)
+  return getvalue(λvar), getobjectivevalue(ms)
 end
 
 function bundle(graph,λ,res,lagrangeheuristic)

@@ -7,7 +7,7 @@ include("ex4inputs.jl")
 
 function spmodel(products=oproducts,time=otime)
 
-    m1 = Model(solver=GurobiSolver())
+    m1 = Model(solver=GurobiSolver(MIPGap=0.01,OutputFlag=0))
 
 ###Positive Variables###
 #Sales

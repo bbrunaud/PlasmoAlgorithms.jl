@@ -17,7 +17,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cut::S
     end
     backwardstep(graph,cut)
   end
-  return getobjectivevalue(getmodel(graph.nodes[1]))
+  return s
 end
 
 function bdprepare(graph::Plasmo.PlasmoGraph)
@@ -55,7 +55,7 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
     if numChildNodes(graph,node) != 0
       mp = getmodel(node)
       @variable(mp,θ[1:numNodes] >= -1e6)
-      for node in LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
+      for node in LightGraphs.outneighbors(graph.graph,getindex(graph,node))
         childNode = graph.nodes[node]
         childNodeIndex = getindex(graph,childNode)
         θ = getindex(mp,:θ)
@@ -149,7 +149,7 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
     levels[level] = currentNodes
     childrenNodes = []
     for node in currentNodes
-      childNodeIndex = LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
+      childNodeIndex = LightGraphs.outneighbors(graph.graph,getindex(graph,node))
       for index in childNodeIndex
         childNode = graph.nodes[index]
         push!(childrenNodes,childNode)
@@ -161,11 +161,11 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
 end
 
 function numChildNodes(g::PlasmoGraph, n1::PlasmoNode)
-  return length(LightGraphs.out_neighbors(g.graph,getindex(g,n1)))
+  return length(LightGraphs.outneighbors(g.graph,getindex(g,n1)))
 end
 
 function numParentNodes(g::PlasmoGraph, n1::PlasmoNode)
-  return length(LightGraphs.in_neighbors(g.graph,getindex(g,n1)))
+  return length(LightGraphs.inneighbors(g.graph,getindex(g,n1)))
 end
 
 
@@ -177,7 +177,7 @@ end
 
 function isChildNode(g::Plasmo.PlasmoGraph, n1::PlasmoNode, n2::PlasmoNode)
   ##Checks if n1 is a child node of n2
-  for node in LightGraphs.out_neighbors(g.graph,getindex(g,n2))
+  for node in LightGraphs.outneighbors(g.graph,getindex(g,n2))
     if (n1 == g.nodes[node]) return true
       return true
     end
@@ -289,6 +289,9 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   if cut == :Bin
     binarycut(graph,node,θlb=θlb)
   end
+  if cut == :Root
+    rootcut(graph,node)
+  end
   if cut == :Superset
     supersetcut(graph,node)
   end
@@ -303,7 +306,7 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
   variables = graph.attributes[:variables]
   valbars = graph.attributes[:valbars]
   λs = graph.attributes[:λs]
-  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNodes = LightGraphs.inneighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
   mp = getmodel(parentNode)
@@ -328,13 +331,54 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
   end
 end
 
+function rootcut(graph::PlasmoGraph, node::PlasmoNode)
+  status = :Optimal
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
+  dualMap = graph.attributes[:duals]
+  λs = []
+  dualCon = dualMap[node]
+  parentNodes = in_neighbors(graph,node)
+  parentNode = graph.nodes[parentNodes[1]]
+
+  mp = getmodel(parentNode)
+  θ = getindex(mp,:θ)
+
+  sp = getmodel(node)
+  writeLP(sp,"nodemodel.lp")
+  run(`cpxgetroot nodemodel.lp 0 1`)
+  lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
+  lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
+  MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+  MathProgBase.optimize!(lp.internalModel)
+  rootduals = MathProgBase.getconstrduals(lp.internalModel)
+  lpobj = MathProgBase.getobjval(lp.internalModel)
+  sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
+  λs = getdual(dualCon)
+  graph.attributes[:λs] = λs
+
+  rhs = 0
+  for i in 1:length(variables)
+      rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+      rhs2 = λs[i]*(getupperbound(valbars[i])-variables[i])
+  end
+  if status != :Optimal
+    @constraint(mp, 0 >= rhs)
+    debug("Infeasible Model, adding feasibility cut")
+  else
+    θk = lpobj
+    @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
+    i = getindex(graph,node)
+  end
+end
+
 function supersetcut(graph::PlasmoGraph, node::PlasmoNode)
   status = graph.attributes[:status]
   variables = graph.attributes[:variables]
   valbars = graph.attributes[:valbars]
   Z1 = []
   Z0 = []
-  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNodes = LightGraphs.inneighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
   mp = getmodel(parentNode)
@@ -365,7 +409,7 @@ function subsetcut(graph::PlasmoGraph, node::PlasmoNode)
   Z1 = []
   Z0 = []
   status = solve(sp)
-  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNodes = LightGraphs.inneighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
   mp = getmodel(parentNode)
@@ -392,7 +436,7 @@ function binarycut(graph::PlasmoGraph, node::PlasmoNode;θlb=0)
   status = graph.attributes[:status]
   variables = graph.attributes[:variables]
   valbars = graph.attributes[:valbars]
-  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
+  parentNodes = LightGraphs.inneighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
   mp = getmodel(parentNode)

@@ -1,0 +1,5 @@
+TIME        	
+PERIODS       IMPLICIT
+    Z01JJ01   D01JJ01		      STAGE-1
+    Z01JJ02   D01JJ02  		      STAGE-2	
+ENDATA
