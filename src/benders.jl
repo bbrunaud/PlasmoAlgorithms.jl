@@ -289,6 +289,9 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   if cut == :Bin
     binarycut(graph,node,θlb=θlb)
   end
+  if cut == :Root
+    rootcut(graph,node)
+  end
   if cut == :Superset
     supersetcut(graph,node)
   end
@@ -323,6 +326,47 @@ function LPcut(graph::PlasmoGraph, node::PlasmoNode)
     else
       θk = getobjectivevalue(getmodel(node))
     end
+    @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
+    i = getindex(graph,node)
+  end
+end
+
+function rootcut(graph::PlasmoGraph, node::PlasmoNode)
+  status = :Optimal
+  variables = graph.attributes[:variables]
+  valbars = graph.attributes[:valbars]
+  dualMap = graph.attributes[:duals]
+  λs = []
+  dualCon = dualMap[node]
+  parentNodes = LightGraphs.inneighbors(graph.graph,getindex(graph,node))
+  parentNode = graph.nodes[parentNodes[1]]
+
+  mp = getmodel(parentNode)
+  θ = getindex(mp,:θ)
+
+  sp = getmodel(node)
+  writeLP(sp,"nodemodel.lp")
+  run(`cpxgetroot nodemodel.lp 0 1`)
+  lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
+  lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
+  MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+  MathProgBase.optimize!(lp.internalModel)
+  rootduals = MathProgBase.getconstrduals(lp.internalModel)
+  lpobj = MathProgBase.getobjval(lp.internalModel)
+  sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
+  λs = getdual(dualCon)
+  graph.attributes[:λs] = λs
+
+  rhs = 0
+  for i in 1:length(variables)
+      rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+      rhs2 = λs[i]*(getupperbound(valbars[i])-variables[i])
+  end
+  if status != :Optimal
+    @constraint(mp, 0 >= rhs)
+    debug("Infeasible Model, adding feasibility cut")
+  else
+    θk = lpobj
     @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
     i = getindex(graph,node)
   end

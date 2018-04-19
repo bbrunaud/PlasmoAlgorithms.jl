@@ -6,6 +6,8 @@ using Logging
 using DataFrames
 using LightGraphs
 using Gaston
+using CPLEX
+using MathProgBase
 
 import Plasmo.solve
 
