@@ -30,7 +30,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
       s.termination = "Time Limit"
       return s
     end
-    saveiteration(s,tstamp,[n*LB,n*UB,toc(),tstamp],n)
+    saveiteration(s,tstamp,[n*UB,n*LB,toc(),tstamp],n)
     printiterationsummary(s,singleline=false)
   end
 
@@ -39,7 +39,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
 end
 
 function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Bool)
-  levels = graph.attributes[:levels]
+  levels = getlevels(graph)
   numlevels = length(levels)
   for level in 1:numlevels
     nodeslevel = levels[level]
@@ -53,16 +53,17 @@ function solvenode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbol,1}, 
   nodenumber = getnodenumber(node)
   numinneighbors = length(in_neighbors(graph,node))
   numoutneighbors = length(out_neighbors(graph,node))
+  x = getx(graph)
+  λ = getλ(graph)
+  nodebound = getnodebounds(graph)
 
   # 1. Add cuts
   if numoutneighbors > 0   # Not a leaf node
-    x = graph.attributes[:λ]
-    nodebound = graph.attributes[:nodebound]
     generatebenderscut(node,nodebound,x)
   end
   # 2. Take x
   if numinneighbors > 0    # Not a root node
-    fixxvalue(node,x)
+    takex(node,x)
   end
   # 3. solve
   if :LP in cuts
@@ -72,10 +73,16 @@ function solvenode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbol,1}, 
     xnode, λnode, nodebound = solverootrelaxation(node)
   end
   if updatebound
-    xnode, nodeobjective = solvenode(node)
+    xnode, znode = solvenode(node)
   end
   # 4. put x
+  if numoutneighbors > 0   # Not a leaf node
+    putx(node,xnode,x)
+  end
   # 5. put λ and nodebound
+  if numinneighbors > 0    # Not a root node
+    putλ(node,λnode,λ)
+  end
 end
 
 function solvelprelaxation(node)
@@ -99,7 +106,8 @@ function solverootrelaxation(node)
   lpfile = joinpath(tmpdir,"nodemodel.lp")
   writeLP(sp,lpfile)
   run(`cpxgetroot nodemodel.lp 0 1`)
-  lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
+  lp = Model(solver=sp.solver)
+  turnoffpresolve(lp)
   lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
   MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
   MathProgBase.optimize!(lp.internalModel)
