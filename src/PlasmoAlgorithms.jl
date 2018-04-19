@@ -6,11 +6,11 @@ using Logging
 using DataFrames
 using LightGraphs
 
-export lagrangesolve, psolve, bendersolve,
-preProcess, forwardStep, backwardStep, cutGeneration, initialCuts
+export lagrangesolve, psolve, bendersolve, crossPrepare
 
 include("lagrange.jl")
 include("benders.jl")
+include("cross.jl")
 
 
 end

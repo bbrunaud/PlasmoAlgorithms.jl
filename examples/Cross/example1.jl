@@ -1,7 +1,7 @@
 using JuMP
 using Gurobi
 using Plasmo
-using PlasmoAlgorithms
+#using PlasmoAlgorithms
 
 mp = Model(solver = GurobiSolver())
 sp1 = Model(solver = GurobiSolver())
@@ -37,5 +37,4 @@ edge = Plasmo.add_edge(g, n1, n3)
 @linkconstraint(g, [i in 1:2], n1[:x][i] == n2[:x][i])
 @linkconstraint(g, [i in 1:2], n1[:x][i] == n3[:x][i])
 
-test = lagrangePrep(g, [0,0])
-#test = crossSolve(g,5)
+#test = crossPrepare(g)

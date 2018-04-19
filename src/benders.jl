@@ -1,78 +1,31 @@
 using JuMP
-using Gurobi
 using Plasmo
-using Logging
-using DataFrames
 
-function fix(var,value)
-  ##Sets value for constraint variable
-  setlowerbound(var,value)
-  setupperbound(var,value)
-end
+function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cut::Symbol=:LP, ϵ=1e-5)
+  bdprepare(graph)
 
-function isChildNode(g::Plasmo.PlasmoGraph, n1::PlasmoNode, n2::PlasmoNode)
-  ##Checks if n1 is a child node of n2
-  for node in LightGraphs.out_neighbors(g.graph,getindex(g,n2))
-    if (n1 == g.nodes[node]) return true
-      return true
+  starttime = time()
+  s = Solution(method=:benders)
+
+  UB = Inf
+  LB = -Inf
+
+  for i in 1:max_iterations
+    LB,UB = forwardstep(graph)
+    if abs(UB - LB) < ϵ
+      break
     end
+    backwardstep(graph,cut)
   end
-  return false
+  return getobjectivevalue(getmodel(graph.nodes[1]))
 end
 
-function numChildNodes(g::PlasmoGraph, n1::PlasmoNode)
-  return length(LightGraphs.out_neighbors(g.graph,getindex(g,n1)))
-end
-
-function numParentNodes(g::PlasmoGraph, n1::PlasmoNode)
-  return length(LightGraphs.in_neighbors(g.graph,getindex(g,n1)))
-end
-
-function levels(graph::Plasmo.PlasmoGraph)
-  #Create lists of root and leaf nodes in graph
-  graph.attributes[:roots] = []
-  graph.attributes[:leaves] = []
-  #Create dictionary to keep track of levels of nodes
-  graph.attributes[:levels] = Dict()
-  #Iterate through every node to check for root/leaf nodes
-  for nodeIndex in 1:length(graph.nodes)
-    node = graph.nodes[nodeIndex]
-    #If the node does not have parents it is a root node
-    if numParentNodes(graph,node)==0
-      push!(graph.attributes[:roots],node)
-      #Root nodes are the first level
-    end
-    #If the node does not have children it is a leaf node
-    if numChildNodes(graph,node)==0
-      push!(graph.attributes[:leaves],node)
-    end
+function bdprepare(graph::Plasmo.PlasmoGraph)
+  if haskey(graph.attributes,:preprocessed)
+    return true
   end
 
-  #Start mapping level from the root nodes
-  currentNodes = graph.attributes[:roots]
-  levels = graph.attributes[:levels]
-  level = 1
-  while currentNodes != []
-    levels[level] = currentNodes
-    childrenNodes = []
-    for node in currentNodes
-      childNodeIndex = LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
-      for index in childNodeIndex
-        childNode = graph.nodes[index]
-        push!(childrenNodes,childNode)
-      end
-    end
-    level += 1
-    currentNodes = childrenNodes
-  end
-end
-
-function preProcess(graph::Plasmo.PlasmoGraph)
-  if get(graph.attributes,:preprocessed,false)
-    return 0
-  end
-
-  levels(graph)
+  identifylevels(graph)
 
   links = getlinkconstraints(graph)
   numLinks = length(links)
@@ -110,7 +63,6 @@ function preProcess(graph::Plasmo.PlasmoGraph)
       end
     end
   end
-
   #Add dual constraint to child nodes using the linking constraints
   for link in 1:numLinks
     #Take the two variables of the constraint
@@ -169,45 +121,73 @@ function preProcess(graph::Plasmo.PlasmoGraph)
   graph.attributes[:preprocessed] = true
 end
 
-function getLinkingVars(graph::Plasmo.PlasmoGraph,link::Any)
-    #Get the nodes and variables in the linked constraint
-    links = getlinkconstraints(graph)
-    var1 = links[link].terms.vars[1]
-    var2 = links[link].terms.vars[2]
-    nodeV1 = getnode(var1)
-    nodeV2 = getnode(var2)
-    return var1, var2, nodeV1, nodeV2
-end
-
-function setRelationship(graph::Plasmo.PlasmoGraph, nodeV1::Plasmo.PlasmoNode, nodeV2::Plasmo.PlasmoNode)
-    #Determine which nodes are parents and children
-    if isChildNode(graph,nodeV1,nodeV2)
-      childNode = nodeV1
-      parentNode = nodeV2
-    elseif isChildNode(graph,nodeV2,nodeV1)
-      childNode = nodeV2
-      parentNode = nodeV1
+function identifylevels(graph::Plasmo.PlasmoGraph)
+  #Create lists of root and leaf nodes in graph
+  graph.attributes[:roots] = []
+  graph.attributes[:leaves] = []
+  #Create dictionary to keep track of levels of nodes
+  graph.attributes[:levels] = Dict()
+  #Iterate through every node to check for root/leaf nodes
+  for nodeIndex in 1:length(graph.nodes)
+    node = graph.nodes[nodeIndex]
+    #If the node does not have parents it is a root node
+    if numParentNodes(graph,node)==0
+      push!(graph.attributes[:roots],node)
+      #Root nodes are the first level
     end
-    return childNode, parentNode
-end
-
-function getValBar(parentNode::Plasmo.PlasmoNode, nodeV1::Plasmo.PlasmoNode, var1::Any, var2::Any)
-    if parentNode == nodeV1
-        val = getvalue(var1)
-        var = var1
-    else
-        val = getvalue(var2)
-        var = var1
+    #If the node does not have children it is a leaf node
+    if numChildNodes(graph,node)==0
+      push!(graph.attributes[:leaves],node)
     end
-    return var, val
-end
+  end
 
-function getParentNodes(graph::Plasmo.PlasmoGraph, node::Plasmo.PlasmoNode)
-    return LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
-end
-
-function forwardStep(graph::Plasmo.PlasmoGraph)
+  #Start mapping level from the root nodes
+  currentNodes = graph.attributes[:roots]
   levels = graph.attributes[:levels]
+  level = 1
+  while currentNodes != []
+    levels[level] = currentNodes
+    childrenNodes = []
+    for node in currentNodes
+      childNodeIndex = LightGraphs.out_neighbors(graph.graph,getindex(graph,node))
+      for index in childNodeIndex
+        childNode = graph.nodes[index]
+        push!(childrenNodes,childNode)
+      end
+    end
+    level += 1
+    currentNodes = childrenNodes
+  end
+end
+
+function numChildNodes(g::PlasmoGraph, n1::PlasmoNode)
+  return length(LightGraphs.out_neighbors(g.graph,getindex(g,n1)))
+end
+
+function numParentNodes(g::PlasmoGraph, n1::PlasmoNode)
+  return length(LightGraphs.in_neighbors(g.graph,getindex(g,n1)))
+end
+
+
+function fix(var,value)
+  ##Sets value for constraint variable
+  setlowerbound(var,value)
+  setupperbound(var,value)
+end
+
+function isChildNode(g::Plasmo.PlasmoGraph, n1::PlasmoNode, n2::PlasmoNode)
+  ##Checks if n1 is a child node of n2
+  for node in LightGraphs.out_neighbors(g.graph,getindex(g,n2))
+    if (n1 == g.nodes[node]) return true
+      return true
+    end
+  end
+  return false
+end
+
+function forwardstep(graph::Plasmo.PlasmoGraph)
+  levels = graph.attributes[:levels]
+  links = getlinkconstraints(graph)
   linksMap = graph.attributes[:links]
   for level in 1:length(levels)
     currentLevel = levels[level]
@@ -218,17 +198,25 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
       nodelinks = linksMap[node]
       #Iterate through linking constraints
       for link in nodelinks
-        var1, var2, nodeV1, nodeV2 = getLinkingVars(graph,link)
-        childNode, parentNode = setRelationship(graph, nodeV1, nodeV2)
-        var, val = getValBar(parentNode, nodeV1, var1, var2)
-
+        #Get the nodes and variables in the linked constraint
+        var1 = links[link].terms.vars[1]
+        var2 = links[link].terms.vars[2]
+        nodeV1 = getnode(var1)
+        nodeV2 = getnode(var2)
+        #Determine which nodes are parents and children
+        if isChildNode(graph,nodeV1,nodeV2)
+          childNode = nodeV1
+          parentNode = nodeV2
+          val = getvalue(var2)
+        elseif isChildNode(graph,nodeV2,nodeV1)
+          childNode = nodeV2
+          parentNode = nodeV1
+          val = getvalue(var1)
+        end
         #Set valbar in child node associated with link to variable value in parent
         sp = getmodel(childNode)
         valbar = getindex(sp, :valbar)
-        if isnan(val) == false
-          debug(val, val== NaN)
-          fix(valbar[link], val)
-        end
+        JuMP.fix(valbar[link], val)
       end
     end
   end
@@ -250,7 +238,7 @@ function forwardStep(graph::Plasmo.PlasmoGraph)
   return LB,UB
 end
 
-function backwardStep(graph::Plasmo.PlasmoGraph,cut::Symbol)
+function backwardstep(graph::Plasmo.PlasmoGraph,cut::Symbol)
   levels = graph.attributes[:levels]
   for level in length(keys(levels)):-1:2
     for node in levels[level]
@@ -259,63 +247,34 @@ function backwardStep(graph::Plasmo.PlasmoGraph,cut::Symbol)
   end
 end
 
-function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=3, cut::Symbol=:LP;)
-  tic()
-  starttime = time()
-
-  # Results outputs
-  df = DataFrame(Iter=[],Time=[],UB=[],LB=[],Obj=[])
-  res = Dict()
-
-  preProcess(graph)
-  ϵ = 10e-5
-  UB = Inf
-  LB = -Inf
-  iter = 0
-
-  for i in 1:max_iterations
-    LB,UB = forwardStep(graph)
-    debug("***** ITERATION $i ***********")
-    debug("*** UB = ",UB)
-    debug("*** LB = ",LB)
-    if abs(UB - LB)<ϵ
-      debug("Converged!")
-      iter = i
-      break
-    end
-    backwardStep(graph,cut)
-  end
-  push!(df,[iter,round(time()-starttime,5),UB,LB,getobjectivevalue(getmodel(g.nodes[1]))])
-
-  res[:Iterations] = iter
-  return res, df
-end
 
 function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   linkList= graph.attributes[:links]
   childLinks = graph.attributes[:childlinks]
   dualMap = graph.attributes[:duals]
+  links = getlinkconstraints(graph)
 
   sp = getmodel(node)
   valbars = []
   variables = []
   λs = []
-  status = solve(sp, relaxation = true)
-  if status != :Optimal
-    debug("Infeasible Model")
-  end
-  #status = solve(sp)
-  graph.attributes[:status] = status
   for childLink in childLinks[node]
     valbar = getindex(sp,:valbar)
     push!(valbars,valbar[childLink])
 
-    var1, var2, nodeV1, nodeV2 = getLinkingVars(graph,childLink)
-    childNode, parentNode = setRelationship(graph, nodeV1, nodeV2)
-    var, val = getValBar(parentNode, nodeV1, var1, var2)
+    var1 = links[childLink].terms.vars[1]
+    var2 = links[childLink].terms.vars[2]
+    nodeV1 = getnode(var1)
+    nodeV2 = getnode(var2)
+    #Determine which nodes are parents and children
+    if isChildNode(graph,nodeV1,nodeV2)
+      var = var2
+    elseif isChildNode(graph,nodeV2,nodeV1)
+      var = var1
+    end
     push!(variables,var)
-
     if cut == :LP
+      status = solve(sp, relaxation = true)
       dualCon = dualMap[node]
       λs = getdual(dualCon)
       graph.attributes[:λs] = λs
@@ -338,44 +297,32 @@ function cutGeneration(graph::PlasmoGraph, node::PlasmoNode,cut::Symbol;θlb=0)
   end
 end
 
+# Cuts
 function LPcut(graph::PlasmoGraph, node::PlasmoNode)
-  status = graph.attributes[:status]
+  status = :Optimal
   variables = graph.attributes[:variables]
   valbars = graph.attributes[:valbars]
   λs = graph.attributes[:λs]
-  parentNodes = getParentNodes(graph,node)
+  parentNodes = LightGraphs.in_neighbors(graph.graph,getindex(graph,node))
   parentNode = graph.nodes[parentNodes[1]]
 
   mp = getmodel(parentNode)
   θ = getindex(mp,:θ)
 
-  # TODO: There are two solve calls in the function... there should be only one
   rhs = 0
-  rhs2 = 0
-
+  for i in 1:length(variables)
+      rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+      rhs2 = λs[i]*(getupperbound(valbars[i])-variables[i])
+  end
   if status != :Optimal
-    for i in 1:length(variables)
-        sp = getmodel(node)
-        for j in 1:length(sp.linconstr)
-            if getindex(sp, Symbol(variables[i])) in sp.linconstr[j].terms.vars
-            ind = findin(getindex(sp, Symbol(variables[i])), sp.linconstr[j].terms.vars)
-            if sp.linconstr[j].lb == -Inf
-              rhs2 = rhs2 + λs[i]*(sp.linconstr[j].ub - (sp.linconstr[j].terms.coeffs[ind])*variables[i])
-            elseif sp.linconstr[j].ub == Inf
-                rhs2 = rhs2 + λs[i]*(sp.linconstr[j].lb)
-            end
-          end
-        end
-        print(rhs2)
-        @constraint(mp, 0 .>= rhs2)
-    end
     @constraint(mp, 0 >= rhs)
     debug("Infeasible Model, adding feasibility cut")
   else
-    for i in 1:length(variables)
-        rhs = rhs + λs[i]*(getupperbound(valbars[i])-variables[i])
+    if haskey(getmodel(node).ext,:nlp)
+      θk = getobjectivevalue(getmodel(node).ext[:nlp])
+    else
+      θk = getobjectivevalue(getmodel(node))
     end
-    θk = getobjectivevalue(getmodel(node))
     @constraint(mp, θ[getindex(graph,node)] >= θk + rhs)
     i = getindex(graph,node)
   end
