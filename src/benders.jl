@@ -17,7 +17,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cut::S
     end
     backwardstep(graph,cut)
   end
-  return getobjectivevalue(getmodel(graph.nodes[1]))
+  return s
 end
 
 function bdprepare(graph::Plasmo.PlasmoGraph)

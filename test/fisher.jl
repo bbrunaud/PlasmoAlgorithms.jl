@@ -21,7 +21,7 @@ m2 = Model(solver=GurobiSolver())
 @variable(m2, xs[i in 1:2],Bin)
 @variable(m2, y[i in 1:2], Bin)
 @constraint(m2, y[1] + y[2] <= 1)
-@constraint(m2, 8xs[1] + 2xs[2] + y[2] + 4y[2] <= 10)
+@constraint(m2, 8xs[1] + 2xs[2] + y[1] + 4y[2] <= 10)
 @objective(m2, Max, 4y[2])
 
 ## Plasmo Graph
