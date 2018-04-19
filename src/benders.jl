@@ -338,7 +338,7 @@ function rootcut(graph::PlasmoGraph, node::PlasmoNode)
   dualMap = graph.attributes[:duals]
   λs = []
   dualCon = dualMap[node]
-  parentNodes = LightGraphs.inneighbors(graph.graph,getindex(graph,node))
+  parentNodes = in_neighbors(graph,node)
   parentNode = graph.nodes[parentNodes[1]]
 
   mp = getmodel(parentNode)
