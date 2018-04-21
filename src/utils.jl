@@ -14,19 +14,13 @@ function normalizegraph(graph::PlasmoGraph)
     return n
 end
 
-getx(graph::PlasmoGraph) = graph.attributes[:x]
-getλ(graph::PlasmoGraph) = graph.attributes[:λ]
-getrootnode(graph::PlasmoGraph) = graph.attributes[:rootnode]
-getnodebounds(graph::PlasmoGraph) = graph.attributes[:nodebounds]
-getnodeobjectivevals(graph::PlasmoGraph) = graph.attributes[:nodeobjectivevals]
-getlevels(graph::PlasmoGraph) = graph.attributes[:levels]
-
-function turnoffpresolve(model::JuMP.Model)
-    if typeof(model.solver) == CPLEX.CplexSolver
-        push!(model.solver.options,(:CPX_PARAM_PREIND,0))
-    elseif typeof(model.solver) == Gurobi.GurobiSolver
-        push!(model.solver.options,(:Presolve,0))
-    else
-        error("Root relaxation requires to turn off presolve for the solver, only CPLEX and Gurobi are supported")
-    end
+function fix(var::JuMP.Variable,value::Real)
+  setlowerbound(var,value)
+  setupperbound(var,value)
 end
+
+"""
+Checks if n1 is a child node of n2
+"""
+ischildnode(graph::PlasmoGraph, n1::PlasmoNode, n2::PlasmoNode) = in(n2,in_neighbors(graph,n1))
+ 

@@ -169,11 +169,7 @@ function numParentNodes(g::PlasmoGraph, n1::PlasmoNode)
 end
 
 
-function fix(var,value)
-  ##Sets value for constraint variable
-  setlowerbound(var,value)
-  setupperbound(var,value)
-end
+
 
 function isChildNode(g::Plasmo.PlasmoGraph, n1::PlasmoNode, n2::PlasmoNode)
   ##Checks if n1 is a child node of n2

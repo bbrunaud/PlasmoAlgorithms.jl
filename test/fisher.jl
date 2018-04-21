@@ -6,7 +6,7 @@ using Plasmo
 # Min 16x[1] + 10x[2]
 # s.t. x[1] + x[2] <= 1OutputFlag=0
 #      x ∈ {0,1}
-m1 = Model(solver=GurobiSolver())
+m1 = Model()
 @variable(m1, xm[i in 1:2],Bin)
 @constraint(m1, xm[1] + xm[2] <= 1)
 @objective(m1, Max, 16xm[1] + 10xm[2])
@@ -17,7 +17,7 @@ m1 = Model(solver=GurobiSolver())
 #      8x[1] + 2x[2] + y[2] + 4y[2] <= 10
 #      x, y ∈ {0,1}
 
-m2 = Model(solver=GurobiSolver())
+m2 = Model()
 @variable(m2, xs[i in 1:2],Bin)
 @variable(m2, y[i in 1:2], Bin)
 @constraint(m2, y[1] + y[2] <= 1)

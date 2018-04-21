@@ -2,9 +2,7 @@ module PlasmoAlgorithms
 
 using Plasmo
 using JuMP
-using Logging
 using DataFrames
-using LightGraphs
 using Gaston
 using CPLEX
 using MathProgBase
@@ -22,7 +20,7 @@ normalizegraph
 
 
 include("lagrange.jl")
-include("benders.jl")
+include("bendersnew.jl")
 include("solution.jl")
 include("utils.jl")
 include("cross.jl")
