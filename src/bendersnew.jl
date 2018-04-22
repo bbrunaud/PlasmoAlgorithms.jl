@@ -290,6 +290,9 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
   for index in 1:length(graph.nodes)
     node = graph.nodes[index]
     model = getmodel(node)
+    if model.solver == JuMP.UnsetSolver()
+      model.solver = graph.solver
+    end
     model.ext[:preobj] = model.obj
     #Add theta to parent nodes
     if out_degree(graph,node) != 0

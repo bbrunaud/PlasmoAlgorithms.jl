@@ -3,9 +3,12 @@ module PlasmoAlgorithms
 using Plasmo
 using JuMP
 using DataFrames
-using Gaston
-using CPLEX
 using MathProgBase
+using Gaston
+using PyCall
+using Gurobi
+using CPLEX
+
 
 import Plasmo.solve
 
@@ -18,12 +21,11 @@ saveiteration,
 # Utils
 normalizegraph
 
-
 include("lagrange.jl")
 include("bendersnew.jl")
 include("solution.jl")
 include("utils.jl")
 include("cross.jl")
-
+include("smps.jl")
 
 end
