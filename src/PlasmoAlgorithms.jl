@@ -2,10 +2,12 @@ module PlasmoAlgorithms
 
 using Plasmo
 using JuMP
-using DataFrames
+#using Requires
+using PyCall
+
 using MathProgBase
 using Gaston
-using PyCall
+
 using Gurobi
 using CPLEX
 
@@ -19,7 +21,8 @@ lgprepare, solvenode,
 saveiteration,
 
 # Utils
-normalizegraph
+normalizegraph, smpsread
+
 
 include("lagrange.jl")
 include("bendersnew.jl")

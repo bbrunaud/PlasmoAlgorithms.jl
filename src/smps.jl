@@ -1,6 +1,7 @@
 
-@pyimport smps.read as smps
 
+#@require PyCall begin
+@pyimport smps.read as smps
 function smpsread(basename::String)::PlasmoGraph
     smodel = smps.StochasticModel(basename)
     numstages = length(smodel[:periods])
@@ -38,19 +39,29 @@ function smpsread(basename::String)::PlasmoGraph
                 n1 = ndl[genealogy[k]]
                 n2 = ndl[genealogy[k+1]]
                 add_edge(g,n1,n2)
-                @linkconstraint(g, [i in keys(n1[:y])], n1[:y][i] == n2[:x][i])
+                @linkconstraint(g, [i in keys(n1[:y])], n2[:x][i] == n1[:y][i])
             end
         end
     end
     return g
 end
+#end
 
 function _scenariomodel(sc,smodel,numvars,numconstrs,root=false)
     m = Model()
     stage = _getstage(sc,smodel,root)
     @variable(m, y[1:numvars[stage]])
-    setlowerbound.(y,sc[:lb][stage])
-    setupperbound.(y,sc[:ub][stage])
+    # Change large numbers by Inf
+    lb = sc[:lb][stage]
+    infindex = find(a -> a .< -1e20,lb)
+    lb[infindex] = -Inf*ones(infindex)
+
+    ub = sc[:ub][stage]
+    infindex = find(a -> a .> 1e20,ub)
+    ub[infindex] = Inf*ones(infindex)
+
+    setlowerbound.(y,lb)
+    setupperbound.(y,ub)
     for i in 1:numvars[stage]
         category = smodel[:vtype][stage][i]
         if category == "B"
@@ -68,8 +79,18 @@ function _scenariomodel(sc,smodel,numvars,numconstrs,root=false)
 
     if stage > 1
         @variable(m, x[1:numvars[stage-1]])
-        setlowerbound.(x,sc[:lb][stage-1])
-        setupperbound.(x,sc[:ub][stage-1])
+
+        # Change large numbers by Inf
+        lb = sc[:lb][stage-1]
+        infindex = find(a -> a .< -1e20,lb)
+        lb[infindex] = -Inf*ones(infindex)
+
+        ub = sc[:ub][stage-1]
+        infindex = find(a -> a .> 1e20,ub)
+        ub[infindex] = Inf*ones(infindex)
+
+        setlowerbound.(x,lb)
+        setupperbound.(x,ub)
         for i in 1:numvars[stage-1]
             category = smodel[:vtype][stage-1][i]
             if category == "B"
@@ -98,6 +119,7 @@ function _scenariomodel(sc,smodel,numvars,numconstrs,root=false)
 
     return m
 end
+
 
 function _getstage(scenario,smodel,root=false)
     root && return 1
