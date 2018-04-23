@@ -137,6 +137,9 @@ function solverootrelaxation(node::PlasmoNode)
   lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
   lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
   MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+  # Restore Bounds
+  MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
+  MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
   MathProgBase.optimize!(lp.internalModel)
 
   run(`mv node0.lp $tmpdir/`)

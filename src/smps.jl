@@ -39,7 +39,7 @@ function smpsread(basename::String)::PlasmoGraph
                 n1 = ndl[genealogy[k]]
                 n2 = ndl[genealogy[k+1]]
                 add_edge(g,n1,n2)
-                @linkconstraint(g, [i in keys(n1[:y])], n2[:x][i] == n1[:y][i])
+                @linkconstraint(g, [i in keys(n1[:y])], n1[:y][i] == n2[:x][i])
             end
         end
     end
