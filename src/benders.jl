@@ -97,9 +97,6 @@ function nodeworkflow(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbol,1
   if :LP in cuts
     solvelprelaxation(node)
   end
-  if :Root in cuts
-    solverootrelaxation(node)
-  end
   if updatebound
     solvenodemodel(node,graph)
   end
@@ -126,35 +123,6 @@ function solvelprelaxation(node::PlasmoNode)
   return status
 end
 
-function solverootrelaxation(node::PlasmoNode)
-  sp = getmodel(node)
-  if length(sp.linconstrDuals) == 0
-    solve(sp, relaxation=true)
-  end
-  lpfile = joinpath(tmpdir,"nodemodel.lp")
-  writeLP(sp,lpfile)
-  run(`cpxgetroot $lpfile 0 1`)
-  lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
-  lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
-  MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
-  # Restore Bounds
-  MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
-  MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
-  MathProgBase.optimize!(lp.internalModel)
-
-  run(`mv node0.lp $tmpdir/`)
-
-  dualconstraints = node.attributes[:linkconstraints]
-
-  rootduals = MathProgBase.getconstrduals(lp.internalModel)
-  sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
-
-  λnode = getdual(dualconstraints)
-  nodebound = MathProgBase.getobjval(lp.internalModel)
-
-  node.attributes[:bound] = nodebound
-  node.attributes[:λ] = λnode
-end
 
 function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
   model = getmodel(node)
