@@ -1,13 +1,10 @@
 module PlasmoAlgorithms
 
+
 using Plasmo
 using JuMP
-#using Requires
+using Requires
 using PyCall
-using Plots
-using MathProgBase
-using CPLEX
-
 
 import Plasmo.solve
 
