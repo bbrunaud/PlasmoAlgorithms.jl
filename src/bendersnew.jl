@@ -228,7 +228,7 @@ function generatebenderscut(node::PlasmoNode, cd::BendersCutData,index)
   model = getmodel(node)
   θ = getindex(model, :θ)
   x = node.attributes[:childvars][index]
-  @constraint(model, θ[index] >= cd.θk + cd.λk'*(x - cd.xk))
+  @constraint(model, θ[index] >= cd.θk + cd.λk'*(cd.xk - x))
 end
 
 
