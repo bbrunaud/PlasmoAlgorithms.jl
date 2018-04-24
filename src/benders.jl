@@ -75,7 +75,7 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   for level in 1:numlevels
     nodeslevel = levels[level]
     for node in nodeslevel
-      nodeworkflow(node,graph,cuts,updatebound)
+      nsolveprimalnode(node,graph,cuts,updatebound)
     end
   end
   LB = graph.attributes[:LB]
@@ -88,7 +88,7 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   return LB,UB
 end
 
-function nodeworkflow(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Bool)
+function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Bool)
   # 1. Add cuts
   generatecuts(node,graph)
   # 2. Take x
