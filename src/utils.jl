@@ -38,3 +38,19 @@ function savenodeobjective(mf::JuMP.Model)
         push!(nov[index],coeff,var)
     end
 end
+
+function getnumsolutions(m::JuMP.Model)
+    if typeof(m.solver) == Gurobi.GurobiSolver
+        gm = m.internalModel.inner
+        return Gurobi.get_intattr(,"SolCount")
+    end
+end
+
+function nextsolution(m::JuMP.Model)
+    if typeof(m.solver) == Gurobi.GurobiSolver
+        gm = m.internalModel.inner
+        solnumber = Gurobi.get_int_param(gm.env,"SolutionNumber")
+        Gurobi.set_int_param!(gm.env,"SolutionNumber",solnumber+1)
+        m.colVal = Gurobi.get_dblattrarray(gm,"Xn",1,Gurobi.num_vars(gm))
+    end
+end
