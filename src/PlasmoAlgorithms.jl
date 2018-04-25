@@ -6,7 +6,7 @@ using JuMP
 using Requires
 
 
-import Plasmo.solve
+import Plasmo.solve, Base.==
 
 export Solution, lagrangesolve, psolve, bendersolve,
 lgprepare, solvenode,
