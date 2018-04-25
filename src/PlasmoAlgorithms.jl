@@ -22,6 +22,7 @@ include("lagrange.jl")
 include("benders.jl")
 include("solution.jl")
 include("utils.jl")
+include("smps.jl"
 
 
 end
