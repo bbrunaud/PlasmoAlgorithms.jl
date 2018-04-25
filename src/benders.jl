@@ -16,9 +16,6 @@ struct IntegerCutData <: CutData
   yk
 end
 
-(==)(cd1::BendersCutData,cd2::BendersCutData) = (cd1.θk == cd2.θk) && (cd1.λk == cd2.λk) && (cd1.xk == cd2.xk)
-(==)(cd1::LLIntegerCutData,cd2::LLIntegerCutData) = (cd1.θlb == cd2.θlb) &&  (cd1.yk == cd2.yk)
-(==)(cd1::IntegerCutData,cd2::IntegerCutData) = (cd1.yk == cd2.yk)
 
 """
 bendersolve
@@ -48,7 +45,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
     updatebound = ((i-1) % UBupdatefrequency) == 0
     LB,UB = forwardstep(graph, cuts, updatebound)
 
-    tstamp = time() - starttime
+    tstamp = starttime - time()
     if n == 1
       saveiteration(s,tstamp,[UB,LB,toc(),tstamp],n)
     else
@@ -66,11 +63,6 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
       s.termination = "Time Limit"
       return s
     end
-
-    if graph.attributes[:stalled]
-      s.termination = "Stalled"
-      return s
-    end
   end
 
   s.termination = "Max Iterations"
@@ -83,7 +75,7 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   for level in 1:numlevels
     nodeslevel = levels[level]
     for node in nodeslevel
-      solveprimalnode(node,graph,cuts,updatebound)
+      nsolveprimalnode(node,graph,cuts,updatebound)
     end
   end
   LB = graph.attributes[:LB]
@@ -104,6 +96,9 @@ function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbo
   # 3. solve
   if :LP in cuts
     solvelprelaxation(node)
+  end
+  if :Root in cuts
+  solverootrelaxation(node)
   end
   if updatebound
     solvenodemodel(node,graph)
@@ -131,6 +126,35 @@ function solvelprelaxation(node::PlasmoNode)
   return status
 end
 
+function solverootrelaxation(node::PlasmoNode)
+  sp = getmodel(node)
+  if length(sp.linconstrDuals) == 0
+    solve(sp, relaxation=true)
+  end
+  lpfile = joinpath(tmpdir,"nodemodel.lp")
+  writeLP(sp,lpfile)
+  run(`cpxgetroot $lpfile 0 1`)
+  lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
+  lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
+  MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+  # Restore Bounds
+  MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
+  MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
+  MathProgBase.optimize!(lp.internalModel)
+
+  run(`mv node0.lp $tmpdir/`)
+
+  dualconstraints = node.attributes[:linkconstraints]
+
+  rootduals = MathProgBase.getconstrduals(lp.internalModel)
+  sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
+
+  λnode = getdual(dualconstraints)
+  nodebound = MathProgBase.getobjval(lp.internalModel)
+
+  node.attributes[:bound] = nodebound
+  node.attributes[:λ] = λnode
+end
 
 function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
   model = getmodel(node)
@@ -188,18 +212,10 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
   length(children) == 0 && return true
 
   cutdataarray = node.attributes[:cutdata]
-  previouscuts = node.attributes[:prevcuts]
-  thisitercuts = Dict()
-  samecuts = Dict()
   for child in children
     childindex = getnodeindex(graph,child)
-    thisitercuts[childindex] = CutData[]
-    samecuts[childindex] = Bool[]
     while length(cutdataarray[childindex]) > 0
       cutdata = pop!(cutdataarray[childindex])
-      samecut = in(cutdata,previouscuts[childindex])
-      push!(samecuts[childindex],samecut)
-      samecut && continue
       if typeof(cutdata) == BendersCutData
         generatebenderscut(node,cutdata,childindex)
       elseif typeof(cutdata) == LLIntegerCutData
@@ -207,16 +223,7 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
       elseif typeof(cutdata) == IntegerCutData
         generateintegercut(node,cutdata)
       end
-      push!(thisitercuts[childindex],cutdata)
     end
-    samecuts[childindex] = reduce(*,samecuts[childindex]) && length(samecuts[childindex]) > 0
-  end
-  node.attributes[:prevcuts] = thisitercuts
-  nodesamecuts = collect(values(samecuts))
-  node.attributes[:stalled] = reduce(*,nodesamecuts)
-  node.attributes[:stalled] && warn("Node $(node.label) stalled")
-  if in(node,graph.attributes[:roots]) && node.attributes[:stalled]
-    graph.attributes[:stalled] = true
   end
 end
 
@@ -263,8 +270,6 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
         push!(children,out_neighbors(graph,node)...)
         node.attributes[:childvars] = Dict(getnodeindex(graph,child) => [] for child in out_neighbors(graph,node))
         node.attributes[:cutdata] = Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node))
-        node.attributes[:prevcuts] = Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node))
-        node.attributes[:stalled] = false
     end
     current = children
     level += 1
@@ -279,7 +284,6 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
 
   identifylevels(graph)
   graph.attributes[:normalized] = normalizegraph(graph)
-  graph.attributes[:stalled] = false
   graph.attributes[:mflat] = create_flat_graph_model(graph)
   setsolver(graph.attributes[:mflat],graph.solver)
 
