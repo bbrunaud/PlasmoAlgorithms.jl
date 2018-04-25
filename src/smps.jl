@@ -11,6 +11,7 @@
 """
 function smpsread(basename::String)::PlasmoGraph
     smodel = smps.StochasticModel(basename)
+    rm("gurobi.log")
     numstages = length(smodel[:periods])
     stages = 1:numstages
     numvars = [length(smodel[:stage_vars][i]) for i in stages]

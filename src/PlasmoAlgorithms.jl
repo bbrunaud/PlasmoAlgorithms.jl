@@ -4,7 +4,9 @@ module PlasmoAlgorithms
 using Plasmo
 using JuMP
 using Requires
-
+using PyCall
+using CPLEX
+using MathProgBase
 
 import Plasmo.solve, Base.==
 

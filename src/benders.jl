@@ -88,8 +88,9 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   end
   LB = graph.attributes[:LB]
   if updatebound
-    UB = sum(node.attributes[:preobjval] for node in values(graph.nodes))
-    graph.attributes[:UB] = UB
+    iterUB = sum(node.attributes[:preobjval] for node in values(graph.nodes))
+    graph.attributes[:iterUB] = iterUB
+    UB = graph.attributes[:UB] = min(graph.attributes[:UB],iterUB)
   else
     UB = graph.attributes[:UB]
   end
