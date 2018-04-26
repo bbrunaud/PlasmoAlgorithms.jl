@@ -38,3 +38,9 @@ function savenodeobjective(mf::JuMP.Model)
         push!(nov[index],coeff,var)
     end
 end
+
+function update!(rr::RemoteChannel,value)
+    !isready(rr) && error("Updating an empty channel")
+    take!(rr)
+    put!(rr,value)
+end

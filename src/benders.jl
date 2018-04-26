@@ -35,6 +35,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
   mf = graph.attributes[:mflat]
   solve(mf,relaxation=true)
   LB = getobjectivevalue(graph.attributes[:mflat])
+  update!(graph.attributes[:LB],LB)
   UB = Inf
 
   # Set bound to root node
@@ -67,7 +68,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
       return s
     end
 
-    if graph.attributes[:stalled]
+    if fetch(graph.attributes[:stalled])
       s.termination = "Stalled"
       return s
     end
@@ -83,10 +84,10 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   for level in 1:numlevels
     nodeslevel = levels[level]
     for node in nodeslevel
-      solveprimalnode(node,graph,cuts,updatebound)
+      solveprimalnode(node,cuts,updatebound)
     end
   end
-  LB = graph.attributes[:LB]
+  LB = fetch(graph.attributes[:LB])
   if updatebound
     UB = sum(node.attributes[:preobjval] for node in values(graph.nodes))
     graph.attributes[:UB] = UB
@@ -96,9 +97,9 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   return LB,UB
 end
 
-function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Bool)
+function solveprimalnode(node::PlasmoNode, cuts::Array{Symbol,1}, updatebound::Bool)
   # 1. Add cuts
-  generatecuts(node,graph)
+  generatecuts(node)
   # 2. Take x
   takex(node)
   # 3. solve
@@ -106,12 +107,12 @@ function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbo
     solvelprelaxation(node)
   end
   if updatebound
-    solvenodemodel(node,graph)
+    solvenodemodel(node)
   end
   # 4. put x
-  putx(node,graph)
+  putx(node)
   # 5. put cuts and nodebound
-  putcutdata(node,graph,cuts)
+  putcutdata(node,cuts)
 end
 
 function solvelprelaxation(node::PlasmoNode)
@@ -132,71 +133,64 @@ function solvelprelaxation(node::PlasmoNode)
 end
 
 
-function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
+function solvenodemodel(node::PlasmoNode)
   model = getmodel(node)
   solve(model)
-  if in_degree(graph,node) == 0 # Root node
-    graph.attributes[:LB] = getobjectivevalue(model)
+  if node.attributes[:numparents] == 0 # Root node
+     update!(node.attributes[:graphLB], getobjectivevalue(model))
   end
   node.attributes[:preobjval] = getvalue(model.ext[:preobj])
 end
 
 function takex(node::PlasmoNode)
-  xinvals = node.attributes[:xin]
+  node.attributes[:numparents] == 0 && return true
+  xinvals = fetch(node.attributes[:xin])
   xinvars = node.attributes[:xinvars]
   if length(xinvals) > 0
     fix.(xinvars,xinvals)
   end
 end
 
-function putx(node::PlasmoNode,graph::PlasmoGraph)
+function putx(node::PlasmoNode)
+  node.attributes[:numchildren] == 0 && return true
   childvars = node.attributes[:childvars]
-  children = out_neighbors(graph,node)
-  length(children) == 0 && return true
-
-  for child in children
-    xnode = getvalue(childvars[getnodeindex(graph,child)])
-    child.attributes[:xin] = xnode
+  for childindex in keys(childvars)
+    xnode = getvalue(childvars[childindex])
+    put!(node.attributes[:xout][childindex],xnode)
   end
 end
 
-function putcutdata(node::PlasmoNode,graph::PlasmoGraph,cuts::Array{Symbol,1})
-  parents = in_neighbors(graph,node)
-  length(parents) == 0 && return true
-  parent = parents[1]    # Assume only one parent
-  parentcuts = parent.attributes[:cutdata]
+function putcutdata(node::PlasmoNode,cuts::Array{Symbol,1})
+  node.attributes[:numparents] == 0 && return true
   θk = node.attributes[:bound]
   λk = node.attributes[:λ]
-  xk = node.attributes[:xin]
-  nodeindex = getnodeindex(graph,node)
+  xk = take!(node.attributes[:xin])
   if :LP in cuts || :Root in cuts
     bcd = BendersCutData(θk, λk, xk)
-    push!(parentcuts[nodeindex],bcd)
+    put!(node.attributes[:cutdataout],bcd)
   end
   if :LLinteger in cuts
     llintcd = LLIntegerCutData(θlb,xk)
-    push!(parentcuts[nodeindex],llintcd)
+    put!(node.attributes[:cutdataout],llintcd)
   end
   if :Integer in cuts
     intcd = IntegerCutData(xk)
-    push!(parentcuts[nodeindex],intcd)
+    put!(node.attributes[:cutdataout],intcd)
   end
 end
 
-function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
-  children = out_neighbors(graph,node)
-  length(children) == 0 && return true
+function generatecuts(node::PlasmoNode)
+  node.attributes[:numchildren] == 0 && return true
 
   cutdataarray = node.attributes[:cutdata]
   previouscuts = node.attributes[:prevcuts]
   thisitercuts = Dict()
   samecuts = Dict()
-  for child in children
-    childindex = getnodeindex(graph,child)
+  for childindex in keys(cutdataarray)
     thisitercuts[childindex] = CutData[]
     samecuts[childindex] = Bool[]
-    while length(cutdataarray[childindex]) > 0
-      cutdata = pop!(cutdataarray[childindex])
+    while isready(cutdataarray[childindex]) 
+      cutdata = take!(cutdataarray[childindex])
       samecut = in(cutdata,previouscuts[childindex])
       push!(samecuts[childindex],samecut)
       samecut && continue
@@ -213,10 +207,11 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
   end
   node.attributes[:prevcuts] = thisitercuts
   nodesamecuts = collect(values(samecuts))
-  node.attributes[:stalled] = reduce(*,nodesamecuts)
-  node.attributes[:stalled] && warn("Node $(node.label) stalled")
-  if in(node,graph.attributes[:roots]) && node.attributes[:stalled]
-    graph.attributes[:stalled] = true
+    stalled = reduce(*,nodesamecuts)
+    node.attributes[:stalled] = stalled
+  stalled && warn("Root node stalled")
+  if node.attributes[:numparents] == 0 && stalled     
+    update!(node.attributes[:graphstalled],true)
   end
 end
 
@@ -236,20 +231,29 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
   levels = graph.attributes[:levels] = Dict()
   #Iterate through every node to check for root/leaf nodes
   for node in values(graph.nodes)
-    node.attributes[:xin] = []
     node.attributes[:λ] = []
     node.attributes[:bound] = NaN
     node.attributes[:xinvars] = []
     node.attributes[:preobjval] = NaN
     node.attributes[:linkconstraints] = []
     #If the node does not have parents it is a root node
-    if in_degree(graph,node) == 0
-      push!(roots,node)
-    end
+      if in_degree(graph,node) == 0
+         LBchannel = RemoteChannel(()->Channel{Float64}(1))
+         put!(LBchannel,-Inf)
+         graph.attributes[:LB] = LBchannel
+         node.attributes[:numparents] = 0
+         node.attributes[:graphLB] = LBchannel
+         stalledchannel = RemoteChannel(()->Channel{Bool}(1))
+         put!(stalledchannel,false)
+         node.attributes[:graphstalled] = stalledchannel
+         graph.attributes[:stalled] = stalledchannel
+         push!(roots,node)
+      end
     #If the node does not have children it is a leaf node
-    if out_degree(graph,node) == 0
-      push!(leaves,node)
-    end
+      if out_degree(graph,node) == 0
+          node.attributes[:numchildren] = 0
+          push!(leaves,node)
+      end
   end
 
   #Start mapping level from the root nodes
@@ -261,9 +265,27 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
     children = []
     for node in current
         push!(children,out_neighbors(graph,node)...)
-        node.attributes[:childvars] = Dict(getnodeindex(graph,child) => [] for child in out_neighbors(graph,node))
-        node.attributes[:cutdata] = Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node))
-        node.attributes[:prevcuts] = Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node))
+        node.attributes[:childvars] = Dict()
+        node.attributes[:xout] = Dict()
+        node.attributes[:cutdata] = Dict()
+        node.attributes[:prevcuts] = Dict()
+        node.attributes[:numchildren] = 0
+        for child in children
+            childindex = getindex(graph,child)
+            node.attributes[:childvars][childindex] = []
+
+            xchannel = RemoteChannel(()->Channel{Array{Float64,1}}(1))
+            node.attributes[:xout][childindex] = xchannel
+            child.attributes[:xin] = xchannel
+
+            cutchannel = RemoteChannel(()->Channel{CutData}(10))
+            node.attributes[:cutdata][childindex] = cutchannel
+            child.attributes[:cutdataout] = cutchannel
+
+            node.attributes[:childvars][childindex] = []
+            node.attributes[:numchildren] += 1
+            child.attributes[:numparents] = 1
+        end
         node.attributes[:stalled] = false
     end
     current = children
@@ -279,7 +301,6 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
 
   identifylevels(graph)
   graph.attributes[:normalized] = normalizegraph(graph)
-  graph.attributes[:stalled] = false
   graph.attributes[:mflat] = create_flat_graph_model(graph)
   setsolver(graph.attributes[:mflat],graph.solver)
 
