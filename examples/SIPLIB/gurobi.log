@@ -1,0 +1,43 @@
+
+Gurobi 7.5.2 (linux64, Python) logging started Sun 22 Apr 2018 10:33:47 PM EDT
+
+Academic license - for non-commercial use only
+Read MPS format model from file sslp/sslp_15_45_5.mps
+Reading time = 0.00 seconds
+SSLP_15_45_5: 61 rows, 705 columns, 1379 nonzeros
+
+Gurobi 7.5.2 (linux64, Python) logging started Mon 23 Apr 2018 01:09:39 AM EDT
+
+Academic license - for non-commercial use only
+Read MPS format model from file sslp/sslp_15_45_5.mps
+Reading time = 0.00 seconds
+SSLP_15_45_5: 61 rows, 705 columns, 1379 nonzeros
+
+Gurobi 7.5.2 (linux64, Python) logging started Tue 24 Apr 2018 11:50:04 PM EDT
+
+Academic license - for non-commercial use only
+Read MPS format model from file sslp/sslp_15_45_5.mps
+Reading time = 0.00 seconds
+SSLP_15_45_5: 61 rows, 705 columns, 1379 nonzeros
+Read MPS format model from file sslp/sslp_15_45_5.mps
+Reading time = 0.00 seconds
+SSLP_15_45_5: 61 rows, 705 columns, 1379 nonzeros
+
+Gurobi 7.5.2 (linux64, Python) logging started Tue 24 Apr 2018 11:54:41 PM EDT
+
+Academic license - for non-commercial use only
+Read MPS format model from file sslp/sslp_15_45_5.mps
+Reading time = 0.00 seconds
+SSLP_15_45_5: 61 rows, 705 columns, 1379 nonzeros
+Read MPS format model from file sslp/sslp_15_45_5.mps
+Reading time = 0.00 seconds
+SSLP_15_45_5: 61 rows, 705 columns, 1379 nonzeros
+Read MPS format model from file sslp/sslp_15_45_5.mps
+Reading time = 0.00 seconds
+SSLP_15_45_5: 61 rows, 705 columns, 1379 nonzeros
+Read MPS format model from file sslp/sslp_15_45_5.mps
+Reading time = 0.00 seconds
+SSLP_15_45_5: 61 rows, 705 columns, 1379 nonzeros
+Read MPS format model from file sslp/sslp_15_45_5.mps
+Reading time = 0.02 seconds
+SSLP_15_45_5: 61 rows, 705 columns, 1379 nonzeros

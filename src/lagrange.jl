@@ -311,6 +311,7 @@ function marchingstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][en
   return (λ += α*step*res), bound
 end
 
+@require Gaston begin
 function interactive(graph,λ,res,lagrangeheuristic)
   α = graph.attributes[:α][end]
   n = graph.attributes[:normalized]
@@ -323,6 +324,7 @@ function interactive(graph,λ,res,lagrangeheuristic)
   step = α*abs(Zk-bound)/(norm(res)^2)
   λ += step*res
   return λ,bound
+end
 end
 
 function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01,ϵ=0.001)
@@ -420,26 +422,6 @@ function fixbinaries(graph::PlasmoGraph,cat=[:Bin])
   else
     error("Heuristic model not infeasible or unbounded")
   end
-end
-
-function crossheuristic(graph::PlasmoGraph)
-  lGraph = graph
-  zkls = []
-  λs = []
-  #LSPs to BMP
-  for nodeIndex in 1:length(lGraph.nodes)
-    zkl = getobjectivevalue(getmodel(lGraph.nodes[nodeIndex]))
-    push!(zkls,zkl)
-  end
-  bGraph = graph.attributes[:bGraph]
-  BMP = getmodel(bGraph.nodes[1])
-  θ = getindex(BMP, :θ)
-  for s in 1:length(zkls)
-    #@constraint(BMP, zkls[s]<=θ[s])
-  end
-  println("***********")
-  print(getmodel(lGraph.nodes[2]))
-  #bendersolve(bGraph, 1)
 end
 
 function fixintegers(graph::PlasmoGraph)

@@ -1,13 +1,9 @@
-
-
 #@require PyCall begin
 @pyimport smps.read as smps
 """
     smpsread(basename::String)::PlasmoGraph
-
     Parses a two-stage stochastic programming problem in SMPS format into a
     Plasmo Graph
-
     # Example
     ```julia
         graph = smpsread("SIPLIB/smps/smps_15_45_5")
