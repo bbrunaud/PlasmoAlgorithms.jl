@@ -52,6 +52,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
     LB,UB = forwardstep(graph, cuts, updatebound)
 
     tstamp = time() - starttime
+
     itertime = toc()
     if n == 1
       saveiteration(s,tstamp,[UB,LB,itertime,tstamp],n)
@@ -94,7 +95,8 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   if updatebound
     iterUB = sum(node.attributes[:preobjval] for node in values(graph.nodes))
     graph.attributes[:iterUB] = iterUB
-    UB = graph.attributes[:UB] = min(graph.attributes[:UB],iterUB)
+    UB = min(graph.attributes[:UB],iterUB)
+    graph.attributes[:UB] = UB
   else
     UB = graph.attributes[:UB]
   end
@@ -238,6 +240,7 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
     childindex = getnodeindex(graph,child)
     thisitercuts[childindex] = CutData[]
     samecuts[childindex] = Bool[]
+
     while length(cutdataarray[childindex]) > 0
       cutdata = pop!(cutdataarray[childindex])
       samecut = in(cutdata,previouscuts[childindex])
@@ -324,6 +327,7 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
   graph.attributes[:normalized] = normalizegraph(graph)
   graph.attributes[:stalled] = false
   graph.attributes[:mflat] = create_flat_graph_model(graph)
+  graph.attributes[:UB] = Inf
   setsolver(graph.attributes[:mflat],graph.solver)
 
   links = getlinkconstraints(graph)
