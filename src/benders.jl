@@ -43,6 +43,8 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
   rootmodel = getmodel(rootnode)
   @constraint(rootmodel, rootmodel.obj.aff >= LB)
 
+  # Send nodes to workers
+  nprocs() > 1 && sendnodestoworkers(graph)
   # Begin iterations
   for i in 1:max_iterations
     tic()
@@ -83,13 +85,14 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   numlevels = length(levels)
   for level in 1:numlevels
     nodeslevel = levels[level]
-    for node in nodeslevel
-      solveprimalnode(node,cuts,updatebound)
+    worker = repeat(workers(),outer=Int(ceil(length(nodeslevel)/nworkers())))
+    @sync for (k,node) in enumerate(nodeslevel)
+      remotecall_fetch(solveprimalnode,worker[k],node,cuts,updatebound)
     end
   end
   LB = fetch(graph.attributes[:LB])
   if updatebound
-    UB = sum(node.attributes[:preobjval] for node in values(graph.nodes))
+    UB = sum(fetch(graph.attributes[:preobjval][nodelabel]) for nodelabel in keys(graph.attributes[:preobjval]))
     graph.attributes[:UB] = UB
   else
     UB = graph.attributes[:UB]
@@ -117,6 +120,8 @@ end
 
 function solvelprelaxation(node::PlasmoNode)
   model = getmodel(node)
+    println("SOLVING LP RELAXATION FOR NODE $(node.label)")
+    show(model)
   status = solve(model, relaxation = true)
 
   @assert status == :Optimal
@@ -139,7 +144,7 @@ function solvenodemodel(node::PlasmoNode)
   if node.attributes[:numparents] == 0 # Root node
      update!(node.attributes[:graphLB], getobjectivevalue(model))
   end
-  node.attributes[:preobjval] = getvalue(model.ext[:preobj])
+  update!(node.attributes[:preobjval],getvalue(model.ext[:preobj]))
 end
 
 function takex(node::PlasmoNode)
@@ -228,13 +233,16 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
   roots = graph.attributes[:roots] = []
   leaves = graph.attributes[:leaves] = []
   #Create dictionary to keep track of levels of nodes
-  levels = graph.attributes[:levels] = Dict()
+    levels = graph.attributes[:levels] = Dict()
+  #Create channel to receive preobj
+  graph.attributes[:preobjval] = Dict(node.label => RemoteChannel(()->Channel{Float64}(1)) for node in values(getnodes(graph)))
   #Iterate through every node to check for root/leaf nodes
   for node in values(graph.nodes)
     node.attributes[:λ] = []
     node.attributes[:bound] = NaN
     node.attributes[:xinvars] = []
-    node.attributes[:preobjval] = NaN
+    node.attributes[:preobjval] = graph.attributes[:preobjval][node.label]
+    put!(node.attributes[:preobjval],NaN)  
     node.attributes[:linkconstraints] = []
     #If the node does not have parents it is a root node
       if in_degree(graph,node) == 0
@@ -280,6 +288,7 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
 
             cutchannel = RemoteChannel(()->Channel{CutData}(10))
             node.attributes[:cutdata][childindex] = cutchannel
+            node.attributes[:prevcuts][childindex] = []
             child.attributes[:cutdataout] = cutchannel
 
             node.attributes[:childvars][childindex] = []
@@ -353,3 +362,16 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
   end
   graph.attributes[:preprocessed] = true
 end
+
+function sendnodestoworkers(graph)
+  levels = graph.attributes[:levels]
+  numlevels = length(levels)
+  for level in 1:numlevels
+    nodeslevel = levels[level]
+    worker = repeat(workers(),outer=Int(ceil(length(nodeslevel)/nworkers())))
+    for (k,node) in enumerate(nodeslevel)
+      println("Sending node $(node.label) to worker $(worker[k])")  
+      remotecall_fetch(()->node,worker[k])
+    end
+  end
+ end    

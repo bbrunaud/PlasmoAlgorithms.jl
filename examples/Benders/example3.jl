@@ -6,9 +6,9 @@ using Logging
 
 Logging.configure(level=DEBUG)
 
-mp = Model(solver = GurobiSolver())
-sp1 = Model(solver = GurobiSolver())
-sp2 = Model(solver = GurobiSolver())
+mp = Model(solver = GurobiSolver(OutputFlag=0))
+sp1 = Model(solver = GurobiSolver(OutputFlag=0))
+sp2 = Model(solver = GurobiSolver(OutputFlag=0))
 
 @variable(mp,x[1:2]>=0)
 @constraint(mp,x[1]+x[2]>=50)
@@ -43,4 +43,4 @@ edge2 = Plasmo.add_edge(g,n2,n3)
 @linkconstraint(g,[i in 1:2], n1[:x][i] == n2[:x][i])
 @linkconstraint(g,[i in 1:2], n2[:y][i] == n3[:y][i])
 
-bendersolve(g,max_iterations =10)
+#bendersolve(g,max_iterations =10)
