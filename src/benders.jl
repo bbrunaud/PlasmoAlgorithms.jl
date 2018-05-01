@@ -23,15 +23,17 @@ end
 """
 bendersolve
 """
-function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600)
+function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600,verbose=false)
   starttime = time()
   global tmpdir = "/tmp/RootNode" # mktempdir()
   s = Solution(method=:benders)
   updatebound = true
 
+  verbose && info("Preparing graph")
   bdprepare(graph)
   n = graph.attributes[:normalized]
 
+  verbose && info("Solve relaxation and set LB")
   mf = graph.attributes[:mflat]
   solve(mf,relaxation=true)
   LB = getobjectivevalue(graph.attributes[:mflat])
@@ -43,16 +45,19 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
   @constraint(rootmodel, rootmodel.obj.aff >= LB)
 
   # Begin iterations
+  verbose && info("Begin iterations")
   for i in 1:max_iterations
     tic()
     updatebound = ((i-1) % UBupdatefrequency) == 0
     LB,UB = forwardstep(graph, cuts, updatebound)
 
     tstamp = time() - starttime
+
+    itertime = toc()
     if n == 1
-      saveiteration(s,tstamp,[UB,LB,toc(),tstamp],n)
+      saveiteration(s,tstamp,[UB,LB,itertime,tstamp],n)
     else
-      saveiteration(s,tstamp,[n*LB,n*UB,toc(),tstamp],n)
+      saveiteration(s,tstamp,[n*LB,n*UB,itertime,tstamp],n)
     end
     printiterationsummary(s,singleline=false)
 
@@ -90,7 +95,8 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   if updatebound
     iterUB = sum(node.attributes[:preobjval] for node in values(graph.nodes))
     graph.attributes[:iterUB] = iterUB
-    UB = graph.attributes[:UB] = min(graph.attributes[:UB],iterUB)
+    UB = min(graph.attributes[:UB],iterUB)
+    graph.attributes[:UB] = UB
   else
     UB = graph.attributes[:UB]
   end
@@ -145,10 +151,16 @@ function solverootrelaxation(node::PlasmoNode)
   run(`cpxgetroot $lpfile 0 1`)
   lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
   lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
-  MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+  if isfile("node0.lp")
+      MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+  else
+    warn("Node file not found, falling back to lp relaxation")
+    return solvelprelaxation(node)
+  end
   # Restore Bounds
   MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
   MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
+
   MathProgBase.optimize!(lp.internalModel)
 
   run(`mv node0.lp $tmpdir/`)
@@ -228,6 +240,7 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
     childindex = getnodeindex(graph,child)
     thisitercuts[childindex] = CutData[]
     samecuts[childindex] = Bool[]
+
     while length(cutdataarray[childindex]) > 0
       cutdata = pop!(cutdataarray[childindex])
       samecut = in(cutdata,previouscuts[childindex])
@@ -314,6 +327,7 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
   graph.attributes[:normalized] = normalizegraph(graph)
   graph.attributes[:stalled] = false
   graph.attributes[:mflat] = create_flat_graph_model(graph)
+  graph.attributes[:UB] = Inf
   setsolver(graph.attributes[:mflat],graph.solver)
 
   links = getlinkconstraints(graph)
