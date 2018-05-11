@@ -75,7 +75,7 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
   for level in 1:numlevels
     nodeslevel = levels[level]
     for node in nodeslevel
-      nsolveprimalnode(node,graph,cuts,updatebound)
+      solveprimalnode(node,graph,cuts,updatebound)
     end
   end
   LB = graph.attributes[:LB]
@@ -265,6 +265,7 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
       model.solver = graph.solver
     end
     model.ext[:preobj] = model.obj
+    node.attributes[:cgmodel] = deepcopy(model)
     #Add theta to parent nodes
     if out_degree(graph,node) != 0
       childrenindices = [getnodeindex(graph,child) for child in out_neighbors(graph,node)]
