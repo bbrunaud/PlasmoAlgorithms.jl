@@ -74,7 +74,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
 
     if graph.attributes[:stalled]
       s.termination = "Stalled"
-      return s
+      #return s
     end
   end
 

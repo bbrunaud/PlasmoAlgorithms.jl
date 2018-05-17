@@ -25,13 +25,13 @@ m1 = Model(solver=GurobiSolver(OutputFlag=0))
 #      8x[1] + 2x[2] + y[2] + 4y[2] <= 10
 #      x, y ∈ {0,1}
 
-m2 = Model(solver=GurobiSolver(OutputFlag=0))
+m = Model(solver=GurobiSolver(OutputFlag=0))
 
-@variable(m2, xs[i in 1:2],Bin)
-@variable(m2, y[i in 1:2], Bin)
-@constraint(m2, y[1] + y[2] <= 1)
-@constraint(m2, 8xs[1] + 2xs[2] + y[2] + 4y[2] <= 10)
-@objective(m2, Max, 4y[2])
+@variable(m, xs[i in 1:2],Bin)
+@variable(m, y[i in 1:2], Bin)
+@constraint(m, y[1] + y[2] <= 1)
+@constraint(m, 8xs[1] + 2xs[2] + y[2] + 4y[2] <= 10)
+@objective(m, Max, 4y[2])
 
 ## Plasmo Graph
 g = PlasmoGraph()
@@ -39,7 +39,7 @@ g.solver = GurobiSolver(OutputFlag=0)
 n1 = add_node(g)
 setmodel(n1,m1)
 n2 = add_node(g)
-setmodel(n2,m2)
+setmodel(n2,m)
 
 
 ## Linking
