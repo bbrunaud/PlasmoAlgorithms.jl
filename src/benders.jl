@@ -30,13 +30,20 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
   updatebound = true
 
   verbose && info("Preparing graph")
-  bdprepare(graph)
+  bdprepare(graph, cuts)
   n = graph.attributes[:normalized]
 
   verbose && info("Solve relaxation and set LB")
   mf = graph.attributes[:mflat]
   solve(mf,relaxation=true)
   LB = getobjectivevalue(graph.attributes[:mflat])
+  println("LP relaxation =========")
+  println(LB)
+  temp_mf = deepcopy(mf)
+  solve(temp_mf)
+  temp_LB = getobjectivevalue(temp_mf)
+  println("DE  =========")
+  println(temp_LB)
   UB = Inf
 
   # Set bound to root node
@@ -113,7 +120,10 @@ function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbo
     solvelprelaxation(node)
   end
   if :Root in cuts
-  solverootrelaxation(node)
+  	solverootrelaxation(node, graph)
+  end
+  if :Root1 in cuts
+  	solverootrelaxation_1norm(node)
   end
   if updatebound
     solvenodemodel(node,graph)
@@ -141,7 +151,186 @@ function solvelprelaxation(node::PlasmoNode)
   return status
 end
 
-function solverootrelaxation(node::PlasmoNode)
+# function solverootrelaxation(node::PlasmoNode)
+#   sp = getmodel(node)
+#   if length(sp.linconstrDuals) == 0
+#     solve(sp, relaxation=true)
+#   end
+#   lpfile = joinpath(tmpdir,"nodemodel.lp")
+#   writeLP(sp,lpfile)
+#   run(`cpxgetroot $lpfile 0 1`)
+#   lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
+#   lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
+#   if isfile("node0.lp")
+#       MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+#   else
+#     warn("Node file not found, falling back to lp relaxation")
+#     return solvelprelaxation(node)
+#   end
+
+#   # Restore Bounds
+#   MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
+#   MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
+
+#   MathProgBase.optimize!(lp.internalModel)
+
+#   run(`mv node0.lp $tmpdir/`)
+
+#   dualconstraints = node.attributes[:linkconstraints]
+
+#   rootduals = MathProgBase.getconstrduals(lp.internalModel)
+#   sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
+
+#   λnode = getdual(dualconstraints)
+#   nodebound = MathProgBase.getobjval(lp.internalModel)
+
+#   node.attributes[:bound] = nodebound
+#   node.attributes[:λ] = λnode
+# end
+
+function solverootrelaxation(node::PlasmoNode, graph)
+  sp = getmodel(node)
+  if length(sp.linconstrDuals) == 0
+    solve(sp, relaxation=true)
+  end
+  lpfile = joinpath(tmpdir,"nodemodel.lp")
+  writeLP(sp,lpfile)
+  run(`cpxgetroot $lpfile 0 1`)
+  lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
+  lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
+  if isfile("node0.lp")
+  	  # temp_s = string(0)
+  	  # temp_command = string("cp node0.lp nodehistory/", temp_s)
+  	  # run(`$temp_command`)
+      temp = open("/tmp/RootNode/nodemodel.lp")
+      original_obj = readlines(temp)[1:2]
+      close(temp)
+      temp = open("node0.lp")
+      node0lp = readlines(temp)[3:end]
+      close(temp)
+      temp = open("node0.lp", "w")
+      for line in original_obj
+        write(temp, line)
+        write(temp, "\n")
+      end
+      start = false
+      for line in node0lp
+        if line == "Subject To"
+          start = true 
+        end
+        if start
+          write(temp, line)
+          write(temp, "\n")
+        end
+      end
+      close(temp)
+
+      MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+
+      #check if the cuts are valid 
+      all_constraints = MathProgBase.getconstrmatrix(lp.internalModel)
+      all_LB =  MathProgBase.getconstrLB(lp.internalModel)
+      all_UB =  MathProgBase.getconstrUB(lp.internalModel)
+      optimal_colVal = graph.attributes[:optimal_solutions][node.label]
+      if all_constraints.m > 6
+      #debug print the 6th cut 
+        coefficients = zeros(135)
+        for j in 1:135
+          coefficients[j] = all_constraints[6, j]
+        end
+        println("coefficients of c6")
+        println(coefficients)
+      end
+      cut_length = all_constraints.m - 35
+      if cut_length >0
+        for i in 1:cut_length
+          expr = 0
+          coefficients = zeros(135)
+          for j in 1:135
+            expr += optimal_colVal[j] * all_constraints[i+35, j]
+            coefficients[j] = all_constraints[i+35, j]
+          end
+          if expr > all_LB[i+35] || expr < all_UB[i+35]
+            cp("node0.lp", "nodehistory/node0.lp", remove_destination=true)
+            cp("/tmp/RootNode/nodemodel.lp", "nodehistory/nodemodel.lp", remove_destination=true)
+            println("optimal value")
+            println(optimal_colVal)
+            println("coefficients")
+            println(coefficients)
+            println("rhs")
+            println(expr)
+            println("lhs")
+            println(all_UB[i+35])
+            println(node.label)
+            println(i)
+            error("invalid cut")
+          end
+        end
+      end
+  else
+    warn("Node file not found, falling back to lp relaxation")
+    return solvelprelaxation(node)
+  end
+
+  # Restore Bounds
+  MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
+  MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
+
+  MathProgBase.optimize!(lp.internalModel)
+
+  run(`mv node0.lp $tmpdir/`)
+
+  dualconstraints = node.attributes[:linkconstraints]
+
+  rootduals = MathProgBase.getconstrduals(lp.internalModel)
+  sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
+
+  λnode = getdual(dualconstraints)
+  nodebound = MathProgBase.getobjval(lp.internalModel)
+
+  node.attributes[:bound] = nodebound
+  node.attributes[:λ] = λnode
+  node.attributes[:rootprob] = lp 
+end
+
+# function solverootrelaxation(node::PlasmoNode)
+#   sp = getmodel(node)
+#   if length(sp.linconstrDuals) == 0
+#     solve(sp, relaxation=true)
+#   end
+#   lpfile = joinpath(tmpdir,"nodemodel.lp")
+#   writeLP(sp,lpfile)
+#   run(`cpxgetroot $lpfile 0 1`)
+#   lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
+#   lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
+#   if isfile("node0.lp")
+#       MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+#   else
+#     warn("Node file not found, falling back to lp relaxation")
+#     return solvelprelaxation(node)
+#   end
+
+#   # Restore Bounds
+#   MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
+#   MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
+
+#   MathProgBase.optimize!(lp.internalModel)
+
+#   run(`mv node0.lp $tmpdir/`)
+
+#   dualconstraints = node.attributes[:linkconstraints]
+
+#   rootduals = MathProgBase.getconstrduals(lp.internalModel)
+#   sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
+
+#   λnode = getdual(dualconstraints)
+#   nodebound = MathProgBase.getobjval(lp.internalModel)
+
+#   node.attributes[:bound] = nodebound
+#   node.attributes[:λ] = λnode
+# end
+
+function solverootrelaxation_1norm(node::PlasmoNode)
   sp = getmodel(node)
   if length(sp.linconstrDuals) == 0
     solve(sp, relaxation=true)
@@ -157,6 +346,7 @@ function solverootrelaxation(node::PlasmoNode)
     warn("Node file not found, falling back to lp relaxation")
     return solvelprelaxation(node)
   end
+
   # Restore Bounds
   MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
   MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
@@ -176,6 +366,66 @@ function solverootrelaxation(node::PlasmoNode)
   node.attributes[:bound] = nodebound
   node.attributes[:λ] = λnode
 end
+
+# function solverootrelaxation_1norm(node::PlasmoNode)
+#   sp = getmodel(node)
+#   println("=====")
+#   #set up Cut generating MIP 
+#   # if !haskey(node.attributes, :CGMIP)
+#   # 	node.attributes[:CGMIP] = deepcopy(sp)
+#   # end
+#   cgmip = node.attributes[:CGMIP]
+#   solve(sp, relaxation=true)
+#   println(length(node.attributes[:xinvars]))
+#   println(sp.colVal)
+#   println(sp.colNames)
+#   println(sp)
+#   println(cgmip.colVal)
+#   println(cgmip.colNames)
+#   println(cgmip)
+
+#   frac_vars_values = sp.colVal[1:length(cgmip.colVal)]
+#   println(frac_vars_values)
+#   @objective(cgmip, Min, sum((frac_vars_values[i]*Variable(cgmip, i)) for i in 1:length(cgmip.colVal)))
+#   println(cgmip)
+
+
+  
+#   if length(sp.linconstrDuals) == 0
+#     solve(sp, relaxation=true)
+#   end
+#   lpfile = joinpath(tmpdir,"nodemodel.lp")
+#   writeLP(cgmip,lpfile)
+#   run(`cpxgetroot $lpfile 0 1`)
+#   lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
+#   lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
+#   if isfile("node0.lp")
+#       MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
+#   else
+#     warn("Node file not found, falling back to lp relaxation")
+#     return solvelprelaxation(node)
+#   end
+
+#   # # Restore Bounds
+#   # MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
+#   # MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
+
+#   # MathProgBase.optimize!(lp.internalModel)
+
+#   # run(`mv node0.lp $tmpdir/`)
+
+#   # dualconstraints = node.attributes[:linkconstraints]
+
+#   # rootduals = MathProgBase.getconstrduals(lp.internalModel)
+#   # sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
+
+#   # λnode = getdual(dualconstraints)
+#   # nodebound = MathProgBase.getobjval(lp.internalModel)
+
+#   # node.attributes[:bound] = nodebound
+#   # node.attributes[:λ] = λnode
+# end
+
 
 function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
   model = getmodel(node)
@@ -318,7 +568,7 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
   graph.attributes[:numlevels] = level - 1
 end
 
-function bdprepare(graph::Plasmo.PlasmoGraph)
+function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
   if haskey(graph.attributes,:preprocessed)
     return true
   end
@@ -340,6 +590,11 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
       model.solver = graph.solver
     end
     model.ext[:preobj] = model.obj
+    #create CGMIP if root1 is used 
+    if :Root1 in cuts
+    	node.attributes[:CGMIP] = deepcopy(model)
+    end
+
     #Add theta to parent nodes
     if out_degree(graph,node) != 0
       childrenindices = [getnodeindex(graph,child) for child in out_neighbors(graph,node)]
@@ -379,3 +634,5 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
   end
   graph.attributes[:preprocessed] = true
 end
+
+
