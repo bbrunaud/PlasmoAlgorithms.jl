@@ -12,9 +12,10 @@ function lagrangesolve(graph;
   initialmultipliers=:zero, # :relaxation for LP relaxation
   δ = 0.5, # Factor to shrink step when subgradient stuck
   maxnoimprove = 3,
-  combinationdef=[]) # Amount of iterations that no improvement is allowed before shrinking step
+  cpbound=1e6) # Amount of iterations that no improvement is allowed before shrinking step
 
-  lgprepare(graph,δ,maxnoimprove)
+  ### INITIALIZATION ###
+  lgprepare(graph,δ,maxnoimprove,cpbound)
   n = graph.attributes[:normalized]
 
   if initialmultipliers == :relaxation
@@ -31,7 +32,8 @@ function lagrangesolve(graph;
   graph.attributes[:α] = [1.0α]
   iterval = 0
 
-
+  ### ITERATIONS ###
+  #iterationheader()
   for iter in 1:max_iterations
     variant = iter == 1 ? :default : update_method # Use default version in the first iteration
 
@@ -42,18 +44,25 @@ function lagrangesolve(graph;
        (x,Zkn) = solvenode(node,λ,x,variant)
        Zk += Zkn
     end
-    Zk *= n
+    #Zk *= n
     graph.attributes[:steptaken] = true
-    if Zk > graph.attributes[:Zk][end]
+
+    # If no improvement, increase counter
+    if Zk < graph.attributes[:Zk][end]
       graph.attributes[:noimprove] += 1
     end
+    # If too many iterations without improvement, decrease :α
     if graph.attributes[:noimprove] >= graph.attributes[:maxnoimprove]
       graph.attributes[:noimprove] = 0
       graph.attributes[:α][end] *= graph.attributes[:δ]
     end
+    # Save info
     push!(graph.attributes[:Zk],Zk)
     push!(graph.attributes[:x],x)
     α = graph.attributes[:α][end]
+    push!(graph.attributes[:α], α)
+    # TODO Check the order of updates and saving
+
 
     # Update residuals
     res = x[:,1] - x[:,2]
@@ -61,8 +70,8 @@ function lagrangesolve(graph;
 
     itertime = time() - iterstart
     tstamp = time() - starttime
-    saveiteration(s,tstamp,[iterval,Zk,itertime,tstamp],n)
-    iterationsummary(s)
+    saveiteration(s,tstamp,[n*iterval,n*Zk,itertime,tstamp],n)
+    printiterationsummary(s,singleline=false)
 
     # Check convergence
     if norm(res) < ϵ
@@ -78,10 +87,10 @@ function lagrangesolve(graph;
 
     # Update multipliers
     println("α = $α")
-    push!(graph.attributes[:α], α)
     (λ, iterval) = updatemultipliers(graph,λ,res,update_method,lagrangeheuristic)
     push!(graph.attributes[:λ], λ)
-    # Save summary
+    # Update iteration time
+    s.itertime[end] = time() - iterstart
   end
   s.termination = "Max Iterations"
   return s
@@ -92,7 +101,7 @@ end
   lgprepare(graph::PlasmoGraph)
   Prepares the graph to apply lagrange decomposition algorithm
 """
-function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3)
+function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   if haskey(graph.attributes,:preprocessed)
     return true
   end
@@ -103,27 +112,30 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3)
   graph.attributes[:λ] = [zeros(nmult)] # Array{Float64}(nmult)
   graph.attributes[:x] = [zeros(nmult,2)] # Linking variables values
   graph.attributes[:res] = [zeros(nmult)] # Residuals
-  graph.attributes[:Zk] = [0.0] # Residuals
-  graph.attributes[:mflat] = create_flat_graph_model(graph)
-  graph.attributes[:mflat].solver = graph.solver
+  graph.attributes[:Zk] = [0.0] # Bounds
+  #graph.attributes[:mflat] = #create_flat_graph_model(graph)
+  #graph.attributes[:mflat].solver = graph.solver
   graph.attributes[:cuts] = []
   graph.attributes[:δ] = δ
   graph.attributes[:noimprove] = 0
   graph.attributes[:maxnoimprove] = maxnoimprove
-  graph.attributes[:df] = []
+  graph.attributes[:explore] = []
   graph.attributes[:steptaken] = false
 
   # Create Lagrange Master
   ms = Model(solver=graph.solver)
-  @variable(ms, η, upperbound=1e-6)
+  @variable(ms, η, upperbound=cpbound)
   @variable(ms, λ[1:nmult])
   @objective(ms, Max, η)
 
   graph.attributes[:lgmaster] = ms
 
-  # Each node most save its initial objective
+  # Each node save its initial objective and set a solver if they don't have one
   for n in values(getnodes(graph))
     mn = getmodel(n)
+    if mn.solver == JuMP.UnsetSolver()
+      mn.solver = graph.solver
+    end
     mn.ext[:preobj] = mn.obj
     mn.ext[:multmap] = Dict()
     mn.ext[:varmap] = Dict()
@@ -195,7 +207,7 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   elseif method == :intersectionstep
     intersectionstep(graph,λ,res,lagrangeheuristic)
   elseif method == :probingsubgradient
-    fastsubgradient(graph,λ,res,lagrangeheuristic)
+    probingsubgradient(graph,λ,res,lagrangeheuristic)
   elseif method == :marchingstep
     marchingstep(graph,λ,res,lagrangeheuristic)
   elseif method == :ADMM
@@ -204,15 +216,17 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
     cuttingplanes(graph,λ,res)
   elseif method == :bundle
     bundle(graph,λ,res,lagrangeheuristic)
+  elseif  method == :interactive
+    interactive(graph,λ,res,lagrangeheuristic)
   end
 end
 
 # Update functions
 function subgradient(graph,λ,res,lagrangeheuristic)
   α = graph.attributes[:α][end]
-  bound = lagrangeheuristic(graph)
+  n = graph.attributes[:normalized]
+  bound = n*lagrangeheuristic(graph)
   Zk = graph.attributes[:Zk][end]
-  #αexplore(graph,bound)
   step = α*abs(Zk-bound)/(norm(res)^2)
   λ += step*res
   return λ,bound
@@ -222,7 +236,6 @@ function αeval(αv,graph,bound)
   xv = deepcopy(graph.attributes[:x][end])
   res = graph.attributes[:res][end]
   Zk = graph.attributes[:Zk][end]
-  n = graph.attributes[:normalized]
   λ = graph.attributes[:λ][end]
   nodes = [node for node in values(getnodes(graph))]
   step = abs(Zk-bound)/(norm(res)^2)
@@ -231,26 +244,95 @@ function αeval(αv,graph,bound)
      (xv,Zkn) = solvenode(node,λ+αv*step*res,xv,:default)
      zk += Zkn
   end
-  zk *= n
   return zk
 end
 
 function αexplore(graph,bound)
-  df = graph.attributes[:df]
-  z = []
-  for α in -2:0.1:2
-    push!(z,αeval(α,graph,bound))
+  df = graph.attributes[:explore]
+  n = graph.attributes[:normalized]
+  z = Float64[]
+  for α in 0:0.1:2
+    push!(z,n*αeval(α,graph,bound))
   end
   push!(df,z)
 end
 
+function probingsubgradient(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01;exhaustive=false)
+  res = graph.attributes[:res][end]
+  Zk = graph.attributes[:Zk][end]
+  n = graph.attributes[:normalized]
+  bound = n*lagrangeheuristic(graph)
+  step = abs(Zk-bound)/(norm(res)^2)
+  # First point
+  α1 = 0
+  z1 = Zk
+
+  # Second point
+  α2 = α
+  z2 = αeval(α2,graph,bound)
+
+  if (z2 - z1)/abs(z1) >= Δ
+    # If second point gives an increase of more than Δ%, take it.
+    return (λ += α2*step*res), bound
+  elseif abs((z2 - z1)/z1) < Δ
+    # If second point is similar to the first one, take the midpoint
+    return (λ += α2/2*step*res), bound
+  else
+    # If second point is larger than first, take quarter-step
+    if exhaustive
+      return probingsubgradient(graph,λ,res,lagrangeheuristic,α/4,Δ;exhaustive=true)
+    else
+      return (λ += α2/4*step*res), bound
+    end
+  end
+end
+
+function marchingstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.1α)
+  res = graph.attributes[:res][end]
+  Zk = graph.attributes[:Zk][end]
+  n = graph.attributes[:normalized]
+  bound = n*lagrangeheuristic(graph)
+  step = abs(Zk-bound)/(norm(res)^2)
+  # First point
+  α1 = 0
+  z1 = Zk
+  zs_1 = z1
+  αs_1 = α1
+
+  for αs in α1+Δ:Δ:α
+    zs = αeval(αs,graph,bound)
+    if zs < zs_1
+      return (λ += αs_1*step*res), bound
+    end
+    zs_1 = zs
+    αs_1 = αs
+  end
+
+  return (λ += α*step*res), bound
+end
+
+@require Gaston begin
+function interactive(graph,λ,res,lagrangeheuristic)
+  α = graph.attributes[:α][end]
+  n = graph.attributes[:normalized]
+  bound = n*lagrangeheuristic(graph)
+  Zk = graph.attributes[:Zk][end]
+  αexplore(graph,bound)
+  plot(0:0.1:2,graph.attributes[:explore][end])
+  print("α = ")
+  α = parse(Float64,readline(STDIN))
+  step = α*abs(Zk-bound)/(norm(res)^2)
+  λ += step*res
+  return λ,bound
+end
+end
 
 function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01,ϵ=0.001)
   res = graph.attributes[:res][end]
   Zk = graph.attributes[:Zk][end]
-  bound = lagrangeheuristic(graph)
+  n = graph.attributes[:normalized]
+  bound = n*lagrangeheuristic(graph)
   step = abs(Zk-bound)/(norm(res)^2)
-  #αexplore(graph,bound)
   # First curve
   αa0 = 0
   za0 = Zk
@@ -259,10 +341,9 @@ function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α
   ma = (za1 - za0)/(αa1 - αa0)
   if abs(ma) < ϵ
     return λ,bound
-  elseif ma > 0
-    #return λ - α*step*res, bound #
-    α = -α
-    Δ = -Δ
+  elseif ma < 0
+    warn("First slope decreasing. This might be an indication that there is no improvement in the direction chosen")
+    return λ,bound
   end
 
   # Second curve
@@ -277,67 +358,12 @@ function intersectionstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α
     return λ + α*step*res, bound
   end
   # Check different Sign
-  if sign(ma)<0 && sign(mb)<0
+  if sign(ma)>0 && sign(mb)>0
     return λ + α*step*res, bound
   end
   # Find intersection
   αinter = (za0 - zb0 + αb0*mb)/(mb - ma)
   λ += αinter*step*res
-  return λ,bound
-end
-
-function probingsubgradient(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.01)
-  res = graph.attributes[:res][end]
-  Zk = graph.attributes[:Zk][end]
-  bound = lagrangeheuristic(graph)
-  step = abs(Zk-bound)/(norm(res)^2)
-  # First point
-  α1 = 0
-  z1 = Zk
-
-  # Second point
-  α2 = α
-  z2 = αeval(α2,graph,bound)
-
-  if (z1 - z2)/z1 > Δ
-    # If second point gives a decrease of more than Δ%, take it.
-    return (λ += α2*step*res), bound
-  elseif abs((z1 - z2)/z1) < Δ
-    # If second point is similar to the first one, take the midpoint
-    return (λ += α2/2*step*res), bound
-  else
-    # If second point is larger than first, take quarter-step
-    return (λ += α2/4*step*res), bound
-  end
-end
-
-function marchingstep(graph,λ,res,lagrangeheuristic,α=graph.attributes[:α][end],Δ=0.1α)
-  res = graph.attributes[:res][end]
-  Zk = graph.attributes[:Zk][end]
-  bound = lagrangeheuristic(graph)
-  step = abs(Zk-bound)/(norm(res)^2)
-  # First point
-  α1 = 0
-  z1 = Zk
-  zs_1 = z1
-  αs_1 = α1
-
-  for αs in α1+Δ:Δ:α
-    zs = αeval(αs,graph,bound)
-    if zs > zs_1
-      return (λ += αs_1*step*res), bound
-    end
-    zs_1 = zs
-    αs_1 = αs
-  end
-
-  return (λ += α*step*res), bound
-end
-
-
-function ADMM(graph,λ,res,lagrangeheuristic)
-  bound = lagrangeheuristic(graph)
-  λ += res/norm(res)
   return λ,bound
 end
 
@@ -369,6 +395,12 @@ function bundle(graph,λ,res,lagrangeheuristic)
   cuttingplanes(graph,λ,res)
 end
 
+function ADMM(graph,λ,res,lagrangeheuristic)
+  bound = lagrangeheuristic(graph)
+  λ += res/norm(res)
+  return λ,bound
+end
+
 # Lagrangean Heuristics
 function fixbinaries(graph::PlasmoGraph,cat=[:Bin])
   if !haskey(graph.attributes,:mflat)
@@ -377,7 +409,7 @@ function fixbinaries(graph::PlasmoGraph,cat=[:Bin])
   n = graph.attributes[:normalized]
   mflat = graph.attributes[:mflat]
   mflat.solver = graph.solver
-  mflat.colVal = vcat([getmodel(n).colVal for n in values(getnodes(g))]...)
+  mflat.colVal = vcat([getmodel(n).colVal for n in values(getnodes(graph))]...)
   for j in 1:mflat.numCols
     if mflat.colCat[j] in cat
       mflat.colUpper[j] = mflat.colVal[j]

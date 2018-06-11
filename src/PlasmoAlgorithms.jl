@@ -1,10 +1,12 @@
 module PlasmoAlgorithms
 
+
 using Plasmo
 using JuMP
-using Logging
-using DataFrames
-using LightGraphs
+using Requires
+
+
+import Plasmo.solve
 
 export Solution, lagrangesolve, psolve, bendersolve,
 lgprepare, solvenode,
@@ -13,7 +15,7 @@ lgprepare, solvenode,
 saveiteration,
 
 # Utils
-normalizegraph
+normalizegraph, smpsread
 
 
 include("lagrange.jl")

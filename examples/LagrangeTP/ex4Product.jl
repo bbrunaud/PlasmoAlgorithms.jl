@@ -1,29 +1,23 @@
 using Plasmo
 using PlasmoAlgorithms
-using Logging
-using Gurobi
-using DataFrames
-
-Logging.configure(level=DEBUG)
-
-g = PlasmoGraph()
-g.solver = GurobiSolver(OutputFlag=0)
 
 include("modelgen4.jl")
 psize=20
-otime=1:psize
-oproducts=1:psize
+timeperiods=1:psize
+products=1:psize
 
+g = PlasmoGraph()
 node = []
 
-for i in oproducts
+for i in products
     n = add_node(g)
-    m = spmodel(i)
+    m = model(i)
     setmodel(n,m)
     push!(node,n)
 end
 
-@linkconstraint(g, [s in sites, i in 1:oproducts[end-1], t in otime],node[i][:hf][s,i,t] == node[i+1][:hi][s,i+1,t])
+@linkconstraint(g, [s in sites, i in 1:products[end-1], t in timperiods],
+node[i][:cf][s,i,t] == node[i+1][:ci][s,i+1,t])
 
 function cheat6(mf)
   return 72827.587
