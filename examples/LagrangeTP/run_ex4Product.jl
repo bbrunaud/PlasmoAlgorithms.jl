@@ -18,4 +18,3 @@ result[:Method] = method
 result[:δ] = δ
 
 writetable("res20zero_ex4Product.csv",df)
-

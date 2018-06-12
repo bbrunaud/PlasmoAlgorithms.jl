@@ -1,4 +1,4 @@
-include("ex4ProdTemp.jl")
+include("ex4Temporal.jl")
 
 method = :subgradient
 δ = 0.9
