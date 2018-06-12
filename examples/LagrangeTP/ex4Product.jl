@@ -23,10 +23,12 @@ end
 @linkconstraint(g, [s in sites, i in 1:products[end-1], t in timeperiods],
 node[i][:hf][s,i,t] == node[i+1][:hi][s,i+1,t])
 
-function cheat6(mf)
-  return 72827.587
-end
-
-function cheat20(mf)
-  return 515551.12
+if 6 in psize
+    function heur(mf)
+        return 72827.587
+    end
+elseif 20 in psize
+    function heur(mf)
+      return 515551.12
+    end
 end

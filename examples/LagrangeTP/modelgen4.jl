@@ -42,8 +42,10 @@ end
 @constraint(m1, eq3a[s in sites, i in products, t in time], tt[s,i,t]+setup[s,i,t]*sut[s,i] <= hi[s,i,t])
 @constraint(m1, eq3b[s in sites,i in products, t in time], hf[s,i,t]==hi[s,i,t]-(tt[s,i,t]+setup[s,i,t]*sut[s,i]))
 #dual
-if 1 in products
-  @constraint(m1, eq3c[s in sites, t in time], hi[s,1,t]==HT)
+
+# assign capacity HT to first product
+if firstproduct in products
+  @constraint(m1, eq3c[s in sites, t in time], hi[s,firstproduct,t]==HT)
 end
 
 #Market mass balances

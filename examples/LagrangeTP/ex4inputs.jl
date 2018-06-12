@@ -15,7 +15,8 @@ otime = 1:20
 
 #horas disponibles de produccion (longitud del periodo de tiempo)
 HT= 720
-
+#se sobreescribe si es distinto
+firstproduct=1
 
 #table cap(i,s) Upper bound on production of product i in production site s
 X_ubT= [
