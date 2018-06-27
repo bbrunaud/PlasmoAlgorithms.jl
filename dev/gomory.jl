@@ -217,8 +217,6 @@ for col in col_cbasis
 			cut_coeff[constr_matrix.n+num_struct_constr+j] = 0
 			j+=1
 		end
-		println(cut_coeff)
-		println(cut_rhs)
 		#change the cut back into x 
 		for col in 1:constr_matrix.n 
 			if col in x_indices && model.colVal[col] == model.colUpper[col]
@@ -226,8 +224,6 @@ for col in col_cbasis
 				cut_coeff[col] = - cut_coeff[col]
 			end
 		end
-		println(cut_coeff)
-		println(cut_rhs)
 		cut_coeff = cut_coeff[1:constr_matrix.n]
 		expr = 0.0 
 		for col in 1:constr_matrix.n 
@@ -238,8 +234,7 @@ for col in col_cbasis
 	i += 1
 end
 
-println(CPLEX.get_constr_matrix(cpx))
-println(CPLEX.get_rhs(cpx))
+
 # solve(model, relaxation=true)
 
 #to do 

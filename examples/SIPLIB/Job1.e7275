@@ -1,0 +1,26 @@
+ERROR: LoadError: PyError (ccall(@pysym(:PyObject_Call), PyPtr, (PyPtr, PyPtr, PyPtr), o, arg, C_NULL)) <class 'gurobipy.GurobiError'>
+GurobiError()
+  File "/home/canl1/.julia/v0.6/Conda/deps/usr/lib/python2.7/site-packages/smps-1.0-py2.7.egg/smps/read.py", line 84, in __init__
+    self._parse_nominal_model()
+  File "/home/canl1/.julia/v0.6/Conda/deps/usr/lib/python2.7/site-packages/smps-1.0-py2.7.egg/smps/read.py", line 97, in _parse_nominal_model
+    self.nominal_model = gb.read(self.model_filename+'.mps')
+  File "gurobi.pxi", line 2403, in gurobipy.read (../../src/python/gurobipy.c:120766)
+  File "gurobi.pxi", line 59, in gurobipy.gurobi.read (../../src/python/gurobipy.c:118514)
+  File "gurobi.pxi", line 15, in gurobipy.gurobi._getdefaultenv (../../src/python/gurobipy.c:117689)
+  File "env.pxi", line 30, in gurobipy.Env.__init__ (../../src/python/gurobipy.c:7269)
+
+Stacktrace:
+ [1] pyerr_check at /home/canl1/.julia/v0.6/PyCall/src/exception.jl:58 [inlined]
+ [2] pyerr_check at /home/canl1/.julia/v0.6/PyCall/src/exception.jl:62 [inlined]
+ [3] macro expansion at /home/canl1/.julia/v0.6/PyCall/src/exception.jl:82 [inlined]
+ [4] #_pycall#88(::Array{Any,1}, ::Function, ::PyCall.PyObject, ::String, ::Vararg{String,N} where N) at /home/canl1/.julia/v0.6/PyCall/src/PyCall.jl:710
+ [5] _pycall(::PyCall.PyObject, ::String, ::Vararg{String,N} where N) at /home/canl1/.julia/v0.6/PyCall/src/PyCall.jl:698
+ [6] #pycall#92(::Array{Any,1}, ::Function, ::PyCall.PyObject, ::Type{PyCall.PyAny}, ::String, ::Vararg{String,N} where N) at /home/canl1/.julia/v0.6/PyCall/src/PyCall.jl:732
+ [7] pycall(::PyCall.PyObject, ::Type{PyCall.PyAny}, ::String, ::Vararg{String,N} where N) at /home/canl1/.julia/v0.6/PyCall/src/PyCall.jl:732
+ [8] #call#93(::Array{Any,1}, ::PyCall.PyObject, ::String, ::Vararg{String,N} where N) at /home/canl1/.julia/v0.6/PyCall/src/PyCall.jl:735
+ [9] smpsread(::String) at /home/canl1/.julia/v0.6/PlasmoAlgorithms/src/smps.jl:13
+ [10] include_from_node1(::String) at ./loading.jl:576
+ [11] include(::String) at ./sysimg.jl:14
+ [12] process_options(::Base.JLOptions) at ./client.jl:305
+ [13] _start() at ./client.jl:371
+while loading /home/canl1/.julia/v0.6/PlasmoAlgorithms/examples/SIPLIB/sslp_example.jl, in expression starting on line 5
