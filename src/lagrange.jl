@@ -111,7 +111,7 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   graph.attributes[:numlinks] = nmult
   graph.attributes[:λ] = [zeros(nmult)] # Array{Float64}(nmult)
   graph.attributes[:x] = [zeros(nmult,2)] # Linking variables values
-  graph.attributes[:res] = [zeros(nmult)] # Residuals
+  graph.attributes[:res] = [ones(nmult)] # Residuals
   graph.attributes[:Zk] = [0.0] # Bounds
   #graph.attributes[:mflat] = #create_flat_graph_model(graph)
   #graph.attributes[:mflat].solver = graph.solver
@@ -182,7 +182,6 @@ function solvenode(node,λ,x,variant=:default)
 
   objval = getvalue(m.ext[:lgobj])
   node.attributes[:objective] = objval
-  node.attributes[:solvetime] = getsolvetime(m)
 
   return x, objval
 end
