@@ -13,6 +13,12 @@ Pkg.clone("https://github.com/jalving/Plasmo.jl.git")
 Pkg.clone("https://github.com/bbrunaud/PlasmoAlgorithms.jl.git")
 ```
 
+PlasmoAlgorithms is currently working with Plasmo version v0.0.1. In order to use the algorithms, after installation Plasmo must be downgraded using the following command in the Plasmo tree (`/home/user/.julia/v0.6/Plasmo.jl/`). PlasmoAlgorithms will be updated to use the latest version of Plasmo in August 2018.
+
+```
+$ git checkout v0.0.1
+```
+
 ## Usage
 
 ### Generate the graph
