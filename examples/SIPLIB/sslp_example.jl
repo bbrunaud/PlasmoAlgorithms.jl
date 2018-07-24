@@ -2,11 +2,11 @@ using PlasmoAlgorithms
 using Plasmo
 using CPLEX
 
-g = smpsread("sslp/sslp_15_45_5")
+g = smpsread("sslp/sslp_15_45_15")
 g.solver = CplexSolver(CPX_PARAM_SCRIND=0)
 # g1 = deepcopy(g)
-bendersolve(g, cuts=[:LP], max_iterations=100, timelimit=10000)
-# bendersolve(g, cuts=[:GMI], max_iterations=60, tim0elimit=100000)
+# bendersolve(g, cuts=[:LP], max_iterations=100, timelimit=10000)
+bendersolve(g, cuts=[:GMI], max_iterations=60, timelimit=100000)
 # global optimal_solutions = Dict()
 # all_nodes= getnodes(g)
 

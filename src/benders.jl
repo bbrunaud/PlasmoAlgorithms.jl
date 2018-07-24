@@ -23,8 +23,9 @@ end
 """
 bendersolve
 """
-function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600,verbose=false)
+function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600,verbose=false, LB=NaN, is_nonconvex=false)
   starttime = time()
+  graph.attributes[:is_nonconvex] = is_nonconvex
   global tmpdir = "/tmp/RootNode" # mktempdir()
   s = Solution(method=:benders)
   updatebound = true
@@ -32,18 +33,12 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
   verbose && info("Preparing graph")
   bdprepare(graph, cuts)
   n = graph.attributes[:normalized]
-
-  verbose && info("Solve relaxation and set LB")
-  mf = graph.attributes[:mflat]
-  solve(mf,relaxation=true)
-  LB = getobjectivevalue(graph.attributes[:mflat])
-  println("LP relaxation =========")
-  println(LB)
-  # temp_mf = deepcopy(mf)
-  # solve(temp_mf)
-  # temp_LB = getobjectivevalue(temp_mf)
-  # println("DE  =========")
-  # println(temp_LB)
+  if isnan(LB)
+    verbose && info("Solve relaxation and set LB")
+    mf = graph.attributes[:mflat]
+    solve(mf,relaxation=true)
+    LB = getobjectivevalue(graph.attributes[:mflat])
+  end
   UB = Inf
 
   # Set bound to root node
@@ -114,9 +109,9 @@ function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbo
   # 1. Add cuts
   generatecuts(node,graph)
   # 2. Take x
-  takex(node)
+  takex(node, graph)
   # 3. solve
-  if :LP in cuts
+  if :LP in cuts && in_degree(graph,node) != 0
     solvelprelaxation(node)
   end
 
@@ -585,19 +580,30 @@ end
 
 
 function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
-  model = getmodel(node)
-  solve(model)
-  if in_degree(graph,node) == 0 # Root node
-    graph.attributes[:LB] = getobjectivevalue(model)
+  if graph.attributes[:is_nonconvex] && in_degree(graph, node) != 0
+    model = node.attributes[:ubsub]
+    solve(model)
+    node.attributes[:preobjval] = getvalue(node.attributes[:preobj])
+  else 
+    model = getmodel(node)
+    solve(model)
+    if in_degree(graph,node) == 0 # Root node
+      graph.attributes[:LB] = getobjectivevalue(model)
+    end
+    node.attributes[:preobjval] = getvalue(node.attributes[:preobj])
   end
-  node.attributes[:preobjval] = getvalue(model.ext[:preobj])
+
 end
 
-function takex(node::PlasmoNode)
+function takex(node::PlasmoNode, graph::PlasmoGraph)
   xinvals = node.attributes[:xin]
+  println(xinvals)
   xinvars = node.attributes[:xinvars]
   if length(xinvals) > 0
     fix.(xinvars,xinvals)
+    if graph.attributes[:is_nonconvex]
+      fix.(node.attributes[:ubxinvars], xinvals)
+    end
   end
 end
 
@@ -695,6 +701,9 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
     node.attributes[:xinvars] = []
     node.attributes[:preobjval] = NaN
     node.attributes[:linkconstraints] = []
+    if graph.attributes[:is_nonconvex] && in_degree(graph, node) !=0 
+      node.attributes[:ubxinvars] = []
+    end
     #If the node does not have parents it is a root node
     if in_degree(graph,node) == 0
       push!(roots,node)
@@ -746,18 +755,24 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
     if model.solver == JuMP.UnsetSolver()
       model.solver = graph.solver
     end
-    model.ext[:preobj] = model.obj
+    if graph.attributes[:is_nonconvex] && in_degree(graph, node) != 0
+      node.attributes[:preobj] = node.attributes[:ubsub].obj 
+    else
+      node.attributes[:preobj] = model.obj
+    end
+
     #create GMI if :GMI is in cuts
     if :GMI in cuts
-      model = getmodel(node)
       for col in 1:length(model.colUpper)
         if model.colUpper[col] > 1e10 
           setupperbound(Variable(model, col), 1e10)
         end
       end
-    	# node.attributes[:GMI] = copy(model)
-     #  println("copy")
+    	node.attributes[:GMI] = deepcopy(model.internalModel)
+      println("copy")
     end
+
+
 
     #Add theta to parent nodes
     if out_degree(graph,node) != 0
@@ -796,6 +811,39 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
     conref = @constraint(childmodel, valbar - childvar == 0)
     push!(childnode.attributes[:linkconstraints], conref)
   end
+
+  #link master and ub subproblem for nonconvex 
+  if graph.attributes[:is_nonconvex]
+    for (numlink,link) in enumerate(links)
+      #Take the two variables of the constraint
+      var1 = link.terms.vars[1]
+      var2 = link.terms.vars[2]
+      #Determine which nodes they belong to
+      nodeV1 = getnode(var1)
+      nodeV2 = getnode(var2)
+      #Set the order of the nodes
+      if ischildnode(graph,nodeV1,nodeV2)
+        childnode = nodeV1
+        childvar = var1
+        parentnode = nodeV2
+        parentvar = var2
+      else
+        childnode = nodeV2
+        childvar = var2
+        parentnode = nodeV1
+        parentvar = var1
+      end
+      childindex = getnodeindex(graph,childnode)
+      childmodel = childnode.attributes[:ubsub]
+      # push!(parentnode.attributes[:childvars][childindex],parentvar)
+      valbar = @variable(childmodel)
+      setname(valbar,"varlbar$numlink")
+      push!(childnode.attributes[:ubxinvars],valbar)
+      @constraint(childmodel, valbar - Variable(childmodel, childvar.col) == 0)
+    end
+  end
+  
+  
   graph.attributes[:preprocessed] = true
 end
 
