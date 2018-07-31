@@ -3,8 +3,8 @@ function generate_lagsub(;psi_f=base_psi_f, psi_d1=base_psi_d1, psi_d2=base_psi_
 
 	@variable(m, gamma_intlt[i in feeds], Bin)
 	@variable(m, gamma_pool[l in pools], Bin)
-	@variable(m, S[l in pools]>=0)
-	@variable(m, A[i in feeds]>=0)
+	@variable(m, SL[l]<=S[l in pools]<=SU[l])
+	@variable(m, AL[i]<=A[i in feeds]<=AU[i])
 	@variable(m, y[l in pools, j in products]>=0)
 	@variable(m, z[i in feeds, j in products]>=0)
 	@variable(m, q[i in feeds, l in pools]>=0)

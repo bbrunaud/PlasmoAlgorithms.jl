@@ -21,15 +21,15 @@ function lagrangesolve(graph;
   if initialmultipliers == :relaxation
     initialrelaxation(graph)
   end
-
+ 
   starttime = time()
-  s = Solution(method=:dual_decomposition)
   λ = graph.attributes[:λ][end]
-  x = graph.attributes[:x][end]
   res = graph.attributes[:res][end]
   nmult = graph.attributes[:numlinks]
   nodes = [node for node in values(getnodes(graph))]
-  graph.attributes[:α] = [1.0α]
+  if !haskey(graph.attributes, :α)
+    graph.attributes[:α] = [1.0α]
+  end
   iterval = 0
 
   ### ITERATIONS ###
@@ -40,27 +40,36 @@ function lagrangesolve(graph;
     iterstart = time()
     # Solve subproblems
     Zk = 0
+    x = zeros(graph.attributes[:numlinks],2)
     for node in nodes
        (x,Zkn) = solvenode(node,λ,x,variant)
        Zk += Zkn
     end
+    if Zk > graph.attributes[:LB]
+      graph.attributes[:LB] = Zk
+    end 
+
+
     #Zk *= n
     graph.attributes[:steptaken] = true
-
-    # If no improvement, increase counter
-    if Zk < graph.attributes[:Zk][end]
-      graph.attributes[:noimprove] += 1
-    end
-    # If too many iterations without improvement, decrease :α
-    if graph.attributes[:noimprove] >= graph.attributes[:maxnoimprove]
-      graph.attributes[:noimprove] = 0
-      graph.attributes[:α][end] *= graph.attributes[:δ]
-    end
     # Save info
     push!(graph.attributes[:Zk],Zk)
     push!(graph.attributes[:x],x)
     α = graph.attributes[:α][end]
     push!(graph.attributes[:α], α)
+
+    # If no improvement, increase counter
+    if length(graph.attributes[:Zk]) > 1
+      if Zk < graph.attributes[:Zk][end-1]
+        graph.attributes[:noimprove] += 1
+      end
+    end 
+    # If too many iterations without improvement, decrease :α
+    if graph.attributes[:noimprove] >= graph.attributes[:maxnoimprove]
+      graph.attributes[:noimprove] = 0
+      graph.attributes[:α][end] *= graph.attributes[:δ]
+    end
+
     # TODO Check the order of updates and saving
 
 
@@ -68,32 +77,42 @@ function lagrangesolve(graph;
     res = x[:,1] - x[:,2]
     push!(graph.attributes[:res],res)
 
-    itertime = time() - iterstart
-    tstamp = time() - starttime
-    saveiteration(s,tstamp,[n*iterval,n*Zk,itertime,tstamp],n)
-    printiterationsummary(s,singleline=false)
 
-    # Check convergence
-    if norm(res) < ϵ
-      s.termination = "Optimal"
-      return s
-    end
-
-    # Check time limit
-    if tstamp > timelimit
-      s.termination = "Time Limit"
-      return s
-    end
 
     # Update multipliers
     println("α = $α")
     (λ, iterval) = updatemultipliers(graph,λ,res,update_method,lagrangeheuristic)
     push!(graph.attributes[:λ], λ)
-    # Update iteration time
-    s.itertime[end] = time() - iterstart
+    if iterval < graph.attributes[:UB]
+      graph.attributes[:UB] = iterval
+    end 
+    push!(graph.attributes[:UB_record], iterval)
+    itertime = time() - iterstart
+    tstamp = time() - starttime
+    saveiteration(graph.attributes[:solution],tstamp,[n*iterval,n*Zk,itertime,tstamp],n)
+    printiterationsummary(graph.attributes[:solution],singleline=false)
+
+    # Check convergence
+    if graph.attributes[:UB] - graph.attributes[:LB] < ϵ
+      graph.attributes[:solution].termination = "Optimal"
+      return graph.attributes[:solution]
+    end
+
+    # Check time limit
+    if tstamp > timelimit
+      graph.attributes[:solution].termination = "Time Limit"
+      return graph.attributes[:solution]
+    end
+
+    #check the value of α
+    if graph.attributes[:α][end] < 1e-4
+      graph.attributes[:solution].termination = "α too small"
+      return graph.attributes[:solution]
+    end 
+
   end
-  s.termination = "Max Iterations"
-  return s
+  graph.attributes[:solution].termination = "Max Iterations"
+  return graph.attributes[:solution]
 end
 
 # Preprocess function
@@ -108,11 +127,14 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   n = normalizegraph(graph)
   links = getlinkconstraints(graph)
   nmult = length(links) # Number of multipliers
+  graph.attributes[:solution] = Solution(method=:dual_decomposition)
   graph.attributes[:numlinks] = nmult
+  graph.attributes[:numx] = nmult / (length(getnodes(graph)) -1)
+  graph.attributes[:numnodes] = length(getnodes(graph))
   graph.attributes[:λ] = [zeros(nmult)] # Array{Float64}(nmult)
-  graph.attributes[:x] = [zeros(nmult,2)] # Linking variables values
+  graph.attributes[:x] = [] # Linking variables values
   graph.attributes[:res] = [zeros(nmult)] # Residuals
-  graph.attributes[:Zk] = [0.0] # Bounds
+  graph.attributes[:Zk] = [] # Bounds
   #graph.attributes[:mflat] = #create_flat_graph_model(graph)
   #graph.attributes[:mflat].solver = graph.solver
   graph.attributes[:cuts] = []
@@ -121,6 +143,10 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   graph.attributes[:maxnoimprove] = maxnoimprove
   graph.attributes[:explore] = []
   graph.attributes[:steptaken] = false
+  graph.attributes[:LB_record] = []
+  graph.attributes[:UB_record] =[]
+  graph.attributes[:LB] = -Inf 
+  graph.attributes[:UB] = +Inf 
 
   # Create Lagrange Master
   ms = Model(solver=graph.solver)
@@ -129,6 +155,21 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   @objective(ms, Max, η)
 
   graph.attributes[:lgmaster] = ms
+
+  #map scenario to node & save lagrangean cuts 
+  if haskey(getnodes(graph)[1].attributes, :scenario)
+    graph.attributes[:node_scenariomap] = Dict()
+    graph.attributes[:scenario_nodemap] = Dict()
+    for i in keys(getnodes(graph))
+      node = getnodes(graph)[i]
+      graph.attributes[:node_scenariomap][i] = node.attributes[:scenario]
+      graph.attributes[:scenario_nodemap][node.attributes[:scenario]] = i 
+      node.attributes[:Zsl] = []
+      node.attributes[:μ] = []
+    end 
+  end 
+
+
 
   # Each node save its initial objective and set a solver if they don't have one
   for n in values(getnodes(graph))
@@ -147,7 +188,7 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   for (i,lc) in enumerate(links)
     for j in 1:length(lc.terms.vars)
       var = lc.terms.vars[j]
-      var.m.ext[:multmap][i] = (lc.terms.coeffs[j],lc.terms.vars[j])
+      var.m.ext[:multmap][i] = (lc.terms.coeffs[j],lc.terms.vars[j], j)
       var.m.ext[:varmap][var] = (i,j)
     end
   end
@@ -160,10 +201,17 @@ function solvenode(node,λ,x,variant=:default)
   m = getmodel(node)
   m.obj = m.ext[:preobj]
   m.ext[:lgobj] = m.ext[:preobj]
+  new_μ = Dict()
+  println(m.ext[:multmap])
   # Add dualized part to objective function
   for k in keys(m.ext[:multmap])
     coef = m.ext[:multmap][k][1]
     var = m.ext[:multmap][k][2]
+    var_name = m.colNames[var.col]
+    if !haskey(new_μ, var_name)
+      new_μ[var_name] = 0.0
+    end 
+    new_μ[var_name] += λ[k]*coef
     m.ext[:lgobj] += λ[k]*coef*var
     m.obj += λ[k]*coef*var
     if variant == :ADMM
@@ -172,16 +220,25 @@ function solvenode(node,λ,x,variant=:default)
     end
   end
 
+  push!(node.attributes[:μ], new_μ)
+
   # Optional: If my residuals are zero, do nothing
 
   solve(m)
-  for v in keys(m.ext[:varmap])
-    val = getvalue(v)
-    x[m.ext[:varmap][v]...] = val
+
+  for l in keys(m.ext[:multmap])
+    j = m.ext[:multmap][l][3]
+    x[l, j] = getvalue(m.ext[:multmap][l][2])
   end
 
+
   objval = getvalue(m.ext[:lgobj])
+  println("lower bound ")
+  println(objval)
+  println("uppper bound")
+  println(getobjectivevalue(m))
   node.attributes[:objective] = objval
+  push!(node.attributes[:Zsl], objval)
   node.attributes[:solvetime] = getsolvetime(m)
 
   return x, objval
@@ -202,6 +259,11 @@ function initialrelaxation(graph)
 end
 
 function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
+  if lagrangeheuristic == :fixbinaries
+    lagrangeheuristic = fixbinaries
+  elseif lagrangeheuristic == :nearest_scenario
+    lagrangeheuristic = nearest_scenario
+  end 
   if method == :subgradient
     subgradient(graph,λ,res,lagrangeheuristic)
   elseif method == :intersectionstep
@@ -226,8 +288,10 @@ function subgradient(graph,λ,res,lagrangeheuristic)
   α = graph.attributes[:α][end]
   n = graph.attributes[:normalized]
   bound = n*lagrangeheuristic(graph)
-  Zk = graph.attributes[:Zk][end]
-  step = α*abs(Zk-bound)/(norm(res)^2)
+  if bound < graph.attributes[:UB]
+    graph.attributes[:UB] = bound
+  end
+  step = α*abs(graph.attributes[:UB]-graph.attributes[:LB])/(norm(res)^2)
   λ += step*res
   return λ,bound
 end
@@ -426,6 +490,82 @@ end
 
 function fixintegers(graph::PlasmoGraph)
   fixbinaries(graph,[:Bin,:Int])
+end
+
+function nearest_scenario(graph::PlasmoGraph)
+  avg_x = Dict()
+  x_all_scenarios = []
+  for i in 1:graph.attributes[:numnodes]
+    push!(x_all_scenarios, Dict())
+  end 
+  orig_ub = Dict()
+  orig_lb = Dict()
+  #calculate the average of x over all scenarios
+  j=1
+  for node in values(getnodes(graph))
+    m  = getmodel(node)
+    # println(keys(m.ext[:varmap]))
+    for var in keys(m.ext[:varmap])
+      var_name = m.colNames[var.col]
+      avg_x[var_name] = 0.0
+    end
+    # println(keys(m.ext[:varmap]))
+    for var in keys(m.ext[:varmap])
+      var_name = m.colNames[var.col]
+      avg_x[var_name] += node.attributes[:prob] * getvalue(var)
+      x_all_scenarios[j][var_name] = getvalue(var)
+      if j == 1
+        orig_ub[var_name] = getupperbound(var)
+        orig_lb[var_name] = getlowerbound(var)
+      end
+    end
+    j += 1
+  end
+  println("x_all_scenarios")
+  println(x_all_scenarios)
+  #find the nearest scenario 
+  nearest_x = Dict()
+  min_distance = +Inf  
+  for j in 1:length(graph.attributes[:numnodes])
+    temp_distance = 0 
+    for var_name in keys(avg_x)
+      temp_distance += ((avg_x[var_name] - x_all_scenarios[j][var_name]) / (orig_ub[var_name]  - orig_lb[var_name]))^2
+    end
+    if temp_distance < min_distance
+      min_distance = temp_distance
+      for var_name in keys(avg_x)
+        nearest_x[var_name] = x_all_scenarios[j][var_name]
+      end
+    end 
+  end
+
+
+  #fix x to nearest_x and re-solve all subproblems
+  Zk = 0 
+  for node in values(getnodes(graph))
+    m = getmodel(node)
+    for var in keys(m.ext[:varmap])
+      var_name = var.m.colNames[var.col]
+      setupperbound(var, nearest_x[var_name])
+      setlowerbound(var, nearest_x[var_name])
+    end 
+    status = solve(m)
+    # if status != :Optimal
+    #   error("upper bound subproblem not solved to optimality")
+    # end 
+    Zk += getobjectivevalue(m)
+    #restore bounds after solve 
+    for var in keys(m.ext[:varmap])
+      var_name = var.m.colNames[var.col]
+      setupperbound(var, orig_ub[var_name])
+      setlowerbound(var, orig_lb[var_name])
+    end
+  end
+  if Zk < graph.attributes[:UB]
+    graph.attributes[:best_ub_x]  = nearest_x
+  end 
+  return Zk
+
 end
 
 

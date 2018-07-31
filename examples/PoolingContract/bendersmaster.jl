@@ -3,8 +3,8 @@ function generate_bendersmaster()
 
 	@variable(m, gamma_intlt[i in feeds], Bin)
 	@variable(m, gamma_pool[l in pools], Bin)
-	@variable(m, S[l in pools]>=0)
-	@variable(m, A[i in feeds]>=0)
+	@variable(m, SL[l]<=S[l in pools]<=SU[l])
+	@variable(m, AL[i]<=A[i in feeds]<=AU[i])
 
 	@constraint(m, f1[i in feeds], AL[i]*gamma_intlt[i]<= A[i])
 	@constraint(m, f2[i in feeds], A[i] <= AU[i]*gamma_intlt[i])
