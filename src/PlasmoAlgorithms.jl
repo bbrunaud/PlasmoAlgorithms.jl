@@ -22,6 +22,7 @@ normalizegraph, smpsread
 
 include("lagrange.jl")
 include("benders.jl")
+include("cross.jl")
 include("solution.jl")
 include("utils.jl")
 include("smps.jl")

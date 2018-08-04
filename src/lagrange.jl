@@ -234,7 +234,7 @@ function solvenode(node,λ,x,variant=:default)
 
   objval = getvalue(m.ext[:lgobj])
   println("lower bound ")
-  println(objval)
+  println(MathProgBase.getobjbound(m.internalModel))
   println("uppper bound")
   println(getobjectivevalue(m))
   node.attributes[:objective] = objval

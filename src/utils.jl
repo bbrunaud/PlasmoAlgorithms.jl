@@ -64,3 +64,15 @@ function get_frac(a)
     end
     return a
 end
+
+function get_col_from_varname(m::JuMP.Model, var_name::String)
+    col = 1
+    for name in m.colNames
+        # println(name)
+        # println(var_name)
+        if name == var_name
+            return col
+        end
+        col += 1
+    end
+end

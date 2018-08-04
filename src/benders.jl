@@ -582,6 +582,7 @@ end
 function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
   if graph.attributes[:is_nonconvex] && in_degree(graph, node) != 0
     model = node.attributes[:ubsub]
+    println(model)
     solve(model)
     node.attributes[:preobjval] = getvalue(node.attributes[:preobj])
   else 
@@ -835,11 +836,17 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
       end
       childindex = getnodeindex(graph,childnode)
       childmodel = childnode.attributes[:ubsub]
+      println(childmodel)
+      println(childmodel.colNames)
+      temp_model = childvar.m 
+      childvar_name = temp_model.colNames[childvar.col]
+      println(childvar_name)
+      println(get_col_from_varname(childmodel, childvar_name))
       # push!(parentnode.attributes[:childvars][childindex],parentvar)
       valbar = @variable(childmodel)
       setname(valbar,"varlbar$numlink")
       push!(childnode.attributes[:ubxinvars],valbar)
-      @constraint(childmodel, valbar - Variable(childmodel, childvar.col) == 0)
+      @constraint(childmodel, valbar - Variable(childmodel,get_col_from_varname(childmodel, childvar_name)) == 0)
     end
   end
   
