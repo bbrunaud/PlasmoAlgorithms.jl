@@ -232,11 +232,8 @@ function solvenode(node,λ,x,variant=:default)
   end
 
 
-  objval = getvalue(m.ext[:lgobj])
-  println("lower bound ")
-  println(MathProgBase.getobjbound(m.internalModel))
-  println("uppper bound")
-  println(getobjectivevalue(m))
+
+  objval=MathProgBase.getobjbound(m.internalModel)
   node.attributes[:objective] = objval
   push!(node.attributes[:Zsl], objval)
   node.attributes[:solvetime] = getsolvetime(m)

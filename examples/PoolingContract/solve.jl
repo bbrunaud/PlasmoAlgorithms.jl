@@ -33,7 +33,7 @@ for s in scenarios
 	n.attributes[:ubsub] = ubsub
 end
 
-# bendersolve(g, cuts=[:LP], max_iterations=60, timelimit=100000, is_nonconvex=true)
+bendersolve(g, cuts=[:GMI], max_iterations=60, timelimit=100000, is_nonconvex=true)
 
 lag_g = PlasmoGraph()
 lag_g.solver = BaronSolver(maxtime=5e4, epsr= 1e-3, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so")
@@ -57,4 +57,5 @@ for s in scenarios
 	@linkconstraint(lag_g, [i in pools], n1[:gamma_pool][i] == n[:gamma_pool][i])
 	@linkconstraint(lag_g, [i in pools], n1[:S][i] == n[:S][i])
 end
-lagrangesolve(lag_g, max_iterations=2, lagrangeheuristic=:nearest_scenario,  maxnoimprove = 1)
+# lagrangesolve(lag_g, max_iterations=2, lagrangeheuristic=:nearest_scenario,  maxnoimprove = 1)
+# crosssolve(g, lag_g, max_iterations_lag=30, is_nonconvex=true)

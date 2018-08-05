@@ -11,7 +11,7 @@ using MathProgBase
 import Plasmo.solve, Base.==
 
 export Solution, lagrangesolve, psolve, bendersolve,
-lgprepare, solvenode,
+lgprepare, solvenode,crosssolve,
 
 # Solution
 saveiteration,
@@ -25,7 +25,6 @@ include("benders.jl")
 include("cross.jl")
 include("solution.jl")
 include("utils.jl")
-include("smps.jl")
 
 
 end

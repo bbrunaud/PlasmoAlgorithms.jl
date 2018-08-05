@@ -27,7 +27,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
   starttime = time()
   graph.attributes[:is_nonconvex] = is_nonconvex
   global tmpdir = "/tmp/RootNode" # mktempdir()
-  s = Solution(method=:benders)
+  
   updatebound = true
 
   verbose && info("Preparing graph")
@@ -44,7 +44,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
   # Set bound to root node
   rootnode = graph.attributes[:roots][1]
   rootmodel = getmodel(rootnode)
-  @constraint(rootmodel, rootmodel.obj.aff >= LB)
+  # @constraint(rootmodel, rootmodel.obj.aff >= LB)
 
   # Begin iterations
   verbose && info("Begin iterations")
@@ -57,31 +57,31 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
 
     itertime = toc()
     if n == 1
-      saveiteration(s,tstamp,[UB,LB,itertime,tstamp],n)
+      saveiteration(graph.attributes[:solution],tstamp,[UB,LB,itertime,tstamp],n)
     else
-      saveiteration(s,tstamp,[n*LB,n*UB,itertime,tstamp],n)
+      saveiteration(graph.attributes[:solution],tstamp,[n*LB,n*UB,itertime,tstamp],n)
     end
-    printiterationsummary(s,singleline=false)
+    printiterationsummary(graph.attributes[:solution],singleline=false)
 
     if abs(UB-LB) < ϵ
-      s.termination = "Optimal"
-      return s
+      graph.attributes[:solution].termination = "Optimal"
+      return graph.attributes[:solution]
     end
 
     # Check time limit
     if tstamp > timelimit
-      s.termination = "Time Limit"
-      return s
+      graph.attributes[:solution].termination = "Time Limit"
+      return graph.attributes[:solution]
     end
 
     if graph.attributes[:stalled]
-      s.termination = "Stalled"
-      return s
+      graph.attributes[:solution].termination = "Stalled"
+      return graph.attributes[:solution]
     end
   end
 
-  s.termination = "Max Iterations"
-  return s
+  graph.attributes[:solution].termination = "Max Iterations"
+  return graph.attributes[:solution]
 end
 
 function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Bool)
@@ -582,7 +582,7 @@ end
 function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
   if graph.attributes[:is_nonconvex] && in_degree(graph, node) != 0
     model = node.attributes[:ubsub]
-    println(model)
+    # println(model)
     solve(model)
     node.attributes[:preobjval] = getvalue(node.attributes[:preobj])
   else 
@@ -597,6 +597,9 @@ function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
 end
 
 function takex(node::PlasmoNode, graph::PlasmoGraph)
+  if in_degree(graph, node) == 0 
+    return true
+  end
   xinvals = node.attributes[:xin]
   println(xinvals)
   xinvars = node.attributes[:xinvars]
@@ -739,7 +742,7 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
   if haskey(graph.attributes,:preprocessed)
     return true
   end
-
+  graph.attributes[:solution]= Solution(method=:benders)
   identifylevels(graph)
   graph.attributes[:normalized] = normalizegraph(graph)
   graph.attributes[:stalled] = false
@@ -781,6 +784,21 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
       sort!(childrenindices)
       @variable(model, θ[i in childrenindices] >= -1e6)
       model.obj += sum(θ[i] for i in childrenindices)
+      node.attributes[:θ_to_scenario] = Dict()
+      node.attributes[:scenario_to_θ] = Dict()
+      for child in out_neighbors(graph,node)
+        if haskey(child.attributes, :scenario)
+          index = getnodeindex(graph, child)
+          node.attributes[:θ_to_scenario][index] = child.attributes[:scenario]
+          node.attributes[:scenario_to_θ][child.attributes[:scenario]] = index
+        end
+      end
+      #map variable name to variable 
+      node.attributes[:varname_to_var] = Dict()
+      for i in 1:length(model.colNames)
+        varname = model.colNames[i]
+        node.attributes[:varname_to_var][varname] = Variable(model, i)
+      end
     end
   end
   #Add dual constraint to child nodes using the linking constraints
