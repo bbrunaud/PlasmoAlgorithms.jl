@@ -47,6 +47,7 @@ function lagrangesolve(graph;
     end
     if Zk > graph.attributes[:LB]
       graph.attributes[:LB] = Zk
+      graph.attributes[:best_λ] = λ
     end 
 
 
@@ -180,6 +181,14 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
     mn.ext[:preobj] = mn.obj
     mn.ext[:multmap] = Dict()
     mn.ext[:varmap] = Dict()
+    #map variable name to variable 
+    n.attributes[:varname_to_var] = Dict()
+    n.attributes[:varname_to_varcat] = Dict()
+    for i in 1:length(mn.colNames)
+      varname = mn.colNames[i]
+      n.attributes[:varname_to_var][varname] = Variable(mn, i)
+      n.attributes[:varname_to_varcat][varname] = mn.colCat[i]
+    end
   end
 
   # Maps
@@ -192,7 +201,11 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
       var.m.ext[:varmap][var] = (i,j)
     end
   end
-
+  for n in values(getnodes(graph))
+    mn = getmodel(n)
+    println(mn.ext[:multmap])
+    println(mn.ext[:varmap])
+  end
   graph.attributes[:preprocessed] = true
 end
 
@@ -256,11 +269,6 @@ function initialrelaxation(graph)
 end
 
 function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
-  if lagrangeheuristic == :fixbinaries
-    lagrangeheuristic = fixbinaries
-  elseif lagrangeheuristic == :nearest_scenario
-    lagrangeheuristic = nearest_scenario
-  end 
   if method == :subgradient
     subgradient(graph,λ,res,lagrangeheuristic)
   elseif method == :intersectionstep
@@ -559,7 +567,7 @@ function nearest_scenario(graph::PlasmoGraph)
     end
   end
   if Zk < graph.attributes[:UB]
-    graph.attributes[:best_ub_x]  = nearest_x
+    graph.attributes[:best_feasible_x]  = nearest_x
   end 
   return Zk
 

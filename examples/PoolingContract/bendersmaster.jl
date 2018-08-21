@@ -1,6 +1,6 @@
 function generate_bendersmaster()
-	m = Model(solver=CplexSolver())
-
+	m = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0))
+	# m= Model(solver=GurobiSolver())
 	@variable(m, gamma_intlt[i in feeds], Bin)
 	@variable(m, gamma_pool[l in pools], Bin)
 	@variable(m, SL[l]<=S[l in pools]<=SU[l])

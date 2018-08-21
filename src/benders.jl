@@ -98,6 +98,16 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
     iterUB = sum(node.attributes[:preobjval] for node in values(graph.nodes))
     graph.attributes[:iterUB] = iterUB
     UB = min(graph.attributes[:UB],iterUB)
+    #update best feasible x
+    if UB < graph.attributes[:UB]
+      root = graph.attributes[:roots][1]
+      if !haskey(graph.attributes, :best_feasible_x)
+        graph.attributes[:best_feasible_x] = Dict()
+      end
+      for varname in keys(root.attributes[:varname_to_var])
+        graph.attributes[:best_feasible_x][varname] = getvalue(root.attributes[:varname_to_var][varname])
+      end
+    end
     graph.attributes[:UB] = UB
   else
     UB = graph.attributes[:UB]
@@ -776,10 +786,25 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
       println("copy")
     end
 
+    #map variable name to variable 
+    node.attributes[:varname_to_var] = Dict()
+    node.attributes[:varname_to_varcat] = Dict()
+    for i in 1:length(model.colNames)
+      varname = model.colNames[i]
+      node.attributes[:varname_to_var][varname] = Variable(model, i)
+      node.attributes[:varname_to_varcat][varname] = model.colCat[i]
+    end
 
+    if graph.attributes[:is_nonconvex] && in_degree(graph, node) != 0
+      node.attributes[:nonconvex_varname_to_var] = Dict()
+      for i in 1:length(node.attributes[:ubsub].colNames)
+        varname = node.attributes[:ubsub].colNames[i]
+        node.attributes[:nonconvex_varname_to_var][varname] = Variable(node.attributes[:ubsub], i)
+      end
+    end
 
-    #Add theta to parent nodes
     if out_degree(graph,node) != 0
+#Add theta to parent nodes
       childrenindices = [getnodeindex(graph,child) for child in out_neighbors(graph,node)]
       sort!(childrenindices)
       @variable(model, θ[i in childrenindices] >= -1e6)
@@ -793,12 +818,7 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
           node.attributes[:scenario_to_θ][child.attributes[:scenario]] = index
         end
       end
-      #map variable name to variable 
-      node.attributes[:varname_to_var] = Dict()
-      for i in 1:length(model.colNames)
-        varname = model.colNames[i]
-        node.attributes[:varname_to_var][varname] = Variable(model, i)
-      end
+
     end
   end
   #Add dual constraint to child nodes using the linking constraints
@@ -854,8 +874,8 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
       end
       childindex = getnodeindex(graph,childnode)
       childmodel = childnode.attributes[:ubsub]
-      println(childmodel)
-      println(childmodel.colNames)
+      # println(childmodel)
+      # println(childmodel.colNames)
       temp_model = childvar.m 
       childvar_name = temp_model.colNames[childvar.col]
       println(childvar_name)

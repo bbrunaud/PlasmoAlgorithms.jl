@@ -11,7 +11,7 @@ using MathProgBase
 import Plasmo.solve, Base.==
 
 export Solution, lagrangesolve, psolve, bendersolve,
-lgprepare, solvenode,crosssolve,
+lgprepare, solvenode,crosssolve,fixbinary, nearest_scenario,bab_solve,BABnode,largest_rel_diameter,set_bounds,solve_node,
 
 # Solution
 saveiteration,
@@ -25,6 +25,7 @@ include("benders.jl")
 include("cross.jl")
 include("solution.jl")
 include("utils.jl")
+include("spatialbranchandbound.jl")
 
 
 end

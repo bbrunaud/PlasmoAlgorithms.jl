@@ -1,6 +1,6 @@
 function generate_benderssub(;psi_f=base_psi_f, psi_d1=base_psi_d1, psi_d2=base_psi_d2, psi_b1=base_psi_b1, psi_b2=base_psi_b2, DU=base_DU, prob=0)
-	m = Model(solver=CplexSolver())
-
+	m = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0))
+	# m = Model(solver=GurobiSolver())
 	@variable(m, gamma_intlt[i in feeds], Bin)
 	@variable(m, gamma_pool[l in pools], Bin)
 	@variable(m, SL[l]<=S[l in pools]<=SU[l])

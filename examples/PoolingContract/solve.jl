@@ -2,6 +2,7 @@ using PlasmoAlgorithms
 using Plasmo
 using CPLEX
 using BARON
+using Gurobi
 include("input.jl")
 include("benderssub.jl")
 include("bendersmaster.jl")
@@ -11,10 +12,11 @@ include("ubsub.jl")
 
 master = generate_bendersmaster()
 g = PlasmoGraph()
-g.solver = CplexSolver()
+g.solver = CplexSolver(CPX_PARAM_SCRIND=0)
 n1 = add_node(g)
 setmodel(n1, master)
-
+println(master)
+println(master.colNames)
 for s in scenarios
 	benderssub = generate_benderssub(psi_f = psi_f, psi_d1=psi_d1, psi_d2=psi_d2, psi_b1=psi_b1, psi_b2=psi_b2, DU=DU[:, s], prob=prob[s])
 	ubsub = generate_ubsub(psi_f = psi_f, psi_d1=psi_d1, psi_d2=psi_d2, psi_b1=psi_b1, psi_b2=psi_b2, DU=DU[:, s], prob=prob[s])
@@ -31,9 +33,11 @@ for s in scenarios
 	S = getindex(n1.model, :S)
 	@linkconstraint(g, [i in pools], n1[:S][i] == n[:S][i])
 	n.attributes[:ubsub] = ubsub
+	println(benderssub)
+	println(ubsub)
 end
 
-bendersolve(g, cuts=[:GMI], max_iterations=60, timelimit=100000, is_nonconvex=true)
+# bendersolve(g, cuts=[:LP], max_iterations=10, timelimit=100000, is_nonconvex=true)
 
 lag_g = PlasmoGraph()
 lag_g.solver = BaronSolver(maxtime=5e4, epsr= 1e-3, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so")
@@ -42,6 +46,7 @@ n1 = add_node(lag_g)
 setmodel(n1, lagsub1)
 n1.attributes[:prob] =prob[1]
 n1.attributes[:scenario] = 1
+println(lagsub1)
 for s in scenarios
 	if s == length(scenarios)
 		break
@@ -56,6 +61,108 @@ for s in scenarios
 	@linkconstraint(lag_g, [i in feeds], n1[:gamma_intlt][i] == n[:gamma_intlt][i])
 	@linkconstraint(lag_g, [i in pools], n1[:gamma_pool][i] == n[:gamma_pool][i])
 	@linkconstraint(lag_g, [i in pools], n1[:S][i] == n[:S][i])
+	println(lagsub)
 end
-# lagrangesolve(lag_g, max_iterations=2, lagrangeheuristic=:nearest_scenario,  maxnoimprove = 1)
-# crosssolve(g, lag_g, max_iterations_lag=30, is_nonconvex=true)
+# lagrangesolve(lag_g, max_iterations=5, lagrangeheuristic=nearest_scenario,  maxnoimprove = 1)
+# crosssolve(g, lag_g, max_iterations_lag=2, max_iterations_benders=1, is_nonconvex=true)
+
+# all_α = [2 1.5 1 0.5]
+# all_δ = [0.8 0.5 0.3]
+# # all_α = [2 ]
+# # all_δ = [0.8 ]
+# gap = []
+# for α in all_α
+# 	for δ in all_δ
+# 		gg = deepcopy(g)
+# 		lagg = deepcopy(lag_g)
+# 		solution = crosssolve(gg, lagg, max_iterations_lag=30, max_iterations_benders=60, is_nonconvex=true, lag_α = α, lag_δ = δ)
+# 		push!(gap, solution.gap)
+# 	end
+# end
+# solution = crosssolve(g, lag_g, max_iterations_lag=30, max_iterations_benders=60, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3)
+# println(gap)
+
+#start debug spatial bab
+rootnode = BABnode(lag_g, g, -1e6, 1e6, [], [], [], :notfathomed)
+node_list = []
+active_nodes_indices = []
+fathomed_nodes_indices = []
+solution=crosssolve(rootnode.bgraph, rootnode.lgraph, max_iterations_lag=3, max_iterations_benders=1, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3)
+rootnode.LBq = solution[:LB]
+rootnode.best_feasible_x = deepcopy(solution[:best_feasible_x])
+LB = solution[:LB]
+UB = solution[:UB]
+
+
+xlb_root = Dict()
+xub_root = Dict()
+for varname in keys(rootnode.bgraph.attributes[:roots][1].attributes[:varname_to_var])
+	xlb_root[varname] = getlowerbound(rootnode.bgraph.attributes[:roots][1].attributes[:varname_to_var][varname])
+	xub_root[varname] = getupperbound(rootnode.bgraph.attributes[:roots][1].attributes[:varname_to_var][varname])
+end
+
+rootnode.xlbq = xlb_root
+rootnode.xubq = xub_root
+
+
+push!(node_list, rootnode)
+push!(active_nodes_indices, 1)
+N = 3
+num_iter = 1
+while length(active_nodes_indices)>0
+	#select the node with the tightest lower bound 
+	index_selected = 1 
+	temp_LB = -Inf
+	for index in active_nodes_indices
+		if node_list[index].LBq > temp_LB
+			temp_LB = node_list[index].LBq 
+			index_selected = index
+		end
+	end
+	node_to_branch = node_list[index_selected]
+
+	# create two new nodes 
+	lchild = deepcopy(node_to_branch)
+	rchild = deepcopy(node_to_branch)
+
+	#apply branching rule 
+	# lchild, rchild = largest_rel_diameter(node_to_branch, lchild, rchild, xlb_root, xub_root)
+
+	# bendersolve(lchild.bgraph, max_iterations=6, timelimit=100000, is_nonconvex=true)
+	#solve the two new nodes 
+	# solve_node(lchild)
+	# solve_node(rchild)
+	#update bounds 
+
+	#fathom nodes 
+
+	#add two new nodes 
+	push!(node_list, lchild)
+	push!(node_list, rchild)
+
+	num_iter += 1
+	break 
+
+
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
