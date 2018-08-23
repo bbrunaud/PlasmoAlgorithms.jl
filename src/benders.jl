@@ -1,4 +1,3 @@
-
 abstract type CutData end
 
 struct BendersCutData <: CutData
@@ -23,7 +22,7 @@ end
 """
 bendersolve
 """
-function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600,verbose=false)
+function bendersolve(graph::ModelGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600,verbose=false)
   starttime = time()
   global tmpdir = "/tmp/RootNode" # mktempdir()
   s = Solution(method=:benders)
@@ -31,16 +30,16 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
 
   verbose && info("Preparing graph")
   bdprepare(graph)
-  n = graph.attributes[:normalized]
+  n = getattribute(graph, :normalized)
 
   verbose && info("Solve relaxation and set LB")
-  mf = graph.attributes[:mflat]
+  mf = getattribute(graph, :mflat)
   solve(mf,relaxation=true)
-  LB = getobjectivevalue(graph.attributes[:mflat])
+  LB = getobjectivevalue(getattribute(graph, :mflat))
   UB = Inf
 
   # Set bound to root node
-  rootnode = graph.attributes[:roots][1]
+  rootnode = getattribute(graph, :roots)[1]
   rootmodel = getmodel(rootnode)
   @constraint(rootmodel, rootmodel.obj.aff >= LB)
 
@@ -72,7 +71,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
       return s
     end
 
-    if graph.attributes[:stalled]
+    if getattribute(graph, :stalled)
       s.termination = "Stalled"
       return s
     end
@@ -82,8 +81,8 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
   return s
 end
 
-function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Bool)
-  levels = graph.attributes[:levels]
+function forwardstep(graph::ModelGraph, cuts::Array{Symbol,1}, updatebound::Bool)
+  levels = getattribute(graph, :levels)
   numlevels = length(levels)
   for level in 1:numlevels
     nodeslevel = levels[level]
@@ -91,19 +90,19 @@ function forwardstep(graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Boo
       solveprimalnode(node,graph,cuts,updatebound)
     end
   end
-  LB = graph.attributes[:LB]
+  LB = getattribute(graph, :LB)
   if updatebound
-    iterUB = sum(node.attributes[:preobjval] for node in values(graph.nodes))
-    graph.attributes[:iterUB] = iterUB
-    UB = min(graph.attributes[:UB],iterUB)
-    graph.attributes[:UB] = UB
+    iterUB = sum(getattribute(node, :preobjval) for node in getnodes(graph))
+    setattribute(graph, :iterUB, iterUB)
+    UB = min(getattribute(graph, :UB),iterUB)
+    setattribute(graph, :UB, UB)
   else
-    UB = graph.attributes[:UB]
+    UB = getattribute(graph, :UB)
   end
   return LB,UB
 end
 
-function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbol,1}, updatebound::Bool)
+function solveprimalnode(node::ModelNode, graph::ModelGraph, cuts::Array{Symbol,1}, updatebound::Bool)
   # 1. Add cuts
   generatecuts(node,graph)
   # 2. Take x
@@ -124,24 +123,24 @@ function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbo
   putcutdata(node,graph,cuts)
 end
 
-function solvelprelaxation(node::PlasmoNode)
+function solvelprelaxation(node::ModelNode)
   model = getmodel(node)
   status = solve(model, relaxation = true)
 
   @assert status == :Optimal
 
-  dualconstraints = node.attributes[:linkconstraints]
+  dualconstraints = getattribute(node, :linkconstraints)
 
   λnode = getdual(dualconstraints)
   nodebound = getobjectivevalue(model)
 
-  node.attributes[:bound] = nodebound
-  node.attributes[:λ] = λnode
+  setattribute(node, :bound, nodebound)
+  setattribute(node, :λ, λnode)
 
   return status
 end
 
-function solverootrelaxation(node::PlasmoNode)
+function solverootrelaxation(node::ModelNode)
   sp = getmodel(node)
   if length(sp.linconstrDuals) == 0
     solve(sp, relaxation=true)
@@ -165,7 +164,7 @@ function solverootrelaxation(node::PlasmoNode)
 
   run(`mv node0.lp $tmpdir/`)
 
-  dualconstraints = node.attributes[:linkconstraints]
+  dualconstraints = getattribute(node, :linkconstraints)
 
   rootduals = MathProgBase.getconstrduals(lp.internalModel)
   sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
@@ -173,46 +172,46 @@ function solverootrelaxation(node::PlasmoNode)
   λnode = getdual(dualconstraints)
   nodebound = MathProgBase.getobjval(lp.internalModel)
 
-  node.attributes[:bound] = nodebound
-  node.attributes[:λ] = λnode
+  setattribute(node, :bound, nodebound)
+  setattribute(node, :λ, λnode)
 end
 
-function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
+function solvenodemodel(node::ModelNode,graph::ModelGraph)
   model = getmodel(node)
   solve(model)
   if in_degree(graph,node) == 0 # Root node
-    graph.attributes[:LB] = getobjectivevalue(model)
+    setattribute(graph, :LB, getobjectivevalue(model))
   end
-  node.attributes[:preobjval] = getvalue(model.ext[:preobj])
+  setattribute(node, :preobjval, JuMP.getvalue(model.ext[:preobj]))
 end
 
-function takex(node::PlasmoNode)
-  xinvals = node.attributes[:xin]
-  xinvars = node.attributes[:xinvars]
+function takex(node::ModelNode)
+  xinvals = getattribute(node, :xin)
+  xinvars = getattribute(node, :xinvars)
   if length(xinvals) > 0
     fix.(xinvars,xinvals)
   end
 end
 
-function putx(node::PlasmoNode,graph::PlasmoGraph)
-  childvars = node.attributes[:childvars]
+function putx(node::ModelNode,graph::ModelGraph)
+  childvars = getattribute(node,:childvars)
   children = out_neighbors(graph,node)
   length(children) == 0 && return true
 
   for child in children
     xnode = getvalue(childvars[getnodeindex(graph,child)])
-    child.attributes[:xin] = xnode
+    setattribute(child,:xin, xnode)
   end
 end
 
-function putcutdata(node::PlasmoNode,graph::PlasmoGraph,cuts::Array{Symbol,1})
+function putcutdata(node::ModelNode,graph::ModelGraph,cuts::Array{Symbol,1})
   parents = in_neighbors(graph,node)
   length(parents) == 0 && return true
   parent = parents[1]    # Assume only one parent
-  parentcuts = parent.attributes[:cutdata]
-  θk = node.attributes[:bound]
-  λk = node.attributes[:λ]
-  xk = node.attributes[:xin]
+  parentcuts = getattributes(parent, :cutdata)
+  θk = getattribute(node,:bound)
+  λk = getattribute(node,:λ)
+  xk = getattribute(node,:xin)
   nodeindex = getnodeindex(graph,node)
   if :LP in cuts || :Root in cuts
     bcd = BendersCutData(θk, λk, xk)
@@ -228,12 +227,12 @@ function putcutdata(node::PlasmoNode,graph::PlasmoGraph,cuts::Array{Symbol,1})
   end
 end
 
-function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
+function generatecuts(node::ModelNode,graph::ModelGraph)
   children = out_neighbors(graph,node)
   length(children) == 0 && return true
 
-  cutdataarray = node.attributes[:cutdata]
-  previouscuts = node.attributes[:prevcuts]
+  cutdataarray = getattribute(node,:cutdata)
+  previouscuts = getattribute(node,:prevcuts)
   thisitercuts = Dict()
   samecuts = Dict()
   for child in children
@@ -257,37 +256,40 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
     end
     samecuts[childindex] = reduce(*,samecuts[childindex]) && length(samecuts[childindex]) > 0
   end
-  node.attributes[:prevcuts] = thisitercuts
+  setattribute(node,:prevcuts, thisitercuts)
   nodesamecuts = collect(values(samecuts))
-  node.attributes[:stalled] = reduce(*,nodesamecuts)
-  node.attributes[:stalled] && warn("Node $(node.label) stalled")
-  if in(node,graph.attributes[:roots]) && node.attributes[:stalled]
-    graph.attributes[:stalled] = true
+  setattribute(node, :stalled, reduce(*,nodesamecuts))
+  getattribute(node, :stalled) && warn("Node $(node.label) stalled")
+  if in(node,getattribute(graph, :roots) ) && getattribute(node, :stalled)
+    setattribute(graph, :stalled,  true)
  end
 end
 
-function generatebenderscut(node::PlasmoNode, cd::BendersCutData,index)
+function generatebenderscut(node::ModelNode, cd::BendersCutData,index)
   model = getmodel(node)
   θ = getindex(model, :θ)
-  x = node.attributes[:childvars][index]
+  x = getattribute(node, :childvars)[index]
   @constraint(model, θ[index] >= cd.θk + cd.λk'*(cd.xk - x))
 end
 
 
-function identifylevels(graph::Plasmo.PlasmoGraph)
+function identifylevels(graph::ModelGraph)
   #Create lists of root and leaf nodes in graph
-  roots = graph.attributes[:roots] = []
-  leaves = graph.attributes[:leaves] = []
+  setattribute(graph, :roots, ModelNode[])
+  roots = getattribute(graph, :roots)
+  setattribute(graph, :leaves, ModelNode[])
+  leaves = getattribute(graph, :leaves)
   #Create dictionary to keep track of levels of nodes
-  levels = graph.attributes[:levels] = Dict()
+  setattribute(graph, :levels, Dict())
+  levels = getattribute(graph, :levels)
   #Iterate through every node to check for root/leaf nodes
-  for node in values(graph.nodes)
-    node.attributes[:xin] = []
-    node.attributes[:λ] = []
-    node.attributes[:bound] = NaN
-    node.attributes[:xinvars] = []
-    node.attributes[:preobjval] = NaN
-    node.attributes[:linkconstraints] = []
+  for node in getnodes(graph)
+    setattribute(node,:xin, [])
+    setattribute(node,:λ, [])
+    setattribute(node,:bound, NaN)
+    setattribute(node,:xinvars, [])
+    setattribute(node,:preobjval, NaN)
+    setattribute(node,:linkconstraints, [])
     #If the node does not have parents it is a root node
     if in_degree(graph,node) == 0
       push!(roots,node)
@@ -307,10 +309,10 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
     children = []
     for node in current
         push!(children,out_neighbors(graph,node)...)
-        node.attributes[:childvars] = Dict(getnodeindex(graph,child) => [] for child in out_neighbors(graph,node))
-        node.attributes[:cutdata] = Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node))
-        node.attributes[:prevcuts] = Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node))
-        node.attributes[:stalled] = false
+        setattribute(node,:childvars, Dict(getnodeindex(graph,child) => [] for child in out_neighbors(graph,node)))
+        setattribute(node,:cutdata, Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node)))
+        setattribute(node,:prevcuts, Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node)))
+        setattribute(node,:stalled, false)
     end
     current = children
     level += 1
@@ -318,26 +320,26 @@ function identifylevels(graph::Plasmo.PlasmoGraph)
   graph.attributes[:numlevels] = level - 1
 end
 
-function bdprepare(graph::Plasmo.PlasmoGraph)
-  if haskey(graph.attributes,:preprocessed)
+function bdprepare(graph::ModelGraph)
+  if hasattribute(graph,:preprocessed)
     return true
   end
 
   identifylevels(graph)
-  graph.attributes[:normalized] = normalizegraph(graph)
-  graph.attributes[:stalled] = false
-  graph.attributes[:mflat] = create_flat_graph_model(graph)
-  graph.attributes[:UB] = Inf
-  setsolver(graph.attributes[:mflat],graph.solver)
+  setattribute(graph, :normalized, normalizegraph(graph))
+  setattribute(graph, :stalled, false)
+  setattribute(graph, :mflat ,create_flat_graph_model(graph))
+  setattribute(graph, :UB, Inf)
+  JuMP.setsolver(getattribute(graph, :mflat) ,getsolver(graph))
 
   links = getlinkconstraints(graph)
   numlinks = length(links)
 
-  for index in 1:length(graph.nodes)
-    node = graph.nodes[index]
+  for index in 1:length(getnodes(graph))
+    node = getnode(graph, index)
     model = getmodel(node)
     if model.solver == JuMP.UnsetSolver()
-      model.solver = graph.solver
+      model.solver = getsolver(graph)
     end
     model.ext[:preobj] = model.obj
     #Add theta to parent nodes
@@ -370,12 +372,12 @@ function bdprepare(graph::Plasmo.PlasmoGraph)
     end
     childindex = getnodeindex(graph,childnode)
     childmodel = getmodel(childnode)
-    push!(parentnode.attributes[:childvars][childindex],parentvar)
-    valbar = @variable(childmodel)
-    setname(valbar,"varlbar$numlink")
-    push!(childnode.attributes[:xinvars],valbar)
-    conref = @constraint(childmodel, valbar - childvar == 0)
-    push!(childnode.attributes[:linkconstraints], conref)
+    push!(getattribute(parentnode, :childvars)[childindex],parentvar)
+    linkvar = @variable(childmodel)
+    setname(linkvar,"linkvar$numlink")
+    push!(getattribute(childnode, :xinvars),linkvar)
+    conref = @constraint(childmodel, linkvar - childvar == 0)
+    push!(getattribute(childnode, :linkconstraints), conref)
   end
-  graph.attributes[:preprocessed] = true
+  setattribute(graph, :preprocessed, true)
 end

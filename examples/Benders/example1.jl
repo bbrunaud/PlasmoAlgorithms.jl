@@ -6,7 +6,7 @@ using Logging
 
 Logging.configure(level=DEBUG)
 
-##Place MP and SP into PlasmoGraph
+##Place MP and SP into ModelGraph
 mp = Model(solver = GurobiSolver(OutputFlag=0))
 sp = Model(solver = GurobiSolver(OutputFlag=0))
 
@@ -20,8 +20,8 @@ sp = Model(solver = GurobiSolver(OutputFlag=0))
 @objective(sp,Min,2x[1]+3x[2])
 
 ## Plasmo Graph
-g = PlasmoGraph()
-g.solver = GurobiSolver(OutputFlag=0)
+g = ModelGraph()
+setsolver(g, GurobiSolver(OutputFlag=0))
 n1 = add_node(g)
 setmodel(n1,mp)
 n2 = add_node(g)
