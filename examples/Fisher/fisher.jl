@@ -1,5 +1,6 @@
 using JuMP
 using Gurobi
+using Revise
 using Plasmo
 
 ## Model from Fisher,1985. An Applications Oriented Guide to Lagrangian Relaxation
@@ -34,8 +35,8 @@ m2 = Model(solver=GurobiSolver(OutputFlag=0))
 @objective(m2, Max, 4y[2])
 
 ## Plasmo Graph
-g = PlasmoGraph()
-g.solver = GurobiSolver(OutputFlag=0)
+g = ModelGraph()
+setsolver(g, GurobiSolver(OutputFlag=0))
 n1 = add_node(g)
 setmodel(n1,m1)
 n2 = add_node(g)
