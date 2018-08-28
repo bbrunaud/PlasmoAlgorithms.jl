@@ -2,9 +2,6 @@ using JuMP
 using Gurobi
 using Plasmo
 using PlasmoAlgorithms
-using Logging
-
-Logging.configure(level=DEBUG)
 
 ##Place MP and SP into ModelGraph
 mp = Model(solver = GurobiSolver(OutputFlag=0))
@@ -33,4 +30,4 @@ edge = Plasmo.add_edge(g,n1,n2)
 ## Linking constraints between MP and SP
 @linkconstraint(g, n1[:y] == n2[:y])
 
-#bendersolve(g, max_iterations=5)
+bendersolve(g, max_iterations=5)

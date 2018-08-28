@@ -111,8 +111,8 @@ function solveprimalnode(node::ModelNode, graph::ModelGraph, cuts::Array{Symbol,
   if :LP in cuts
     solvelprelaxation(node)
   end
-  if :Root in cuts
-  solverootrelaxation(node)
+#  if :Root in cuts
+#  solverootrelaxation(node)
   end
   if updatebound
     solvenodemodel(node,graph)
@@ -140,6 +140,7 @@ function solvelprelaxation(node::ModelNode)
   return status
 end
 
+#=
 function solverootrelaxation(node::ModelNode)
   sp = getmodel(node)
   if length(sp.linconstrDuals) == 0
@@ -175,6 +176,7 @@ function solverootrelaxation(node::ModelNode)
   setattribute(node, :bound, nodebound)
   setattribute(node, :λ, λnode)
 end
+=#
 
 function solvenodemodel(node::ModelNode,graph::ModelGraph)
   model = getmodel(node)
@@ -321,7 +323,7 @@ function identifylevels(graph::ModelGraph)
 end
 
 function bdprepare(graph::ModelGraph)
-  if hasattribute(graph,:preprocessed)
+  if Plasmo.hasattribute(graph,:preprocessed)
     return true
   end
 
