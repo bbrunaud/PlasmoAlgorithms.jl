@@ -113,7 +113,7 @@ function solveprimalnode(node::ModelNode, graph::ModelGraph, cuts::Array{Symbol,
   end
 #  if :Root in cuts
 #  solverootrelaxation(node)
-  end
+# end
   if updatebound
     solvenodemodel(node,graph)
   end
@@ -201,7 +201,7 @@ function putx(node::ModelNode,graph::ModelGraph)
   length(children) == 0 && return true
 
   for child in children
-    xnode = getvalue(childvars[getnodeindex(graph,child)])
+    xnode = getvalue(childvars[getindex(graph,child)])
     setattribute(child,:xin, xnode)
   end
 end
@@ -210,11 +210,11 @@ function putcutdata(node::ModelNode,graph::ModelGraph,cuts::Array{Symbol,1})
   parents = in_neighbors(graph,node)
   length(parents) == 0 && return true
   parent = parents[1]    # Assume only one parent
-  parentcuts = getattributes(parent, :cutdata)
+  parentcuts = getattribute(parent, :cutdata)
   θk = getattribute(node,:bound)
   λk = getattribute(node,:λ)
   xk = getattribute(node,:xin)
-  nodeindex = getnodeindex(graph,node)
+  nodeindex = getindex(graph,node)
   if :LP in cuts || :Root in cuts
     bcd = BendersCutData(θk, λk, xk)
     push!(parentcuts[nodeindex],bcd)
@@ -238,7 +238,7 @@ function generatecuts(node::ModelNode,graph::ModelGraph)
   thisitercuts = Dict()
   samecuts = Dict()
   for child in children
-    childindex = getnodeindex(graph,child)
+    childindex = getindex(graph,child)
     thisitercuts[childindex] = CutData[]
     samecuts[childindex] = Bool[]
 
@@ -311,15 +311,16 @@ function identifylevels(graph::ModelGraph)
     children = []
     for node in current
         push!(children,out_neighbors(graph,node)...)
-        setattribute(node,:childvars, Dict(getnodeindex(graph,child) => [] for child in out_neighbors(graph,node)))
-        setattribute(node,:cutdata, Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node)))
-        setattribute(node,:prevcuts, Dict(getnodeindex(graph,child) => CutData[] for child in out_neighbors(graph,node)))
+        setattribute(node,:childvars, Dict(getindex(graph,child) => [] for child in out_neighbors(graph,node)))
+        setattribute(node,:cutdata, Dict(getindex(graph,child) => CutData[] for child in out_neighbors(graph,node)))
+        setattribute(node,:prevcuts, Dict(getindex(graph,child) => CutData[] for child in out_neighbors(graph,node)))
         setattribute(node,:stalled, false)
     end
     current = children
     level += 1
   end
-  graph.attributes[:numlevels] = level - 1
+  setattribute(graph,:numlevels,level - 1)
+  #graph.attributes[:numlevels] = level - 1
 end
 
 function bdprepare(graph::ModelGraph)
@@ -346,7 +347,7 @@ function bdprepare(graph::ModelGraph)
     model.ext[:preobj] = model.obj
     #Add theta to parent nodes
     if out_degree(graph,node) != 0
-      childrenindices = [getnodeindex(graph,child) for child in out_neighbors(graph,node)]
+      childrenindices = [getindex(graph,child) for child in out_neighbors(graph,node)]
       sort!(childrenindices)
       @variable(model, θ[i in childrenindices] >= -1e6)
       model.obj += sum(θ[i] for i in childrenindices)
@@ -372,7 +373,7 @@ function bdprepare(graph::ModelGraph)
       parentnode = nodeV1
       parentvar = var1
     end
-    childindex = getnodeindex(graph,childnode)
+    childindex = getindex(graph,childnode)
     childmodel = getmodel(childnode)
     push!(getattribute(parentnode, :childvars)[childindex],parentvar)
     linkvar = @variable(childmodel)
