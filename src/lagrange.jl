@@ -42,13 +42,17 @@ function lagrangesolve(graph;
     Zk = 0
     x = zeros(graph.attributes[:numlinks],2)
     for node in nodes
-       (x,Zkn) = solvenode(node,λ,x,variant)
+       (x,Zkn) = solvenode(graph,node,λ,x,variant)
        Zk += Zkn
     end
     if Zk > graph.attributes[:LB]
       graph.attributes[:LB] = Zk
       graph.attributes[:best_λ] = λ
     end 
+
+    if graph.attributes[:LB] > graph.attributes[:global_UB]
+      graph.attributes[:fathomed_by_bound] = true
+    end
 
 
     #Zk *= n
@@ -111,6 +115,16 @@ function lagrangesolve(graph;
       return graph.attributes[:solution]
     end 
 
+    if graph.attributes[:fathomed_by_bound]
+      graph.attributes[:solution].termination = "node fathomed by bound"
+      return graph.attributes[:solution]
+    end
+
+    if graph.attributes[:is_infeasible]
+      graph.attributes[:solution].termination = "Lagrangean subproblem is infeasible"
+      return graph.attributes[:solution]
+    end
+
   end
   graph.attributes[:solution].termination = "Max Iterations"
   return graph.attributes[:solution]
@@ -148,6 +162,18 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   graph.attributes[:UB_record] =[]
   graph.attributes[:LB] = -Inf 
   graph.attributes[:UB] = +Inf 
+  #store the orignal upper lower bound of the variables
+  graph.attributes[:orig_ub] = Dict()
+  graph.attributes[:orig_lb] = Dict()
+  graph.attributes[:fathomed_by_bound] = false
+  graph.attributes[:global_UB] = +Inf
+  graph.attributes[:is_infeasible] = false
+  anode = getnodes(graph)[1]
+  amodel = getmodel(anode)
+  for i in 1:length(amodel.colNames)
+    graph.attributes[:orig_ub][amodel.colNames[i]] = amodel.colUpper[i]
+    graph.attributes[:orig_lb][amodel.colNames[i]] = amodel.colLower[i]
+  end
 
   # Create Lagrange Master
   ms = Model(solver=graph.solver)
@@ -203,19 +229,19 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   end
   for n in values(getnodes(graph))
     mn = getmodel(n)
-    println(mn.ext[:multmap])
-    println(mn.ext[:varmap])
+    # println(mn.ext[:multmap])
+    # println(mn.ext[:varmap])
   end
   graph.attributes[:preprocessed] = true
 end
 
 # Solve a single subproblem
-function solvenode(node,λ,x,variant=:default)
+function solvenode(graph, node,λ,x,variant=:default)
   m = getmodel(node)
   m.obj = m.ext[:preobj]
   m.ext[:lgobj] = m.ext[:preobj]
   new_μ = Dict()
-  println(m.ext[:multmap])
+  # println(m.ext[:multmap])
   # Add dualized part to objective function
   for k in keys(m.ext[:multmap])
     coef = m.ext[:multmap][k][1]
@@ -237,7 +263,11 @@ function solvenode(node,λ,x,variant=:default)
 
   # Optional: If my residuals are zero, do nothing
 
-  solve(m)
+  status = solve(m)
+  if status != :Optimal
+    graph.attributes[:is_infeasible] = true
+    graph.attributes[:LB] = +Inf
+  end 
 
   for l in keys(m.ext[:multmap])
     j = m.ext[:multmap][l][3]
@@ -503,17 +533,22 @@ function nearest_scenario(graph::PlasmoGraph)
   for i in 1:graph.attributes[:numnodes]
     push!(x_all_scenarios, Dict())
   end 
+  #save the current upper and lower bound
   orig_ub = Dict()
   orig_lb = Dict()
+
+  #initialize avg_x
+  m = getmodel(getnodes(graph)[1])
+  for var in keys(m.ext[:varmap])
+    var_name = m.colNames[var.col]
+    avg_x[var_name] = 0.0
+  end
+  
   #calculate the average of x over all scenarios
   j=1
   for node in values(getnodes(graph))
     m  = getmodel(node)
     # println(keys(m.ext[:varmap]))
-    for var in keys(m.ext[:varmap])
-      var_name = m.colNames[var.col]
-      avg_x[var_name] = 0.0
-    end
     # println(keys(m.ext[:varmap]))
     for var in keys(m.ext[:varmap])
       var_name = m.colNames[var.col]
@@ -522,19 +557,17 @@ function nearest_scenario(graph::PlasmoGraph)
       if j == 1
         orig_ub[var_name] = getupperbound(var)
         orig_lb[var_name] = getlowerbound(var)
-      end
+      end      
     end
     j += 1
   end
-  println("x_all_scenarios")
-  println(x_all_scenarios)
   #find the nearest scenario 
   nearest_x = Dict()
   min_distance = +Inf  
   for j in 1:length(graph.attributes[:numnodes])
     temp_distance = 0 
     for var_name in keys(avg_x)
-      temp_distance += ((avg_x[var_name] - x_all_scenarios[j][var_name]) / (orig_ub[var_name]  - orig_lb[var_name]))^2
+      temp_distance += ((avg_x[var_name] - x_all_scenarios[j][var_name]) / (graph.attributes[:orig_ub][var_name]  - graph.attributes[:orig_lb][var_name]))^2
     end
     if temp_distance < min_distance
       min_distance = temp_distance
@@ -555,9 +588,10 @@ function nearest_scenario(graph::PlasmoGraph)
       setlowerbound(var, nearest_x[var_name])
     end 
     status = solve(m)
-    # if status != :Optimal
-    #   error("upper bound subproblem not solved to optimality")
-    # end 
+    if status != :Optimal
+      println(nearest_x)
+      error("upper bound subproblem not solved to optimality")
+    end 
     Zk += getobjectivevalue(m)
     #restore bounds after solve 
     for var in keys(m.ext[:varmap])
@@ -569,6 +603,7 @@ function nearest_scenario(graph::PlasmoGraph)
   if Zk < graph.attributes[:UB]
     graph.attributes[:best_feasible_x]  = nearest_x
   end 
+  graph.attributes[:best_avg_x] = deepcopy(avg_x)
   return Zk
 
 end

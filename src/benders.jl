@@ -57,7 +57,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
 
     itertime = toc()
     if n == 1
-      saveiteration(graph.attributes[:solution],tstamp,[UB,LB,itertime,tstamp],n)
+      saveiteration(graph.attributes[:solution],tstamp,[graph.attributes[:iterUB],LB,itertime,tstamp],n)
     else
       saveiteration(graph.attributes[:solution],tstamp,[n*LB,n*UB,itertime,tstamp],n)
     end
@@ -78,6 +78,17 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
       graph.attributes[:solution].termination = "Stalled"
       return graph.attributes[:solution]
     end
+
+    if graph.attributes[:fathomed_by_bound]
+      graph.attributes[:solution].termination = "node fathomed by bound"
+      return graph.attributes[:solution]
+    end
+
+    if graph.attributes[:is_infeasible]
+      graph.attributes[:solution].termination = "Benders master problem is infeasible"
+      return graph.attributes[:solution]
+    end
+
   end
 
   graph.attributes[:solution].termination = "Max Iterations"
@@ -142,7 +153,10 @@ function solvelprelaxation(node::PlasmoNode)
   model = getmodel(node)
   status = solve(model, relaxation = true)
 
-  @assert status == :Optimal
+  # if status != :Optimal
+  #   println(node.attributes[:xin])
+  #   error("lp relaxation not solved to optimality")
+  # end
 
   dualconstraints = node.attributes[:linkconstraints]
 
@@ -593,13 +607,25 @@ function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
   if graph.attributes[:is_nonconvex] && in_degree(graph, node) != 0
     model = node.attributes[:ubsub]
     # println(model)
-    solve(model)
+    status = solve(model)
+
     node.attributes[:preobjval] = getvalue(node.attributes[:preobj])
   else 
     model = getmodel(node)
-    solve(model)
+    status = solve(model)
+    if status != :Optimal && in_degree(graph, node) == 0
+      graph.attributes[:is_infeasible] = true
+      graph.attributes[:LB] = +Inf
+    end
+    if status != :Optimal && in_degree(graph, node) !=0
+      println(node.attributes[:xin])
+      error("upper bound subproblem not solved to optimality")
+    end
     if in_degree(graph,node) == 0 # Root node
       graph.attributes[:LB] = getobjectivevalue(model)
+    end
+    if graph.attributes[:LB] > graph.attributes[:global_UB]
+      graph.attributes[:fathomed_by_bound] = true
     end
     node.attributes[:preobjval] = getvalue(node.attributes[:preobj])
   end
@@ -611,7 +637,7 @@ function takex(node::PlasmoNode, graph::PlasmoGraph)
     return true
   end
   xinvals = node.attributes[:xin]
-  println(xinvals)
+  # println(xinvals)
   xinvars = node.attributes[:xinvars]
   if length(xinvals) > 0
     fix.(xinvars,xinvals)
@@ -758,6 +784,9 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
   graph.attributes[:stalled] = false
   graph.attributes[:mflat] = create_flat_graph_model(graph)
   graph.attributes[:UB] = Inf
+  graph.attributes[:global_UB] = +Inf
+  graph.attributes[:fathomed_by_bound] = false
+  graph.attributes[:is_infeasible] = false
   setsolver(graph.attributes[:mflat],graph.solver)
 
   links = getlinkconstraints(graph)
@@ -878,8 +907,8 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
       # println(childmodel.colNames)
       temp_model = childvar.m 
       childvar_name = temp_model.colNames[childvar.col]
-      println(childvar_name)
-      println(get_col_from_varname(childmodel, childvar_name))
+      # println(childvar_name)
+      # println(get_col_from_varname(childmodel, childvar_name))
       # push!(parentnode.attributes[:childvars][childindex],parentvar)
       valbar = @variable(childmodel)
       setname(valbar,"varlbar$numlink")

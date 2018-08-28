@@ -1,4 +1,4 @@
-function generate_benderssub(;psi_f=base_psi_f, psi_d1=base_psi_d1, psi_d2=base_psi_d2, psi_b1=base_psi_b1, psi_b2=base_psi_b2, DU=base_DU, prob=0)
+function generate_benderssub(;psi_f=base_psi_f, psi_d1=base_psi_d1, psi_d2=base_psi_d2, psi_b1=base_psi_b1, psi_b2=base_psi_b2, y_up = [], DU=base_DU, prob=0)
 	m = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0))
 	# m = Model(solver=GurobiSolver())
 	@variable(m, gamma_intlt[i in feeds], Bin)
@@ -51,7 +51,7 @@ function generate_benderssub(;psi_f=base_psi_f, psi_d1=base_psi_d1, psi_d2=base_
 	# @constraint(m, e11[i in feeds, l in pools; (i,l) in Tx], q[i,l] <=  gamma_intlt[i])
 	# @constraint(m, e12[l in pools, j in products; (l,j) in Ty], y[l,j] <= y_up[l,j] * gamma_pool[l])
 
-# 	#the piecewise McCormick ====================
+	#the piecewise McCormick ====================
 	@constraint(m, p1[i in feeds ,l in pools, j in products], qy[i,l,j] == sum(dot_qy[i,l,j,t] for t in intervals))
 	@constraint(m, p2[l in pools, j in products, i in feeds], y[l,j] == sum(dot_y[l,j,i,t] for t in intervals))
 	@constraint(m, p3[i in feeds, l in pools], q[i,l] == sum(dot_q[i,l,t] for t in intervals))
@@ -63,7 +63,7 @@ function generate_benderssub(;psi_f=base_psi_f, psi_d1=base_psi_d1, psi_d2=base_
 	@constraint(m, b1[i in feeds, l in pools, t in intervals], dot_q[i,l,t]<= q_points[t+1]*delta[i,l,t])
 	@constraint(m, b2[i in feeds, l in pools, t in intervals], dot_q[i,l,t]>= q_points[t]*delta[i,l,t])
 	@constraint(m, b3[l in pools, j in products, i in feeds, t in intervals], dot_y[l,j,i,t] <= y_up[l,j] * delta[i,l,t])
-	# #end ======================
+	#end ======================
 
 	@constraint(m, c1[i in feeds], sum(qy[i,l,j] for l in pools for j in products if ((i,l) in Tx && (l,j) in Ty))  + sum(z[i,j] for j in products if (i,j) in Tz)== Bf[i]+Bd[i]+Bb[i])
 	@constraint(m, c2[i in feeds], AL[i]*uf[i]<=Bf[i])

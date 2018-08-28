@@ -38,7 +38,7 @@ function saveiteration(s::Solution,tstamp::Float64,arr::Array{Float64,1},n=1)
         s.objval = maximum(s.iterval)
     end
     s.numiterations += 1
-    s.gap = abs(s.objval - s.bestbound)/(maximum([abs(s.objval), abs(s.bestbound)]) + 1e-3)
+    s.gap = calculate_gap(s.bestbound, s.objval)
     s.solvetime = maximum([sum(s.itertime), tstamp])
 end
 
@@ -68,6 +68,7 @@ function printiterationsummary(s::Solution; singleline=false)
         println("-----------------")
         println(" Iteration $(s.numiterations)")
         println("-----------------")
+        println("Method: $(s.method)")
         println("Iteration Value : $(s.iterval[end])")
         println("Iteration Bound : $(s.iterbound[end])")
         println("Objective Value : $(s.objval)")

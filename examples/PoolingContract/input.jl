@@ -5,12 +5,12 @@ feeds = 1:5
 products  = 1:3
 pools = 1:4
 qualities = 1:2
-intervals = 1:10
-points = 1:11
+intervals = 1:1
+points = 1:2
 
 q_points = zeros(length(points))
 for i in intervals
-	q_points[i+1] = (1.0 * (i+1) ) / length(intervals)
+	q_points[i+1] = (1.0 * i ) / length(intervals)
 end
 
 Tx = ((1,1),(1,2),(1,3),(1,4),(2,1),(2,2),(2,3),(2,4),(3,1),(3,2),(3,3),(3,4),(4,1),(4,2),(4,3),(4,4),(5,1),(5,2),(5,3),(5,4))

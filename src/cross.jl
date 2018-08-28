@@ -15,27 +15,50 @@ function crosssolve(bgraph::Plasmo.PlasmoGraph, lgraph::Plasmo.PlasmoGraph;
 	lag_δ = 0.5, # Factor to shrink step when subgradient stuck
 	lag_maxnoimprove = 1,
 	lag_cpbound=1e6)# Amount of iterations that no improvement is allowed before shrinking step
-
-	if heuristic == :lagfirst
-		lagrangesolve(lgraph, max_iterations=max_iterations_lag, lagrangeheuristic=lagrangeheuristic,  maxnoimprove = 1, δ = lag_δ, α = lag_α )
-		bendersolve(bgraph, cuts=benders_cuts, max_iterations=1, is_nonconvex=is_nonconvex)
-		num_iter = length(getnodes(lgraph)[1].attributes[:Zsl])
-		for n in values(getnodes(lgraph))
-			println("=======Zsl=======")
-			println(n.attributes[:Zsl])
-			println(n.attributes[:μ])
-		end
-		add_lagrangean_cuts(bgraph, lgraph, cut_indices=1:num_iter)
-		bendersolve(bgraph, cuts=benders_cuts, max_iterations=max_iterations_benders, is_nonconvex=is_nonconvex)
-	end
 	results = Dict()
+	results[:benders_time] = 0
+	results[:lagrangean_time] = 0
+	if heuristic == :lagfirst
+		solution = lagrangesolve(lgraph, max_iterations=max_iterations_lag, lagrangeheuristic=lagrangeheuristic,  maxnoimprove = 1, δ = lag_δ, α = lag_α )
+		results[:lagrangean_time] += solution.clocktime[end]
+		if !lgraph.attributes[:is_infeasible]
+			if !haskey(bgraph.attributes,:preprocessed)
+				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=1, is_nonconvex=is_nonconvex)
+				results[:benders_time] += solution.clocktime[end]
+				num_iter = length(getnodes(lgraph)[1].attributes[:Zsl])
+				println("---------adding Lagrangean cuts to Benders master problem---------")
+				add_lagrangean_cuts(bgraph, lgraph, cut_indices=1:num_iter)
+				if max_iterations_benders < 2
+					max_iterations_benders =2
+				end
+				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=max_iterations_benders-1, is_nonconvex=is_nonconvex)
+				results[:benders_time] += solution.clocktime[end]
+			else
+				num_iter = length(getnodes(lgraph)[1].attributes[:Zsl])
+				println("---------adding Lagrangean cuts to Benders master problem---------")
+				add_lagrangean_cuts(bgraph, lgraph, cut_indices=1:num_iter)
+				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=max_iterations_benders, is_nonconvex=is_nonconvex)
+				results[:benders_time] += solution.clocktime[end]
+			end
+		else
+			results[:LB] = +Inf 
+			results[:UB] = 0
+			results[:best_avg_x] = []
+			results[:best_feasible_x] = []
+			return results
+		end
+	end
+	
 	results[:LB] = bgraph.attributes[:LB]
+	results[:best_avg_x] = lgraph.attributes[:best_avg_x]
 	if lgraph.attributes[:UB] < bgraph.attributes[:UB]
 		results[:UB] = lgraph.attributes[:UB]
 		results[:best_feasible_x] = lgraph.attributes[:best_feasible_x]
+		results[:best_solution_source] = :lgraph
 	else 
 		results[:UB] = bgraph.attributes[:UB]
 		results[:best_feasible_x] = bgraph.attributes[:best_feasible_x]
+		results[:best_solution_source] = :bgraph
 	end
 	return results
 end

@@ -1,11 +1,12 @@
 include("input.jl")
 function generate_model()
-	m = Model(solver=BaronSolver(maxtime=5e4, epsr= 1e-3, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
+	m = Model(solver=BaronSolver(maxtime=5e4, epsr= 1e-4, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
 
 	@variable(m, gamma_intlt[i in feeds], Bin)
 	@variable(m, gamma_pool[l in pools], Bin)
 	@variable(m, SL[l]<=S[l in pools]<=SU[l])
 	@variable(m, AL[i]<=A[i in feeds]<=AU[i])
+	@variable(m, θ[w in scenarios])
 	@variable(m, y[l in pools, j in products, w in scenarios]>=0)
 	@variable(m, z[i in feeds, j in products, w in scenarios]>=0)
 	@variable(m, q[i in feeds, l in pools, w in scenarios]>=0)
@@ -77,6 +78,8 @@ function generate_model()
 	@constraint(m, c21[i in feeds, w in scenarios], Bb2[i,w]<= AU[i]*ub2[i,w])
 	@constraint(m, c22[i in feeds, w in scenarios], ub1[i,w]+ub2[i,w]==ub[i,w])
 
+	@constraint(m, cobj[w in scenarios], θ[w] == prob[w]*(sum(CT[i,w] for i in feeds) -sum(d[j,w]*(sum(y[l,j,w] for l in pools if (l,j) in Ty) + sum(z[i,j,w] for i in feeds if (i,j) in Tz)) for j in products) ))
+
 	@objective(m, Min,  sum(c_fixed_inlt[i] * gamma_intlt[i]+c_variable_inlt[i]*A[i] for i in feeds) + sum(c_fixed_pool[l] * gamma_pool[l] + c_variable_pool[l]*S[l] for l in pools) + sum(prob[w]*(sum(CT[i,w] for i in feeds) -sum(d[j,w]*(sum(y[l,j,w] for l in pools if (l,j) in Ty) + sum(z[i,j,w] for i in feeds if (i,j) in Tz)) for j in products) ) for w in scenarios))
 
 	return m
@@ -106,40 +109,41 @@ solve(model)
 println(getobjectivevalue(model))
 println(getvalue(getindex(model, :A)))
 println(getvalue(getindex(model, :S)))
-println(getvalue(getindex(model, :y)))
-println(getvalue(getindex(model, :z)))
-y_value = getvalue(getindex(model, :y))
-q_value = getvalue(getindex(model, :q))
-x_value = zeros(length(feeds), length(pools), length(scenarios))
-for w in scenarios
-	for i in feeds
-		for l in pools
-			x_value[i,l,w] = sum(y_value[l,j,w]*q_value[i,l,w] for j in products)
-		end
-	end
-end
-println("xvalue")
-for w in scenarios
-	println("scenarios ", w)
-	for i in feeds
-		println("feed ", i)
-		println(x_value[i,:,w])
-	end
-end
+println(getvalue(getindex(model, :θ)))
+# println(getvalue(getindex(model, :y)))
+# println(getvalue(getindex(model, :z)))
+# y_value = getvalue(getindex(model, :y))
+# q_value = getvalue(getindex(model, :q))
+# x_value = zeros(length(feeds), length(pools), length(scenarios))
+# for w in scenarios
+# 	for i in feeds
+# 		for l in pools
+# 			x_value[i,l,w] = sum(y_value[l,j,w]*q_value[i,l,w] for j in products)
+# 		end
+# 	end
+# end
+# println("xvalue")
+# for w in scenarios
+# 	println("scenarios ", w)
+# 	for i in feeds
+# 		println("feed ", i)
+# 		println(x_value[i,:,w])
+# 	end
+# end
 
-println(getvalue(getindex(model, :q)))
-println(getvalue(getindex(model, :gamma_intlt)))
-println(getvalue(getindex(model, :gamma_pool)))
-println(getvalue(getindex(model, :uf)))
-println(getvalue(getindex(model, :ub)))
-println(getvalue(getindex(model, :ud)))
-println(getvalue(getindex(model, :Bf)))
-println(getvalue(getindex(model, :Bd)))
-println(getvalue(getindex(model, :Bd1)))
-println(getvalue(getindex(model, :Bd2)))
-println(getvalue(getindex(model, :Bd11)))
-println(getvalue(getindex(model, :Bd12)))
-println(getvalue(getindex(model, :Bb)))
-println(getvalue(getindex(model, :Bb1)))
-println(getvalue(getindex(model, :Bb2)))
+# println(getvalue(getindex(model, :q)))
+# println(getvalue(getindex(model, :gamma_intlt)))
+# println(getvalue(getindex(model, :gamma_pool)))
+# println(getvalue(getindex(model, :uf)))
+# println(getvalue(getindex(model, :ub)))
+# println(getvalue(getindex(model, :ud)))
+# println(getvalue(getindex(model, :Bf)))
+# println(getvalue(getindex(model, :Bd)))
+# println(getvalue(getindex(model, :Bd1)))
+# println(getvalue(getindex(model, :Bd2)))
+# println(getvalue(getindex(model, :Bd11)))
+# println(getvalue(getindex(model, :Bd12)))
+# println(getvalue(getindex(model, :Bb)))
+# println(getvalue(getindex(model, :Bb1)))
+# println(getvalue(getindex(model, :Bb2)))
 

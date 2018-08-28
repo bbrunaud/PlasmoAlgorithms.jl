@@ -18,7 +18,7 @@ setmodel(n1, master)
 println(master)
 println(master.colNames)
 for s in scenarios
-	benderssub = generate_benderssub(psi_f = psi_f, psi_d1=psi_d1, psi_d2=psi_d2, psi_b1=psi_b1, psi_b2=psi_b2, DU=DU[:, s], prob=prob[s])
+	benderssub = generate_benderssub(psi_f = psi_f, psi_d1=psi_d1, psi_d2=psi_d2, psi_b1=psi_b1, psi_b2=psi_b2,y_up = y_up[:, :, s], DU=DU[:, s], prob=prob[s])
 	ubsub = generate_ubsub(psi_f = psi_f, psi_d1=psi_d1, psi_d2=psi_d2, psi_b1=psi_b1, psi_b2=psi_b2, DU=DU[:, s], prob=prob[s])
 	n = add_node(g)
 	n.attributes[:scenario] = s
@@ -83,13 +83,15 @@ end
 # println(gap)
 
 #start debug spatial bab
-rootnode = BABnode(lag_g, g, -1e6, 1e6, [], [], [], :notfathomed)
+rootnode = BABnode(lag_g, g, -1e6, 1e6, [], [], [], [], :notfathomed)
 node_list = []
 active_nodes_indices = []
 fathomed_nodes_indices = []
-solution=crosssolve(rootnode.bgraph, rootnode.lgraph, max_iterations_lag=3, max_iterations_benders=1, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3)
+solution=crosssolve(rootnode.bgraph, rootnode.lgraph, max_iterations_lag=10, max_iterations_benders=60, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3)
 rootnode.LBq = solution[:LB]
+rootnode.UBq = solution[:UB]
 rootnode.best_feasible_x = deepcopy(solution[:best_feasible_x])
+rootnode.best_avg_x = deepcopy(solution[:best_avg_x])
 LB = solution[:LB]
 UB = solution[:UB]
 
@@ -107,42 +109,89 @@ rootnode.xubq = xub_root
 
 push!(node_list, rootnode)
 push!(active_nodes_indices, 1)
+if calculate_gap(rootnode.LBq, rootnode.UBq) < 0.001
+	active_nodes_indices =[]
+end
 N = 3
 num_iter = 1
+solution_time = Dict()
+solution_time[:benders_time] = 0
+solution_time[:lagrangean_time] = 0
 while length(active_nodes_indices)>0
-	#select the node with the tightest lower bound 
+	#select the node with the lowest lower bound 
 	index_selected = 1 
-	temp_LB = -Inf
+	temp_LB = +Inf
 	for index in active_nodes_indices
-		if node_list[index].LBq > temp_LB
+		if node_list[index].LBq < temp_LB
 			temp_LB = node_list[index].LBq 
 			index_selected = index
 		end
 	end
 	node_to_branch = node_list[index_selected]
+	#remove selected node from active nodes 
+	active_nodes_indices = filter(x->x≠ index_selected,active_nodes_indices)
+	
 
 	# create two new nodes 
-	lchild = deepcopy(node_to_branch)
-	rchild = deepcopy(node_to_branch)
+	lchild = copy_node(node_to_branch, UB)
+	rchild = copy_node(node_to_branch, UB)
 
 	#apply branching rule 
-	# lchild, rchild = largest_rel_diameter(node_to_branch, lchild, rchild, xlb_root, xub_root)
+	if num_iter %3 == 0
+		lchild, rchild = largest_rel_diameter(node_to_branch, lchild, rchild, xlb_root, xub_root)
+	else
+		lchild, rchild = largest_distance(node_to_branch, lchild, rchild, xlb_root, xub_root, node_to_branch.best_avg_x)
+	end
 
-	# bendersolve(lchild.bgraph, max_iterations=6, timelimit=100000, is_nonconvex=true)
+	#set fathom type of node selected 
+	node_to_branch.fathom_type = :bybranch
+
 	#solve the two new nodes 
-	# solve_node(lchild)
-	# solve_node(rchild)
-	#update bounds 
-
-	#fathom nodes 
+	solve_node(lchild, solution_time)
+	solve_node(rchild, solution_time)
 
 	#add two new nodes 
 	push!(node_list, lchild)
 	push!(node_list, rchild)
+	push!(active_nodes_indices, length(node_list))
+	push!(active_nodes_indices, length(node_list)-1)
+
+	#update bounds 
+	LB = +Inf
+	for index in active_nodes_indices
+		if node_list[index].LBq < LB 
+			LB = node_list[index].LBq
+		end 
+		if node_list[index].UBq < UB 
+			UB = node_list[index].UBq
+		end
+	end
+
+	#check if the two new nodes can be fathomed by optimality 
+	if calculate_gap(lchild.LBq, lchild.UBq) < 0.001
+		lchild.fathom_type = :byoptimality
+		active_nodes_indices = filter!(x->x≠ (length(node_list)-1), active_nodes_indices)
+	end 
+	if calculate_gap(rchild.LBq, rchild.UBq) <0.001
+		rchild.fathom_type = :byoptimality
+		active_nodes_indices = filter(x->x≠ length(node_list), active_nodes_indices)
+	end
+
+
+	#fathom nodes by bound 
+	for index in active_nodes_indices
+		if calculate_gap(node_list[index].LBq, UB) < 0.001
+			node_list[index].fathom_type = :bybound
+			active_nodes_indices = filter(x->x≠ index, active_nodes_indices)
+		end
+	end
+
+
 
 	num_iter += 1
-	break 
-
+	if length(node_list) > 100
+		break
+	end 
 
 end
 

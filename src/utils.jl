@@ -76,3 +76,10 @@ function get_col_from_varname(m::JuMP.Model, var_name::String)
         col += 1
     end
 end
+
+function calculate_gap(LB, UB)
+    if UB < LB 
+        return -1
+    end
+    return (UB-LB) / (maximum([abs(LB), abs(UB)]) +1e-3)
+end
