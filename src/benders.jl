@@ -320,7 +320,6 @@ function identifylevels(graph::ModelGraph)
     level += 1
   end
   setattribute(graph,:numlevels,level - 1)
-  #graph.attributes[:numlevels] = level - 1
 end
 
 function bdprepare(graph::ModelGraph)
@@ -331,7 +330,7 @@ function bdprepare(graph::ModelGraph)
   identifylevels(graph)
   setattribute(graph, :normalized, normalizegraph(graph))
   setattribute(graph, :stalled, false)
-  setattribute(graph, :mflat ,create_flat_graph_model(graph))
+  setattribute(graph, :mflat ,create_jump_graph_model(graph))
   setattribute(graph, :UB, Inf)
   JuMP.setsolver(getattribute(graph, :mflat) ,getsolver(graph))
 
@@ -345,7 +344,7 @@ function bdprepare(graph::ModelGraph)
       model.solver = getsolver(graph)
     end
     model.ext[:preobj] = model.obj
-    node.attributes[:cgmodel] = deepcopy(model)
+    setattribute(node, :cgmodel, deepcopy(model))
     #Add theta to parent nodes
     if out_degree(graph,node) != 0
       childrenindices = [getindex(graph,child) for child in out_neighbors(graph,node)]

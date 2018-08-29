@@ -4,7 +4,7 @@
 """
 function lagrangesolve(graph;
   max_iterations=10,
-  update_method=:subgradient, # :intersectionstep, :ADMM, :cuttingplanes, :bundle
+  update_method=:subgradient, #probingsubgradient
   ϵ=0.001, # ϵ-convergence tolerance
   timelimit=3600,
   α=2, # default subgradient step
@@ -33,7 +33,6 @@ function lagrangesolve(graph;
   iterval = 0
 
   ### ITERATIONS ###
-  #iterationheader()
   for iter in 1:max_iterations
     variant = iter == 1 ? :default : update_method # Use default version in the first iteration
 
@@ -44,7 +43,6 @@ function lagrangesolve(graph;
        (x,Zkn) = solvenode(node,λ,x,variant)
        Zk += Zkn
     end
-    #Zk *= n
     setattribute(graph, :steptaken, true)
 
     # If no improvement, increase counter
@@ -61,13 +59,12 @@ function lagrangesolve(graph;
     push!(getattribute(graph, :x),x)
     α = getattribute(graph, :α)[end]
     push!(getattribute(graph, :α), α)
-    # TODO Check the order of updates and saving
-
 
     # Update residuals
     res = x[:,1] - x[:,2]
     push!(getattribute(graph, :res),res)
 
+    # Save iteration data
     itertime = time() - iterstart
     tstamp = time() - starttime
     saveiteration(s,tstamp,[n*iterval,n*Zk,itertime,tstamp],n)
@@ -99,6 +96,7 @@ end
 # Preprocess function
 """
   lgprepare(graph::PlasmoGraph)
+
   Prepares the graph to apply lagrange decomposition algorithm
 """
 function lgprepare(graph::ModelGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
@@ -132,7 +130,7 @@ function lgprepare(graph::ModelGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   for n in values(getnodes(graph))
     mn = getmodel(n)
     if mn.solver == JuMP.UnsetSolver()
-      mn.solver = graph.solver
+      JuMP.setsolver(mn, getsolver(graph))
     end
     mn.ext[:preobj] = mn.obj
     mn.ext[:multmap] = Dict()
@@ -156,6 +154,7 @@ end
 # Solve a single subproblem
 function solvenode(node,λ,x,variant=:default)
   m = getmodel(node)
+  # Restore objective function
   m.obj = m.ext[:preobj]
   m.ext[:lgobj] = m.ext[:preobj]
   # Add dualized part to objective function
@@ -169,15 +168,13 @@ function solvenode(node,λ,x,variant=:default)
       m.obj += 1/2*(coef*var - coef*x[k,j])^2
     end
   end
-
-  # Optional: If my residuals are zero, do nothing
-
+  # Solve
   solve(m)
+  # Pass output
   for v in keys(m.ext[:varmap])
     val = JuMP.getvalue(v)
     x[m.ext[:varmap][v]...] = val
   end
-
   objval = JuMP.getvalue(m.ext[:lgobj])
   setattribute(node, :objective, objval)
   setattribute(node, :solvetime, getsolvetime(m))
@@ -188,8 +185,8 @@ end
 # Multiplier Initialization
 function initialrelaxation(graph)
   if !hasattribute(graph,:mflat)
-    setattribute(graph , :mflat, create_flat_graph_model(graph))
-    getattribute(graph , :mflat).solver = graph.solver
+    setattribute(graph, :mflat, create_jump_graph_model(graph))
+    getattribute(graph, :mflat).solver = getsolver(graph)
   end
   n = getattribute(graph , :normalized)
   nmult = getattribute(graph , :numlinks)
@@ -199,6 +196,7 @@ function initialrelaxation(graph)
   return getobjectivevalue(mf)
 end
 
+
 function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   if method == :subgradient
     subgradient(graph,λ,res,lagrangeheuristic)
@@ -206,19 +204,11 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
     probingsubgradient(graph,λ,res,lagrangeheuristic)
   elseif method == :cuttingplanes
     cuttingplanes(graph,λ,res)
-  elseif method == :bundle
-    bundle(graph,λ,res,lagrangeheuristic)
-  elseif method == :ADMM
-    ADMM(graph,λ,res,lagrangeheuristic)
   elseif  method == :interactive
     interactive(graph,λ,res,lagrangeheuristic)
-  # Experimental
-  elseif method == :intersectionstep
-    intersectionstep(graph,λ,res,lagrangeheuristic)
-  elseif method == :marchingstep
-    marchingstep(graph,λ,res,lagrangeheuristic)
   end
 end
+
 
 # Update functions
 function subgradient(graph,λ,res,lagrangeheuristic)
@@ -286,31 +276,7 @@ function probingsubgradient(graph,λ,res,lagrangeheuristic,α=getattribute(graph
   end
 end
 
-function marchingstep(graph,λ,res,lagrangeheuristic,α=getattribute(graph , :α)[end],Δ=0.1α)
-  res = getattribute(graph , :res)[end]
-  Zk = getattribute(graph , :Zk)[end]
-  n = getattribute(graph , :normalized)
-  bound = n*lagrangeheuristic(graph)
-  step = abs(Zk-bound)/(norm(res)^2)
-  # First point
-  α1 = 0
-  z1 = Zk
-  zs_1 = z1
-  αs_1 = α1
-
-  for αs in α1+Δ:Δ:α
-    zs = αeval(αs,graph,bound)
-    if zs < zs_1
-      return (λ += αs_1*step*res), bound
-    end
-    zs_1 = zs
-    αs_1 = αs
-  end
-
-  return (λ += α*step*res), bound
-end
-
-@require Gaston begin
+@require Plots begin
 function interactive(graph,λ,res,lagrangeheuristic)
   α = getattribute(graph , :α)[end]
   n = getattribute(graph , :normalized)
@@ -324,46 +290,6 @@ function interactive(graph,λ,res,lagrangeheuristic)
   λ += step*res
   return λ,bound
 end
-end
-
-function intersectionstep(graph,λ,res,lagrangeheuristic,α=getattribute(graph , :α)[end],Δ=0.01,ϵ=0.001)
-  res = getattribute(graph , :res)[end]
-  Zk = getattribute(graph , :Zk)[end]
-  n = getattribute(graph , :normalized)
-  bound = n*lagrangeheuristic(graph)
-  step = abs(Zk-bound)/(norm(res)^2)
-  # First curve
-  αa0 = 0
-  za0 = Zk
-  αa1 = Δ
-  za1 = αeval(αa1,graph,bound)
-  ma = (za1 - za0)/(αa1 - αa0)
-  if abs(ma) < ϵ
-    return λ,bound
-  elseif ma < 0
-    warn("First slope decreasing. This might be an indication that there is no improvement in the direction chosen")
-    return λ,bound
-  end
-
-  # Second curve
-  αb0 = α
-  zb0 = αeval(αb0,graph,bound)
-  αb1 = αb0 - Δ
-  zb1 = αeval(αb1,graph,bound)
-  mb = (zb1 - zb0)/(αb1 - αb0)
-  println("ma = $ma")
-  println("mb = $mb")
-  if abs(mb) < ϵ
-    return λ + α*step*res, bound
-  end
-  # Check different Sign
-  if sign(ma)>0 && sign(mb)>0
-    return λ + α*step*res, bound
-  end
-  # Find intersection
-  αinter = (za0 - zb0 + αb0*mb)/(mb - ma)
-  λ += αinter*step*res
-  return λ,bound
 end
 
 function cuttingplanes(graph,λ,res)
@@ -381,33 +307,15 @@ function cuttingplanes(graph,λ,res)
   return getvalue(λvar), getobjectivevalue(ms)
 end
 
-function bundle(graph,λ,res,lagrangeheuristic)
-  α = getattribute(graph , :α)[end]
-  bound = lagrangeheuristic(graph)
-  Zk = getattribute(graph , :Zk)[end]
-  ms = getattribute(graph , :lgmaster)
-  λvar = getindex(ms, :λ)
-  step = α*abs(Zk-bound)/(norm(res)^2)
-  setlowerbound.(λvar,λ-step*abs.(res))
-  setupperbound.(λvar,λ+step*abs.(res))
 
-  cuttingplanes(graph,λ,res)
-end
-
-function ADMM(graph,λ,res,lagrangeheuristic)
-  bound = lagrangeheuristic(graph)
-  λ += res
-  return λ,bound
-end
-
-# Lagrangean Heuristics
+# Standard Lagrangean Heuristics
 function fixbinaries(graph::ModelGraph,cat=[:Bin])
   if !haskey(graph.attributes,:mflat)
-    setattribute(graph , :mflat, create_flat_graph_model(graph))
+    setattribute(graph , :mflat, create_jump_graph_model(graph))
+    getattribute(graph, :mflat).solver = getsolver(graph)
   end
   n = getattribute(graph , :normalized)
   mflat = getattribute(graph , :mflat)
-  mflat.solver = graph.solver
   mflat.colVal = vcat([getmodel(n).colVal for n in values(getnodes(graph))]...)
   for j in 1:mflat.numCols
     if mflat.colCat[j] in cat
@@ -425,19 +333,4 @@ end
 
 function fixintegers(graph::ModelGraph)
   fixbinaries(graph,[:Bin,:Int])
-end
-
-
-# Parallel model solve function, returns an array of objective values with dimension equal to of elements in the collection for which pmap was applied
-function psolve(m::JuMP.Model)
-  solve(m)
-  d = Dict()
-  d[:objective] = getobjectivevalue(m)
-  d[:values] = m.colVal
-  node = getnode(m)
-  for v in values(node.index)
-    d[:nodeindex] = v
-  end
-  #println("Solved node $(d[:nodeindex]) on $(gethostname())")
-  return d
 end
