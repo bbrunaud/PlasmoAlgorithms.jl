@@ -2,11 +2,8 @@ using JuMP
 using Gurobi
 using Plasmo
 using PlasmoAlgorithms
-using Logging
 
-Logging.configure(level=DEBUG)
-
-##Place MP and SP into PlasmoGraph
+##Place MP and SP into ModelGraph
 mp = Model(solver = GurobiSolver())
 sp = Model(solver = GurobiSolver())
 
@@ -20,8 +17,8 @@ sp = Model(solver = GurobiSolver())
 @objective(sp,Min,2x[1]+3x[2])
 
 ## Plasmo Graph
-g = PlasmoGraph()
-g.solver = GurobiSolver()
+g = ModelGraph()
+setsolver(g, GurobiSolver())
 n1 = add_node(g)
 setmodel(n1,mp)
 n2 = add_node(g)

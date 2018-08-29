@@ -1,3 +1,4 @@
 using Base.Test
 
-@testset "Lagrange Max" begin include("test_lgfisher_max.jl") end
+@testset "Lagrange" begin include("test_lagrange.jl") end
+@testset "Benders" begin include("test_benders.jl") end

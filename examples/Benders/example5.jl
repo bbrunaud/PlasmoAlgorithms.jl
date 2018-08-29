@@ -2,9 +2,6 @@ using JuMP
 using Gurobi
 using Plasmo
 using PlasmoAlgorithms
-using Logging
-
-Logging.configure(level=DEBUG)
 
 mp = Model(solver = GurobiSolver())
 sp1 = Model(solver = GurobiSolver())
@@ -33,8 +30,8 @@ sp3 = Model(solver = GurobiSolver())
 @constraint(sp3,x[2]+t[1]>=75)
 @objective(sp3,Min,.5t[1]+5t[2])
 
-g = PlasmoGraph()
-g.solver = GurobiSolver()
+g = ModelGraph()
+setsolver(g, GurobiSolver())
 n1 = add_node(g)
 n2 = add_node(g)
 n3 = add_node(g)

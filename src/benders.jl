@@ -24,7 +24,6 @@ bendersolve
 """
 function bendersolve(graph::ModelGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600,verbose=false)
   starttime = time()
-  global tmpdir = "/tmp/RootNode" # mktempdir()
   s = Solution(method=:benders)
   updatebound = true
 
@@ -44,7 +43,6 @@ function bendersolve(graph::ModelGraph; max_iterations::Int64=10, cuts::Array{Sy
   @constraint(rootmodel, rootmodel.obj.aff >= LB)
 
   # Begin iterations
-  verbose && info("Begin iterations")
   for i in 1:max_iterations
     tic()
     updatebound = ((i-1) % UBupdatefrequency) == 0
@@ -73,7 +71,7 @@ function bendersolve(graph::ModelGraph; max_iterations::Int64=10, cuts::Array{Sy
 
     if getattribute(graph, :stalled)
       s.termination = "Stalled"
-      return s
+      return s  
     end
   end
 
@@ -111,9 +109,6 @@ function solveprimalnode(node::ModelNode, graph::ModelGraph, cuts::Array{Symbol,
   if :LP in cuts
     solvelprelaxation(node)
   end
-#  if :Root in cuts
-#  solverootrelaxation(node)
-# end
   if updatebound
     solvenodemodel(node,graph)
   end
@@ -139,44 +134,6 @@ function solvelprelaxation(node::ModelNode)
 
   return status
 end
-
-#=
-function solverootrelaxation(node::ModelNode)
-  sp = getmodel(node)
-  if length(sp.linconstrDuals) == 0
-    solve(sp, relaxation=true)
-  end
-  lpfile = joinpath(tmpdir,"nodemodel.lp")
-  writeLP(sp,lpfile)
-  run(`cpxgetroot $lpfile 0 1`)
-  lp = Model(solver=CPLEX.CplexSolver(CPX_PARAM_PREIND=0))
-  lp.internalModel = MathProgBase.LinearQuadraticModel(lp.solver)
-  if isfile("node0.lp")
-      MathProgBase.loadproblem!(lp.internalModel,"node0.lp")
-  else
-    warn("Node file not found, falling back to lp relaxation")
-    return solvelprelaxation(node)
-  end
-  # Restore Bounds
-  MathProgBase.setvarLB!(lp.internalModel,sp.colLower)
-  MathProgBase.setvarUB!(lp.internalModel,sp.colUpper)
-
-  MathProgBase.optimize!(lp.internalModel)
-
-  run(`mv node0.lp $tmpdir/`)
-
-  dualconstraints = getattribute(node, :linkconstraints)
-
-  rootduals = MathProgBase.getconstrduals(lp.internalModel)
-  sp.linconstrDuals = MathProgBase.getconstrduals(lp.internalModel)[1:length(sp.linconstrDuals)]
-
-  λnode = getdual(dualconstraints)
-  nodebound = MathProgBase.getobjval(lp.internalModel)
-
-  setattribute(node, :bound, nodebound)
-  setattribute(node, :λ, λnode)
-end
-=#
 
 function solvenodemodel(node::ModelNode,graph::ModelGraph)
   model = getmodel(node)
