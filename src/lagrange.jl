@@ -64,6 +64,9 @@ function lagrangesolve(graph;
     res = x[:,1] - x[:,2]
     push!(getattribute(graph, :res),res)
 
+    # Put cut info
+    push!(getattribute(graph, :cutdata), LagrangeCutData(Zk,res))
+
     # Save iteration data
     itertime = time() - iterstart
     tstamp = time() - starttime
@@ -117,6 +120,7 @@ function lgprepare(graph::ModelGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   setattribute(graph, :maxnoimprove, maxnoimprove)
   setattribute(graph, :explore, [])
   setattribute(graph, :steptaken, false)
+  setattribute(graph, :cutdata, CutData[])
 
   # Create Lagrange Master
   ms = Model(solver=getsolver(graph))
@@ -203,12 +207,11 @@ function updatemultipliers(graph,λ,res,method,lagrangeheuristic=nothing)
   elseif method == :probingsubgradient
     probingsubgradient(graph,λ,res,lagrangeheuristic)
   elseif method == :cuttingplanes
-    cuttingplanes(graph,λ,res)
+    cuttingplanes(graph)
   elseif  method == :interactive
     interactive(graph,λ,res,lagrangeheuristic)
   end
 end
-
 
 # Update functions
 function subgradient(graph,λ,res,lagrangeheuristic)
@@ -292,16 +295,19 @@ function interactive(graph,λ,res,lagrangeheuristic)
 end
 end
 
-function cuttingplanes(graph,λ,res)
+function cuttingplanes(graph)
   ms = getattribute(graph , :lgmaster)
-  Zk = getattribute(graph , :Zk)[end]
   nmult = getattribute(graph , :numlinks)
 
   λvar = getindex(ms, :λ)
   η = getindex(ms,:η)
 
-  cut = @constraint(ms, η <= Zk + sum(λvar[j]*res[j] for j in 1:nmult))
-  push!(getattribute(graph , :cuts), cut)
+  cutdataarray = getattribute(graph,:cutdata)
+  while length(cutdataarray[childindex]) > 0
+    cd = pop!(cutdataarray[childindex])
+    cut = @constraint(ms, η <= cd.zk + sum(λvar[j]*cd.res[j] for j in 1:nmult))
+    push!(getattribute(graph , :cuts), cut)
+  end
 
   solve(ms)
   return getvalue(λvar), getobjectivevalue(ms)
