@@ -179,7 +179,7 @@ function solve_node(node::BABnode, solution_time)
 		n.attributes[:Zsl] = []
 		n.attributes[:μ] = []
 	end
-	solution=crosssolve(node.bgraph, node.lgraph, max_iterations_lag=10, max_iterations_benders=60, is_nonconvex=true)
+	solution=crosssolve(node.bgraph, node.lgraph, max_iterations_lag=10, benders_cuts=[:GMI], max_iterations_benders=60, is_nonconvex=true)
 	node.LBq = solution[:LB]
 	node.UBq = solution[:UB]
 	node.best_feasible_x = deepcopy(solution[:best_feasible_x])

@@ -87,7 +87,7 @@ rootnode = BABnode(lag_g, g, -1e6, 1e6, [], [], [], [], :notfathomed)
 node_list = []
 active_nodes_indices = []
 fathomed_nodes_indices = []
-solution=crosssolve(rootnode.bgraph, rootnode.lgraph, max_iterations_lag=10, max_iterations_benders=60, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3)
+solution=crosssolve(rootnode.bgraph, rootnode.lgraph, benders_cuts=[:GMI], max_iterations_lag=10, max_iterations_benders=60, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3)
 rootnode.LBq = solution[:LB]
 rootnode.UBq = solution[:UB]
 rootnode.best_feasible_x = deepcopy(solution[:best_feasible_x])
@@ -189,7 +189,7 @@ while length(active_nodes_indices)>0
 
 
 	num_iter += 1
-	if length(node_list) > 100
+	if length(node_list) > 10
 		break
 	end 
 
