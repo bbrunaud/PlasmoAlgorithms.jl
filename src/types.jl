@@ -17,7 +17,9 @@ end
 
 struct LagrangeCutData <: CutData
   zk
-  res
+  λc
+  coeffs
+  xk
 end
 
 (==)(cd1::BendersCutData,cd2::BendersCutData) = (cd1.θk == cd2.θk) && (cd1.λk == cd2.λk) && (cd1.xk == cd2.xk)

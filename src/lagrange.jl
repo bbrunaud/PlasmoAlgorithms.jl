@@ -64,9 +64,6 @@ function lagrangesolve(graph;
     res = x[:,1] - x[:,2]
     push!(getattribute(graph, :res),res)
 
-    # Put cut info
-    push!(getattribute(graph, :cutdata), LagrangeCutData(Zk,res))
-
     # Save iteration data
     itertime = time() - iterstart
     tstamp = time() - starttime
@@ -120,13 +117,15 @@ function lgprepare(graph::ModelGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   setattribute(graph, :maxnoimprove, maxnoimprove)
   setattribute(graph, :explore, [])
   setattribute(graph, :steptaken, false)
-  setattribute(graph, :cutdata, CutData[])
+  numnodes = length(getnodes(graph))
+  setattribute(graph, :numnodes, numnodes)
+  setattribute(graph, :cutdata, Dict(i => CutData[] for i in 1:numnodes))
 
   # Create Lagrange Master
   ms = Model(solver=getsolver(graph))
-  @variable(ms, η, upperbound=cpbound)
+  @variable(ms, η[1:numnodes], upperbound=cpbound)
   @variable(ms, λ[1:nmult])
-  @objective(ms, Max, η)
+  @objective(ms, Max, sum(η))
 
   setattribute(graph, :lgmaster, ms)
 
@@ -182,6 +181,23 @@ function solvenode(node,λ,x,variant=:default)
   objval = JuMP.getvalue(m.ext[:lgobj])
   setattribute(node, :objective, objval)
   setattribute(node, :solvetime, getsolvetime(m))
+
+  # Push Cut Data
+  nodeindex = getnodeindex(node)
+  preobjval = JuMP.getvalue(m.ext[:preobj])
+  λcomponent = Int64[]
+  coeffs = Float64[]
+  xk = Float64[]
+  for k in keys(m.ext[:multmap])
+    coeff = m.ext[:multmap][k][1]
+    var = m.ext[:multmap][k][2]
+    push!(λcomponent, k)
+    push!(coeffs, coeff)
+    push!(xk, JuMP.getvalue(var))
+  end
+  graph = getgraph(node)
+  cutdataarray = getattribute(graph,:cutdata)
+  push!(cutdataarray[nodeindex], LagrangeCutData(preobjval, λcomponent, coeffs, xk))
 
   return x, objval
 end
@@ -296,17 +312,21 @@ end
 end
 
 function cuttingplanes(graph)
-  ms = getattribute(graph , :lgmaster)
-  nmult = getattribute(graph , :numlinks)
+  ms = getattribute(graph, :lgmaster)
+  nmult = getattribute(graph, :numlinks)
 
   λvar = getindex(ms, :λ)
   η = getindex(ms,:η)
 
   cutdataarray = getattribute(graph,:cutdata)
-  while length(cutdataarray[childindex]) > 0
-    cd = pop!(cutdataarray[childindex])
-    cut = @constraint(ms, η <= cd.zk + sum(λvar[j]*cd.res[j] for j in 1:nmult))
-    push!(getattribute(graph , :cuts), cut)
+  for node in getnodes(graph)
+    nodeindex = getnodeindex(node)
+    println("Nodeindex = $nodeindex")
+    while length(cutdataarray[nodeindex]) > 0
+      cd = pop!(cutdataarray[nodeindex])
+      cut = @constraint(ms, η[nodeindex] <= cd.zk + sum(cd.coeffs[j]*λvar[cd.λc[j]]*cd.xk[j] for j in 1:length(cd.λc)))
+      push!(getattribute(graph , :cuts), cut)
+    end
   end
 
   solve(ms)
@@ -316,19 +336,20 @@ end
 
 # Standard Lagrangean Heuristics
 function fixbinaries(graph::ModelGraph,cat=[:Bin])
-  if !haskey(graph.attributes,:mflat)
-    setattribute(graph , :mflat, create_jump_graph_model(graph))
+  if !hasattribute(graph,:mflat)
+    setattribute(graph, :mflat, create_jump_graph_model(graph))
     getattribute(graph, :mflat).solver = getsolver(graph)
   end
-  n = getattribute(graph , :normalized)
+  n = getattribute(graph, :normalized)
   mflat = getattribute(graph , :mflat)
-  mflat.colVal = vcat([getmodel(n).colVal for n in values(getnodes(graph))]...)
+  mflat.colVal = vcat([getmodel(n).colVal for n in getnodes(graph)]...)
   for j in 1:mflat.numCols
     if mflat.colCat[j] in cat
       mflat.colUpper[j] = mflat.colVal[j]
       mflat.colLower[j] = mflat.colVal[j]
     end
   end
+  println("Solving Heuristic with Fixing Binary/Integer Variables")
   status = solve(mflat)
   if status == :Optimal
     return n*getobjectivevalue(mflat)

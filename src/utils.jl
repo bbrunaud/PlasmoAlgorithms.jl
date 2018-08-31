@@ -36,3 +36,15 @@ function savenodeobjective(mf::JuMP.Model)
         push!(nov[index],coeff,var)
     end
 end
+
+function getnodeindex(node::Plasmo.PlasmoModels.ModelNode)
+    indexdict = node.basenode.indices
+    length(indexdict) > 1 && error("More than one index found for node")
+    return collect(values(node.basenode.indices))[1]
+end
+
+function getgraph(node::Plasmo.PlasmoModels.ModelNode)
+    indexdict = node.basenode.indices
+    length(indexdict) > 1 && error("More than one index found for node")
+    return collect(keys(node.basenode.indices))[1]
+end
