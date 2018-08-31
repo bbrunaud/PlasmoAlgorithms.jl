@@ -21,8 +21,8 @@ function crossprepare(c::CrossGraph)
 function crosssolve(c::CrossGraph, max_iterations)
  for i in 1:max_iterations
    bendersolve(c.bd, max_iterations=1)
-   lagrangesolve(c.lg,...,max_iterations=100, callback=lagrange_to_benders)
-   #lagrange_to_benders(c)
    benders_to_lagrange(c)
-   end
+   lagrangesolve(c.lg,max_iterations=1, update_method=:cuttingplanes, callback=lagrange_to_benders)
+   lagrange_to_benders(c)
+ end
 end
