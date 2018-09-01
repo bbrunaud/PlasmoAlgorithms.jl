@@ -1,3 +1,5 @@
+import Plasmo.getgraph
+
 function normalizegraph(graph::ModelGraph)
     n = 1
     for node in getnodes(graph)
@@ -47,4 +49,11 @@ function getgraph(node::Plasmo.PlasmoModels.ModelNode)
     indexdict = node.basenode.indices
     length(indexdict) > 1 && error("More than one index found for node")
     return collect(keys(node.basenode.indices))[1]
+end
+
+function subgraphobjective(node, graph)
+    if out_degree(graph, node) == 0
+        return getobjectivevalue(getmodel(node))
+    end
+    return getobjectivevalue(getmodel(node)) + sum(subgraphobjective(childnode) for childnode in out_neighbors(graph, node))
 end
