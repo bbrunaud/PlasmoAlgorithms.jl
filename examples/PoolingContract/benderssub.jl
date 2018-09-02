@@ -36,7 +36,8 @@ function generate_benderssub(;psi_f=base_psi_f, psi_d1=base_psi_d1, psi_d2=base_
 	@variable(m, dot_q[i in feeds, l in pools, t in intervals]>=0)
 	@variable(m, dot_y[l in pools, j in pools, i in feeds, t in intervals]>=0)
 	@variable(m, dot_qy[i in feeds, l in pools, j in products, t in intervals]>=0)
-	@variable(m, delta[i in feeds, l in pools, t in intervals], Bin)
+	# @variable(m, delta[i in feeds, l in pools, t in intervals], Bin)
+	@variable(m, 1<=delta[i in feeds, l in pools, t in intervals]<=1)
 
 	# @constraint(m, e1[i in feeds], AL[i]*gamma_intlt[i] <= sum(q[i,l]*y[l,j] for l in pools for j in products if ((i,l) in Tx && (l,j) in Ty)) + sum(z[i,j] for j in products if (i,j) in Tz))
 	@constraint(m, e2[i in feeds], sum(qy[i,l,j] for l in pools for j in products if ((i,l) in Tx && (l,j) in Ty))  + sum(z[i,j] for j in products if (i,j) in Tz)<= A[i])

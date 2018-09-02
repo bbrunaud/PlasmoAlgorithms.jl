@@ -41,10 +41,6 @@ function getmatrixform(node::PlasmoNode)
     if eq_counter != 0
         m = size(A,1)              # Update Number of inequalities
     end
-    println(A)
-    println(b)
-    println(m)
-    println(n)
     node.attributes[:A] = A
     node.attributes[:b] = b
     node.attributes[:m] = m
@@ -85,17 +81,27 @@ function setCGLP(node::PlasmoNode, graph::PlasmoGraph)
     num_binary = length(map_binary)
 
     #create LP relaxation matrix including bounds of all the variables 
-    m_lp = m + 2*n
+    m_lp = m 
     b_lp = b 
-    A_lp = zeros(m_lp, n)
-    A_lp[1:m,1:n] = A    
+    A_lp = A
     for i in 1:n 
         ub = getupperbound(vars[i])
         lb = getlowerbound(vars[i])
-        A_lp[m + 2*i - 1, i] = 1
-        b_lp = [b_lp; ub]
-        A_lp[m + 2*i, i] = -1 
-        b_lp = [b_lp; -lb]
+        if ub < 1e6
+            new_row = zeros(n)'
+            new_row[i] = -1 
+            A_lp = [A_lp; new_row]
+            b_lp = [b_lp; -ub]
+            m_lp += 1
+        end
+
+        if lb > -1e6
+            new_row = zeros(n)'
+            new_row[i] = 1
+            A_lp = [A_lp; new_row]
+            b_lp = [b_lp; lb]
+            m_lp += 1
+        end
     end
 
     #create CGLPs 
@@ -128,7 +134,52 @@ function setCGLP(node::PlasmoNode, graph::PlasmoGraph)
 end
 
 
+function solveliftandprojectrelaxation(node::PlasmoNode, graph::PlasmoGraph)
+    model = getmodel(node)
+    status = solve(model, relaxation=true)
+    #only start adding lift and project cuts when the LP relaxation has stalled 
+    if graph.attributes[:roots][1].attributes[:LP_stalled]
+        #get the values of variables
+        n = node.attributes[:n]
+        vars = Variable.(model, 1:n)
+        x_bar = getvalue(vars)
+        num_frac = 0 
+        for index in values(node.attributes[:map_binary])
+            if abs(x_bar[index]%1)>1e-3 && abs(x_bar[index]%1) < 1-1e-3
+                num_frac += 1
+                CGLP = node.attributes[:CGLPs][index]
+                α = getindex(CGLP, :α)
+                β = getindex(CGLP, :β)
+                @objective(CGLP, Min, sum(α[ii]*x_bar[ii] for ii in 1:n)  - β)
+                # Solve the Cut Generation problem
+                CGLPstatus = solve(CGLP)
+                if CGLPstatus == :Optimal
+                    #add cuts to model 
+                    α_cut = getvalue(α)
+                    β_cut = getvalue(β)
+                    @constraint(model, sum(α_cut[i]*vars[i]  for i in 1:n) >= β_cut)
+                else
+                    println("ERROR: ")
+                    println("ERROR: Cut Generation Linear problem not Optimal")
+                    println("ERROR: It is not possible to generate Lift-and-Project cuts")
+                    error("lp cuts error")
+                    break
+                end
+            end
+        end
 
+        if num_frac >0 
+            solve(model, relaxation = true)
+        end
+    end
+
+    dualconstraints = node.attributes[:linkconstraints]
+    λnode = getdual(dualconstraints)
+    nodebound = getobjectivevalue(model)
+
+    node.attributes[:bound] = nodebound
+    node.attributes[:λ] = λnode
+end
 
 
 

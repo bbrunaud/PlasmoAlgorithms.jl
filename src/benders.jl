@@ -25,7 +25,6 @@ end
 bendersolve
 """
 function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600,verbose=false, LB=NaN, is_nonconvex=false)
-  starttime = time()
   graph.attributes[:is_nonconvex] = is_nonconvex
   global tmpdir = "/tmp/RootNode" # mktempdir()
   
@@ -49,6 +48,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
 
   # Begin iterations
   verbose && info("Begin iterations")
+  starttime = time()
   for i in 1:max_iterations
     tic()
     updatebound = ((i-1) % UBupdatefrequency) == 0
@@ -138,7 +138,11 @@ function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbo
   end
 
   if :GMI in cuts && in_degree(graph,node) != 0
-    solvegmirelaxation(node)
+    solvegmirelaxation(node, graph)
+  end
+
+  if :LIFT in cuts && in_degree(graph, node) != 0 
+    solveliftandprojectrelaxation(node, graph)
   end
   
   if updatebound
@@ -237,7 +241,7 @@ function putcutdata(node::PlasmoNode,graph::PlasmoGraph,cuts::Array{Symbol,1})
   λk = node.attributes[:λ]
   xk = node.attributes[:xin]
   nodeindex = getnodeindex(graph,node)
-  if :LP in cuts || :GMI in cuts
+  if :LP in cuts || :GMI in cuts || :LIFT in cuts
     bcd = BendersCutData(θk, λk, xk)
     push!(parentcuts[nodeindex],bcd)
   end
@@ -282,8 +286,23 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
   end
   node.attributes[:prevcuts] = thisitercuts
   nodesamecuts = collect(values(samecuts))
-  node.attributes[:stalled] = reduce(*,nodesamecuts)
-  node.attributes[:stalled] && warn("Node $(node.label) stalled")
+
+  cuts = graph.attributes[:cuts]
+  if :LP in cuts 
+    node.attributes[:stalled] = reduce(*,nodesamecuts)
+    node.attributes[:stalled] && warn("Node $(node.label) stalled")
+  end
+
+  #only stalled when LP has already stalled
+  if (:GMI in cuts || :LIFT in cuts) && node.attributes[:LP_stalled]
+    node.attributes[:stalled] = reduce(*,nodesamecuts)
+    node.attributes[:stalled] && warn("Node $(node.label) stalled")
+  end 
+  if (:GMI in cuts || :LIFT in cuts) && (!node.attributes[:LP_stalled])
+    node.attributes[:LP_stalled] = reduce(*,nodesamecuts)
+    println("LP_stalled status")
+    println(node.attributes[:LP_stalled])
+  end 
   if in(node,graph.attributes[:roots]) && node.attributes[:stalled]
     graph.attributes[:stalled] = true
  end
@@ -357,6 +376,7 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
   graph.attributes[:global_UB] = +Inf
   graph.attributes[:fathomed_by_bound] = false
   graph.attributes[:is_infeasible] = false
+  graph.attributes[:cuts] = cuts
   setsolver(graph.attributes[:mflat],graph.solver)
 
   links = getlinkconstraints(graph)
@@ -374,13 +394,16 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
       node.attributes[:preobj] = model.obj
     end
 
-    #create upper bound for variables if GMI or LIFT is in cuts 
+    
     if :GMI in cuts || :LIFT in cuts 
+    #create upper bound for variables if GMI or LIFT is in cuts   
       for col in 1:length(model.colUpper)
         if model.colUpper[col] > 1e10 
           setupperbound(Variable(model, col), 1e10)
         end
       end
+      #add attributes to check if LP cuts has stalled 
+      node.attributes[:LP_stalled] = false 
     end
 
     #create standard matrix for lift and project cuts 
@@ -458,6 +481,7 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
     push!(childnode.attributes[:linkconstraints], conref)
     #store child var index 
     push!(childnode.attributes[:linking_vars_indices], childvar.col)
+    push!(childnode.attributes[:linking_vars_indices], valbar.col)
   end
 
   #link master and ub subproblem for nonconvex 
