@@ -55,5 +55,5 @@ function subgraphobjective(node, graph)
     if out_degree(graph, node) == 0
         return getobjectivevalue(getmodel(node))
     end
-    return getobjectivevalue(getmodel(node)) + sum(subgraphobjective(childnode) for childnode in out_neighbors(graph, node))
+    return getobjectivevalue(getmodel(node)) + sum(subgraphobjective(childnode, graph) for childnode in out_neighbors(graph, node))
 end

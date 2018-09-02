@@ -100,11 +100,12 @@ function lagrange_to_benders(c::CrossGraph)
     for lgnode in getnodes(c.lg)
         if in_degree(c.lg, lgnode) > 0
             parentnode = in_neighbors(c.lg, lgnode)[1]
-            nodeindex = getnodeindex(c.lg, lgnode)
-            parentindex = getnodeindex(c.lg, parentnode)
+            nodeindex = PlasmoAlgorithms.getnodeindex(lgnode)
+            parentindex = PlasmoAlgorithms.getnodeindex(parentnode)
             λk = λ[getattribute(parentnode,:λcomponents)[nodeindex]]
-            bdmodel = getmodel(getnode(c.bd, parentindex))
-            xk = [JuMP.Variable(bdmodel,var.col) for var in getattribute(parentnode,:childvars)[nodeindex]]
+            bdnode = getnode(c.bd, parentindex)
+            zld = PlasmoAlgorithms.subgraphobjective(lgnode, c.lg)
+            push!(getattribute(bdnode,:cutdata)[nodeindex], LagrangeCrossCutData(zld,λk))
         end
     end
 end

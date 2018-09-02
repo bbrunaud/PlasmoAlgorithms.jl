@@ -137,7 +137,7 @@ function putx(node::ModelNode,graph::ModelGraph)
   length(children) == 0 && return true
 
   for child in children
-    xnode = getvalue(childvars[getindex(graph,child)])
+    xnode = JuMP.getvalue(childvars[getindex(graph,child)])
     setattribute(child,:xin, xnode)
   end
 end
@@ -184,11 +184,13 @@ function generatecuts(node::ModelNode,graph::ModelGraph)
       push!(samecuts[childindex],samecut)
       samecut && continue
       if typeof(cutdata) == BendersCutData
-        generatebenderscut(node,cutdata,childindex)
+          generatebenderscut(node, cutdata, childindex)
       elseif typeof(cutdata) == LLIntegerCutData
-        generateLLintegercut(node,cutdata)
+          generateLLintegercut(node,cutdata)
       elseif typeof(cutdata) == IntegerCutData
-        generateintegercut(node,cutdata)
+          generateintegercut(node,cutdata)
+      elseif typeof(cutdata) == LagrangeCrossCutData
+          generatelagrangecrosscut(node, cutdata, childindex)
       end
       push!(thisitercuts[childindex],cutdata)
     end
@@ -210,6 +212,12 @@ function generatebenderscut(node::ModelNode, cd::BendersCutData,index)
   @constraint(model, θ[index] >= cd.θk + cd.λk'*(cd.xk - x))
 end
 
+function generatelagrangecrosscut(node, cd::LagrangeCrossCutData, index)
+    model = getmodel(node)
+    θ = getindex(model, :θ)
+    x = getattribute(node, :childvars)[index]
+    @constraint(model, θ[index] >= cd.zk + cd.λk'*x)
+end
 
 function identifylevels(graph::ModelGraph)
   #Create lists of root and leaf nodes in graph
