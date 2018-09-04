@@ -58,19 +58,25 @@ function crossprepare(c::CrossGraph)
         end
         push!(getattribute(parentnode, :λcomponents)[childindex],numlink)
     end
-  
+
     # Standard preparations
     PlasmoAlgorithms.bdprepare(c.bd)
     PlasmoAlgorithms.lgprepare(c.lg, 0.5, 3, 1e6)
  end
 
-function crosssolve(c::CrossGraph; max_iterations=5)
+function crosssolve(g::ModelGraph; max_iterations=10, subgradientiterations=5)
+    c = CrossGraph(g,deepcopy(g))
+    crosssolve(c, max_iterations=max_iterations, subgradientiterations=subgradientiterations)
+end
+
+function crosssolve(c::CrossGraph; max_iterations=10, subgradientiterations=5)
     crossprepare(c)
     for i in 1:max_iterations
-        bendersolve(c.bd, max_iterations=1)
+        bs = bendersolve(c.bd, max_iterations=1)
         benders_to_lagrange(c)
-        lagrangesolve(c.lg,max_iterations=1, update_method=:cuttingplanes, callback=lagrange_to_benders)
-        lagrange_to_benders(c)
+        updatemethod =  i <= subgradientiterations ? :subgradient : :cuttingplanes
+        ls = lagrangesolve(c.lg,max_iterations=1, update_method=updatemethod, lagrangeheuristic=x->bs.objval)
+        lagrange_to_benders(c, termination=ls.termination)
     end
 end
 
@@ -90,13 +96,19 @@ function benders_to_lagrange(c::CrossGraph)
             push!(λcomponent, k)
             push!(coeffs, coeff)
             push!(xk, JuMP.getvalue(var))
-        end  
+        end
         push!(cutdataarray[nodeindex], LagrangeCutData(preobjval, λcomponent, coeffs, xk))
     end
 end
 
-function lagrange_to_benders(c::CrossGraph)
-    λ = getattribute(c.lg,:λ)[end]
+function lagrange_to_benders(c::CrossGraph; termination="Max Iterations")
+    if termination == "Max Iterations"
+        λ = getattribute(c.lg,:λ)[end-1]
+        println("Max Iterations $λ")
+    else
+        λ = getattribute(c.lg,:λ)[end]
+        println("Optimal $λ")
+    end
     for lgnode in getnodes(c.lg)
         if in_degree(c.lg, lgnode) > 0
             parentnode = in_neighbors(c.lg, lgnode)[1]
