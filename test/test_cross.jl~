@@ -1,0 +1,8 @@
+using PlasmoAlgorithms
+using Base.Test
+
+include("example5.jl")
+
+c = PlasmoAlgorithms.CrossGraph(g)
+@test typeof(c) == PlasmoAlgorithms.CrossGraph
+crossprepare(c)
