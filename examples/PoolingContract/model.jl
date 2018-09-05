@@ -1,6 +1,6 @@
-include("input.jl")
+include("input3.jl")
 function generate_model()
-	m = Model(solver=BaronSolver(maxtime=5e4, epsr= 1e-4, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
+	m = Model(solver=BaronSolver(maxtime=5e4, epsr= 1e-3, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
 
 	@variable(m, gamma_intlt[i in feeds], Bin)
 	@variable(m, gamma_pool[l in pools], Bin)

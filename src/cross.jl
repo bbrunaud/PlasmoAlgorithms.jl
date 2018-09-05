@@ -4,6 +4,7 @@ function crosssolve(bgraph::Plasmo.PlasmoGraph, lgraph::Plasmo.PlasmoGraph;
 	max_iterations_benders::Int64=100,
 	benders_cuts=[:LP],
 	ϵ=1e-5,
+	rel_gap=1e-4,
 	benders_UBupdatefrequency=1,
 	benders_timelimit=3600,
 	benders_verbose=false, 
@@ -19,11 +20,12 @@ function crosssolve(bgraph::Plasmo.PlasmoGraph, lgraph::Plasmo.PlasmoGraph;
 	results[:benders_time] = 0
 	results[:lagrangean_time] = 0
 	if heuristic == :lagfirst
-		solution = lagrangesolve(lgraph, max_iterations=max_iterations_lag, lagrangeheuristic=lagrangeheuristic,  maxnoimprove = 1, δ = lag_δ, α = lag_α )
+		solution = lagrangesolve(lgraph, max_iterations=max_iterations_lag, ϵ=ϵ, rel_gap=rel_gap, initialmultipliers=lag_initialmultipliers, lagrangeheuristic=lagrangeheuristic,  maxnoimprove = lag_maxnoimprove, δ = lag_δ, α = lag_α, cpbound = lag_cpbound )
+		println(solution.termination)
 		results[:lagrangean_time] += solution.clocktime[end]
 		if !lgraph.attributes[:is_infeasible]
 			if !haskey(bgraph.attributes,:preprocessed)
-				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=1, is_nonconvex=is_nonconvex)
+				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=1, is_nonconvex=is_nonconvex, timelimit=benders_timelimit, LB=benders_LB, ϵ=ϵ, rel_gap=rel_gap, UBupdatefrequency=benders_UBupdatefrequency, verbose=benders_verbose)
 				results[:benders_time] += solution.clocktime[end]
 				num_iter = length(getnodes(lgraph)[1].attributes[:Zsl])
 				println("---------adding Lagrangean cuts to Benders master problem---------")
@@ -31,13 +33,13 @@ function crosssolve(bgraph::Plasmo.PlasmoGraph, lgraph::Plasmo.PlasmoGraph;
 				if max_iterations_benders < 2
 					max_iterations_benders =2
 				end
-				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=max_iterations_benders-1, is_nonconvex=is_nonconvex)
+				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=max_iterations_benders-1, is_nonconvex=is_nonconvex, timelimit=benders_timelimit, LB=benders_LB, ϵ=ϵ, rel_gap=rel_gap, UBupdatefrequency=benders_UBupdatefrequency, verbose=benders_verbose)
 				results[:benders_time] += solution.clocktime[end]
 			else
 				num_iter = length(getnodes(lgraph)[1].attributes[:Zsl])
 				println("---------adding Lagrangean cuts to Benders master problem---------")
 				add_lagrangean_cuts(bgraph, lgraph, cut_indices=1:num_iter)
-				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=max_iterations_benders, is_nonconvex=is_nonconvex)
+				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=max_iterations_benders, is_nonconvex=is_nonconvex, timelimit=benders_timelimit, LB=benders_LB, ϵ=ϵ, rel_gap=rel_gap, UBupdatefrequency=benders_UBupdatefrequency, verbose=benders_verbose)
 				results[:benders_time] += solution.clocktime[end]
 			end
 		else

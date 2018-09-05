@@ -24,7 +24,7 @@ end
 """
 bendersolve
 """
-function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600,verbose=false, LB=NaN, is_nonconvex=false)
+function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5, rel_gap=1e-4, UBupdatefrequency=1,timelimit=3600,verbose=false, LB=NaN, is_nonconvex=false)
   graph.attributes[:is_nonconvex] = is_nonconvex
   global tmpdir = "/tmp/RootNode" # mktempdir()
   
@@ -65,6 +65,11 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
     printiterationsummary(graph.attributes[:solution],singleline=false)
 
     if abs(UB-LB) < ϵ
+      graph.attributes[:solution].termination = "Optimal"
+      return graph.attributes[:solution]
+    end
+
+    if calculate_gap(LB, UB) < rel_gap
       graph.attributes[:solution].termination = "Optimal"
       return graph.attributes[:solution]
     end
@@ -290,18 +295,32 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
   cuts = graph.attributes[:cuts]
   if :LP in cuts 
     node.attributes[:stalled] = reduce(*,nodesamecuts)
+    #bound does not improve for 5 iterations is also considered as stalled
+    if length(graph.attributes[:solution].iterbound) > 6 && abs(graph.attributes[:LB] - graph.attributes[:solution].iterbound[end-5]) < 1e-3
+      node.attributes[:stalled] = true
+    end 
     node.attributes[:stalled] && warn("Node $(node.label) stalled")
   end
 
   #only stalled when LP has already stalled
   if (:GMI in cuts || :LIFT in cuts) && node.attributes[:LP_stalled]
     node.attributes[:stalled] = reduce(*,nodesamecuts)
+    if length(graph.attributes[:solution].iterbound) > 6 && abs(graph.attributes[:LB] - graph.attributes[:solution].iterbound[end-5]) < 1e-3 && node.attributes[:LP_stalled_iterations] > 2
+      node.attributes[:stalled] = true
+    end    
+    node.attributes[:LP_stalled_iterations] += 1 
     node.attributes[:stalled] && warn("Node $(node.label) stalled")
   end 
   if (:GMI in cuts || :LIFT in cuts) && (!node.attributes[:LP_stalled])
     node.attributes[:LP_stalled] = reduce(*,nodesamecuts)
+    if length(graph.attributes[:solution].iterbound) > 6 && abs(graph.attributes[:LB] - graph.attributes[:solution].iterbound[end-5]) < 1e-3
+      node.attributes[:LP_stalled] = true
+    end      
     println("LP_stalled status")
     println(node.attributes[:LP_stalled])
+    if node.attributes[:LP_stalled]
+      node.attributes[:LP_stalled_iterations] = 1
+    end 
   end 
   if in(node,graph.attributes[:roots]) && node.attributes[:stalled]
     graph.attributes[:stalled] = true

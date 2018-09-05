@@ -1,0 +1,59 @@
+===========================================================================
+ BARON version 17.10.16. Built: LNX-64 Mon Oct 16 20:42:56 EDT 2017
+
+ BARON is a product of The Optimization Firm, LLC. http://www.minlp.com/
+ Licensee: Can Li at Carnegie Mellon University, canl1@andrew.cmu.edu.
+
+ If you use this software, please cite publications from
+ http://www.minlp.com/about-baron, such as: 
+
+ Tawarmalani, M. and N. V. Sahinidis, A polyhedral
+ branch-and-cut approach to global optimization,
+ Mathematical Programming, 103:225-249, 2005.
+===========================================================================
+ This BARON run may utilize the following subsolver(s)
+ For LP/MIP: ILOG CPLEX                                      
+ For NLP: IPOPT, FILTERSD, FILTERSQP
+===========================================================================
+ Doing local search
+ Preprocessing found feasible solution with value  0.00000000000     
+ Solving bounding LP
+ Starting multi-start local search
+ Preprocessing found feasible solution with value -1334.67424531     
+ Done with local search
+===========================================================================
+  Iteration    Open nodes         Time (s)    Lower bound      Upper bound
+          1             1             3.69    -1342.80         -1334.67    
+*         8             3             5.04    -1342.80         -1336.39    
+*         9             1             5.17    -1342.80         -1338.89    
+          9             0             5.17    -1340.23         -1338.89    
+
+ Cleaning up
+
+                         *** Normal completion ***            
+
+ Wall clock time:                     5.00
+ Total CPU time used:                 5.18
+
+ Total no. of BaR iterations:       9
+ Best solution found at node:       9
+ Max. no. of nodes in memory:       3
+ 
+ All done
+===========================================================================
+-1338.8872967545612
+A: 1 dimensions:
+[1] = 300.0
+[2] = 201.921
+[3] = 0.0
+[4] = 0.0
+[5] = 245.181
+S: 1 dimensions:
+[1] = 247.102
+[2] = 0.0
+[3] = 0.0
+[4] = 500.0
+θ: 1 dimensions:
+[1] = -835.952
+[2] = -1591.93
+[3] = -1325.98

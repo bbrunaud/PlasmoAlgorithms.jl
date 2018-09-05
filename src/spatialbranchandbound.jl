@@ -12,22 +12,38 @@ end
 
 BABnode() = BABnode(lgraph, bgraph, -1e6, 1e6, [], [], [], [], :notfathomed)
 
-function bab_solve(rootnode::Plasmo.PlasmoGraph)
-	active_nodes = []
-	fathomed_nodes = []
-	crosssolve(rootnode.bgraph, rootnode.lgraph, max_iterations_lag=3, max_iterations_benders=6, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3)
-	rootnode.LBq = rootnode.bgraph.attributes[:LB]
-	LB = rootnode.bgraph.attributes[:LB]
-	UB = +Inf
-	if rootnode.lgraph.attributes[:UB] < rootnode.bgraph.attributes[:UB]
-		UB = rootnode.lgraph.attributes[:UB]
-		rootnode.UBq = rootnode.lgraph.attributes[:UB]
-		rootnode.best_feasible_x = deepcopy(rootnode.lgraph.attributes[:best_feasible_x])
-	else 
-		UB = rootnode.bgraph.attributes[:UB]
-		rootnode.UBq = rootnode.bgraph.attributes[:UB]
-		rootnode.best_feasible_x = deepcopy(rootnode.bgraph.attributes[:best_feasible_x])
-	end
+function bab_solve(rootnode::BABnode;
+	time_limit = 1e4,
+	heuristic=:lagfirst, 
+	max_iterations_lag::Int64=60, 
+	max_iterations_benders::Int64=100,
+	benders_cuts=[:LP],
+	ϵ=1e-5,
+	rel_gap=1e-4,
+	benders_UBupdatefrequency=1,
+	benders_timelimit=3600,
+	benders_verbose=false, 
+	benders_LB=NaN, 
+	is_nonconvex=false,
+	lag_α=2,
+	lagrangeheuristic=nearest_scenario, # function to calculate the upper bound
+	lag_initialmultipliers=:zero, # :relaxation for LP relaxation
+	lag_δ = 0.5, # Factor to shrink step when subgradient stuck
+	lag_maxnoimprove = 1,
+	lag_cpbound=1e6)
+	node_list = []
+	active_nodes_indices = []
+	fathomed_nodes_indices = []
+	solution=crosssolve(rootnode.bgraph, rootnode.lgraph, heuristic=heuristic, max_iterations_lag=max_iterations_lag, max_iterations_benders=max_iterations_benders, benders_cuts=benders_cuts, ϵ=ϵ, rel_gap= rel_gap, benders_UBupdatefrequency=benders_UBupdatefrequency,benders_timelimit=benders_timelimit, benders_verbose=benders_verbose, benders_LB=benders_LB, is_nonconvex=is_nonconvex, lag_α=lag_α, lagrangeheuristic=lagrangeheuristic, lag_initialmultipliers=lag_initialmultipliers, lag_δ=lag_δ, lag_maxnoimprove=lag_maxnoimprove, lag_cpbound=lag_cpbound)
+	rootnode.LBq = solution[:LB]
+	rootnode.UBq = solution[:UB]
+	rootnode.best_feasible_x = deepcopy(solution[:best_feasible_x])
+	rootnode.best_avg_x = deepcopy(solution[:best_avg_x])
+	LB = solution[:LB]
+	UB = solution[:UB]
+	solution_time = Dict()
+	solution_time[:benders_time] = solution[:benders_time]
+	solution_time[:lagrangean_time] = solution[:lagrangean_time]
 
 	xlb_root = Dict()
 	xub_root = Dict()
@@ -40,11 +56,102 @@ function bab_solve(rootnode::Plasmo.PlasmoGraph)
 	rootnode.xubq = xub_root
 
 
+	push!(node_list, rootnode)
+	push!(active_nodes_indices, 1)
+	if calculate_gap(rootnode.LBq, rootnode.UBq) < 0.001
+		active_nodes_indices =[]
+	end
+	N = 3
+	num_iter = 1
+
+	while length(active_nodes_indices)>0
+		#terminate if time out 
+		if solution_time[:benders_time] + solution_time[:lagrangean_time] > time_limit
+			break
+		end
+
+		#select the node with the lowest lower bound 
+		index_selected = 1 
+		temp_LB = +Inf
+		for index in active_nodes_indices
+			if node_list[index].LBq < temp_LB
+				temp_LB = node_list[index].LBq 
+				index_selected = index
+			end
+		end
+		node_to_branch = node_list[index_selected]
+		#remove selected node from active nodes 
+		active_nodes_indices = filter(x->x≠ index_selected,active_nodes_indices)
+		
+
+		# create two new nodes 
+		lchild = copy_node(node_to_branch, UB, benders_cuts=benders_cuts)
+		rchild = copy_node(node_to_branch, UB, benders_cuts=benders_cuts)
+
+		#apply branching rule 
+		if num_iter %3 == 0
+			lchild, rchild = largest_rel_diameter(node_to_branch, lchild, rchild, xlb_root, xub_root)
+		else
+			lchild, rchild = largest_distance(node_to_branch, lchild, rchild, xlb_root, xub_root, node_to_branch.best_avg_x)
+		end
+
+		#set fathom type of node selected 
+		node_to_branch.fathom_type = :bybranch
+
+		#solve the two new nodes 
+		solve_node(lchild, solution_time, heuristic=heuristic, max_iterations_lag=max_iterations_lag, max_iterations_benders=max_iterations_benders, benders_cuts=benders_cuts, ϵ=ϵ, rel_gap=rel_gap, benders_UBupdatefrequency=benders_UBupdatefrequency,benders_timelimit=benders_timelimit, benders_verbose=benders_verbose, benders_LB=benders_LB, is_nonconvex=is_nonconvex, lag_α=lag_α, lagrangeheuristic=lagrangeheuristic, lag_initialmultipliers=lag_initialmultipliers, lag_δ=lag_δ, lag_maxnoimprove=lag_maxnoimprove, lag_cpbound=lag_cpbound)
+		solve_node(rchild, solution_time, heuristic=heuristic, max_iterations_lag=max_iterations_lag, max_iterations_benders=max_iterations_benders, benders_cuts=benders_cuts, ϵ=ϵ, rel_gap=rel_gap, benders_UBupdatefrequency=benders_UBupdatefrequency,benders_timelimit=benders_timelimit, benders_verbose=benders_verbose, benders_LB=benders_LB, is_nonconvex=is_nonconvex, lag_α=lag_α, lagrangeheuristic=lagrangeheuristic, lag_initialmultipliers=lag_initialmultipliers, lag_δ=lag_δ, lag_maxnoimprove=lag_maxnoimprove, lag_cpbound=lag_cpbound)
+
+		#add two new nodes 
+		push!(node_list, lchild)
+		push!(node_list, rchild)
+		push!(active_nodes_indices, length(node_list))
+		push!(active_nodes_indices, length(node_list)-1)
+
+		#update bounds 
+		LB = +Inf
+		for index in active_nodes_indices
+			if node_list[index].LBq < LB 
+				LB = node_list[index].LBq
+			end 
+			if node_list[index].UBq < UB 
+				UB = node_list[index].UBq
+			end
+		end
+
+		#check if the two new nodes can be fathomed by optimality 
+		if calculate_gap(lchild.LBq, lchild.UBq) < 0.001
+			lchild.fathom_type = :byoptimality
+			active_nodes_indices = filter!(x->x≠ (length(node_list)-1), active_nodes_indices)
+		end 
+		if calculate_gap(rchild.LBq, rchild.UBq) <0.001
+			rchild.fathom_type = :byoptimality
+			active_nodes_indices = filter(x->x≠ length(node_list), active_nodes_indices)
+		end
 
 
-	push!(active_nodes, rootnode)
-	# while 
-	# solution = crosssolve(node.bgraph, node.lgraph, max_iterations_lag=30, max_iterations_benders=60, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3)
+		#fathom nodes by bound 
+		for index in active_nodes_indices
+			if calculate_gap(node_list[index].LBq, UB) < 0.001
+				node_list[index].fathom_type = :bybound
+				active_nodes_indices = filter(x->x≠ index, active_nodes_indices)
+			end
+		end
+
+
+
+		num_iter += 1
+
+	end	
+	results = Dict()
+	results[:node_list] = node_list
+	results[:active_nodes_indices] = active_nodes_indices
+	results[:solution_time] = solution_time
+	results[:LB] = LB 
+	results[:UB] = UB 
+
+	return results
+	
 end
 
 function largest_rel_diameter(node_to_branch::BABnode, lchild::BABnode, rchild::BABnode, xlb_root, xub_root)
@@ -162,7 +269,23 @@ function set_bounds(node::BABnode, varname, ub, lb)
 	end
 end 
 
-function solve_node(node::BABnode, solution_time)
+function solve_node(node::BABnode, solution_time; heuristic=:lagfirst, 
+	max_iterations_lag::Int64=60, 
+	max_iterations_benders::Int64=100,
+	benders_cuts=[:LP],
+	ϵ=1e-5,
+	rel_gap=1e-4,
+	benders_UBupdatefrequency=1,
+	benders_timelimit=3600,
+	benders_verbose=false, 
+	benders_LB=NaN, 
+	is_nonconvex=false,
+	lag_α=2,
+	lagrangeheuristic=nearest_scenario, # function to calculate the upper bound
+	lag_initialmultipliers=:zero, # :relaxation for LP relaxation
+	lag_δ = 0.5, # Factor to shrink step when subgradient stuck
+	lag_maxnoimprove = 1,
+	lag_cpbound=1e6)
 	#check if the best_feasible_x is still feasible in the current node 
 	for varname in keys(node.best_feasible_x)
 		if node.best_feasible_x[varname] > node.xubq[varname] || node.best_feasible_x[varname] < node.xlbq[varname]
@@ -179,7 +302,7 @@ function solve_node(node::BABnode, solution_time)
 		n.attributes[:Zsl] = []
 		n.attributes[:μ] = []
 	end
-	solution=crosssolve(node.bgraph, node.lgraph, max_iterations_lag=10, benders_cuts=[:GMI], max_iterations_benders=60, is_nonconvex=true)
+	solution=crosssolve(node.bgraph, node.lgraph, heuristic=heuristic, max_iterations_lag=max_iterations_lag, max_iterations_benders=max_iterations_benders, benders_cuts=benders_cuts, ϵ=ϵ, rel_gap= rel_gap, benders_UBupdatefrequency=benders_UBupdatefrequency,benders_timelimit=benders_timelimit, benders_verbose=benders_verbose, benders_LB=benders_LB, is_nonconvex=is_nonconvex, lag_α=lag_α, lagrangeheuristic=lagrangeheuristic, lag_initialmultipliers=lag_initialmultipliers, lag_δ=lag_δ, lag_maxnoimprove=lag_maxnoimprove, lag_cpbound=lag_cpbound)
 	node.LBq = solution[:LB]
 	node.UBq = solution[:UB]
 	node.best_feasible_x = deepcopy(solution[:best_feasible_x])
@@ -190,7 +313,7 @@ function solve_node(node::BABnode, solution_time)
 
 end
 
-function copy_node(node::BABnode, UB)
+function copy_node(node::BABnode, UB; benders_cuts=[:LP])
 	newnode = deepcopy(node)
 	for n in newnode.bgraph.attributes[:roots]
 		model = getmodel(n)
@@ -198,6 +321,20 @@ function copy_node(node::BABnode, UB)
 	end
 	newnode.lgraph.attributes[:global_UB] = UB 
 	newnode.bgraph.attributes[:global_UB] = UB
+
+	#reset the bounds of CGLP if :LIFT in cuts 
+	if :LIFT in benders_cuts
+		graph = node.bgraph
+    	for index in 1:length(graph.nodes)
+      		node = graph.nodes[index]
+      		node.attributes[:LP_stalled] = false 
+      		node.attributes[:stalled] = false
+      		if in_degree(graph, node) != 0 
+        		setCGLP(node, graph)
+      		end
+    	end
+	end
+
 	return newnode
 end
 

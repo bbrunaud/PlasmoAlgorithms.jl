@@ -1,0 +1,87 @@
+===========================================================================
+ BARON version 17.10.16. Built: LNX-64 Mon Oct 16 20:42:56 EDT 2017
+
+ BARON is a product of The Optimization Firm, LLC. http://www.minlp.com/
+ Licensee: Can Li at Carnegie Mellon University, canl1@andrew.cmu.edu.
+
+ If you use this software, please cite publications from
+ http://www.minlp.com/about-baron, such as: 
+
+ Tawarmalani, M. and N. V. Sahinidis, A polyhedral
+ branch-and-cut approach to global optimization,
+ Mathematical Programming, 103:225-249, 2005.
+===========================================================================
+ This BARON run may utilize the following subsolver(s)
+ For LP/MIP: ILOG CPLEX                                      
+ For NLP: IPOPT, FILTERSD, FILTERSQP
+===========================================================================
+ Doing local search
+ Preprocessing found feasible solution with value  0.00000000000     
+ Solving bounding LP
+ Starting multi-start local search
+ Preprocessing found feasible solution with value -1330.37392971     
+ Preprocessing found feasible solution with value -1330.53330357     
+ Done with local search
+===========================================================================
+  Iteration    Open nodes         Time (s)    Lower bound      Upper bound
+*         1             1            60.34    -1592.55         -1333.99    
+          1             1            67.86    -1340.14         -1333.99    
+         21+            8            97.89    -1340.14         -1333.99    
+         71            40           127.93    -1340.14         -1333.99    
+*        85            51           146.66    -1340.14         -1334.22    
+        112+           68           178.67    -1340.14         -1334.22    
+*       132             5           193.15    -1340.14         -1338.65    
+        139             0           193.96    -1339.99         -1338.65    
+
+ Cleaning up
+
+                         *** Normal completion ***            
+
+ Wall clock time:                   194.00
+ Total CPU time used:               193.98
+
+ Total no. of BaR iterations:     139
+ Best solution found at node:     139
+ Max. no. of nodes in memory:      78
+ 
+ All done
+===========================================================================
+-1338.647662615077
+A: 1 dimensions:
+[1] = 300.0
+[2] = 201.921
+[3] = 0.0
+[4] = 0.0
+[5] = 245.181
+S: 1 dimensions:
+[1] = 247.102
+[2] = 0.0
+[3] = 0.0
+[4] = 500.0
+θ: 1 dimensions:
+[1] = -256.992
+[2] = -489.432
+[3] = -407.273
+[4] = -334.305
+[5] = -636.771
+[6] = -530.393
+[7] = -244.579
+[8] = -465.724
+[9] = -388.153
+               [1m[32m_[0m
+   [1m[34m_[0m       [0m_[0m [1m[31m_[1m[32m(_)[1m[35m_[0m     |  A fresh approach to technical computing
+  [1m[34m(_)[0m     | [1m[31m(_)[0m [1m[35m(_)[0m    |  Documentation: https://docs.julialang.org
+   [0m_ _   _| |_  __ _[0m   |  Type "?help" for help.
+  [0m| | | | | | |/ _` |[0m  |
+  [0m| | |_| | | | (_| |[0m  |  Version 0.6.1 (2017-10-24 22:15 UTC)
+ [0m_/ |\__'_|_|_|\__'_|[0m  |  Official http://julialang.org/ release
+[0m|__/[0m                   |  x86_64-pc-linux-gnu
+
+[?2004h[0K[32m[1mjulia> [0m[0m[7C[7Cpfjdsaksdlafjdslkajfadfkasj[0K[32m[1mjulia> [0m[0m[7Cpfjdsaksdlafjdslkajfadfkasj[34C^C
+
+[0K[32m[1mjulia> [0m[0m[7C[7C[0K[32m[1mjulia> [0m[0m[7C[7C^C
+
+[0K[32m[1mjulia> [0m[0m[7C[7C[0K[32m[1mjulia> [0m[0m[7C[7C^C
+
+[0K[32m[1mjulia> [0m[0m[7C[7C
+[?2004l[0m

@@ -11,7 +11,8 @@ using MathProgBase
 import Plasmo.solve, Base.==
 
 export Solution, lagrangesolve, psolve, bendersolve,
-lgprepare, solvenode,crosssolve,fixbinary, nearest_scenario,bab_solve,BABnode,largest_rel_diameter,largest_distance,set_bounds,solve_node,copy_node,
+lgprepare, solvenode,crosssolve,fixbinary, nearest_scenario,bab_solve,BABnode,
+#largest_rel_diameter,largest_distance,set_bounds,solve_node,copy_node,
 calculate_gap,
 # Solution
 saveiteration,

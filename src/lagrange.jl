@@ -6,6 +6,7 @@ function lagrangesolve(graph;
   max_iterations=10,
   update_method=:subgradient, # :intersectionstep, :ADMM, :cuttingplanes, :bundle
   ϵ=0.001, # ϵ-convergence tolerance
+  rel_gap=1e-4,
   timelimit=3600,
   α=2, # default subgradient step
   lagrangeheuristic=fixbinaries, # function to calculate the upper bound
@@ -99,6 +100,11 @@ function lagrangesolve(graph;
 
     # Check convergence
     if graph.attributes[:UB] - graph.attributes[:LB] < ϵ
+      graph.attributes[:solution].termination = "Optimal"
+      return graph.attributes[:solution]
+    end
+
+    if calculate_gap(graph.attributes[:LB], graph.attributes[:UB])  < rel_gap
       graph.attributes[:solution].termination = "Optimal"
       return graph.attributes[:solution]
     end
@@ -264,7 +270,8 @@ function solvenode(graph, node,λ,x,variant=:default)
   # Optional: If my residuals are zero, do nothing
 
   status = solve(m)
-  if status != :Optimal
+  if status == :Infeasible
+    println(status)
     graph.attributes[:is_infeasible] = true
     graph.attributes[:LB] = +Inf
   end 
@@ -588,9 +595,9 @@ function nearest_scenario(graph::PlasmoGraph)
       setlowerbound(var, nearest_x[var_name])
     end 
     status = solve(m)
-    if status != :Optimal
+    if status == :Infeasible
       println(nearest_x)
-      error("upper bound subproblem not solved to optimality")
+      error("upper bound subproblem is infeasible")
     end 
     Zk += getobjectivevalue(m)
     #restore bounds after solve 

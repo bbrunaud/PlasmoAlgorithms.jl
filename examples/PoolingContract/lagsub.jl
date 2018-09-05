@@ -1,4 +1,4 @@
-function generate_lagsub(;psi_f=base_psi_f, psi_d1=base_psi_d1, psi_d2=base_psi_d2, psi_b1=base_psi_b1, psi_b2=base_psi_b2, DU=base_DU, prob=0)
+function generate_lagsub(;psi_f=base_psi_f, psi_d1=base_psi_d1, psi_d2=base_psi_d2, psi_b1=base_psi_b1,d = base_d,  psi_b2=base_psi_b2, DU=base_DU, prob=0)
 	m = Model(solver=BaronSolver(maxtime=5e4, epsr= 1e-3,prlevel=0,CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
 
 	@variable(m, gamma_intlt[i in feeds], Bin)
