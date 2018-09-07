@@ -1,0 +1,266 @@
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/05/18 16:59:30 Page 1
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+   1  *-------------------------------------------
+   2  *                       SET SOLUTION OPTIONS
+   3  *-------------------------------------------
+   4   
+   5  OPTION LIMROW = 0;
+   6  OPTION LIMCOL = 0;
+   7  OPTION OPTCA  = 1E-09;
+   8  OPTION OPTCR  = 1E-03;
+   9  OPTION RESLIM = 3E+02;
+  10  OPTION ITERLIM = 1E+09;
+  11   
+  12  OPTION LP=CPLEX;
+  13  OPTION NLP=SNOPT;
+  14  OPTION MIP=CPLEX;
+  15  *OPTION MINLP=bonmin;
+  16  OPTION MINLP=ANTIGONE;
+  17  *OPTION MINLP=BARON;
+  18  *OPTION MINLP=COUENNE;
+  19  *OPTION MINLP=SCIP;
+  20   
+  21  *--------------------------------
+  22  *               SET DEFINITIONS
+  23  *--------------------------------
+  24   
+  25  SETS
+  26          p               "products"                                                                      / 1*3 /
+  27          n               "event points"                                                          / 1*3 /
+  28          h               "number of scenarios"                                           / 1*2 /
+  29          subh    "num. realizations per uncertain param"         / 1*2 /
+  30  ;
+  31  *** NOTE: Use h = subh or subh^2 or subh^3
+  32   
+  33  alias(subh,subh2,subh3);
+  34  alias(p,pp);
+  35   
+  36  *-------------------------------------------------
+  37  *               DEFINE MODEL-SPECIFIC PARAMETERS
+  38  *-------------------------------------------------
+  39   
+  40  SCALARS
+  41          VariableInvestmentCostFactor    "variable part of the tank investment cost"     / 0.3271 /
+  42          NumDaysInYear "number of days in a year" / 365 /
+  43  ;
+  44   
+  45  PARAMETERS
+  46          MinProductionRate(p) "lower bound on the production rate in m^3/day"
+  47          /       1       15.0
+  48                  2       15.0
+  49                  3       7.0/,
+  50   
+  51          MaxProductionRate(p) "upper bound on the production rate in m^3/day"
+  52          /       1       50.0
+  53                  2       50.0
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/05/18 16:59:30 Page 2
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+  54                  3       50.0/,
+  55   
+  56          InventoryLowerBound(p) "lower bound on inventory in m^3"
+  57          /       1       643.0
+  58                  2       536.0
+  59                  3       214.0/,
+  60   
+  61          InventoryUpperBound(p) "upper bound on inventory in m^3"
+  62          /       1       4018.36
+  63                  2       3348.63
+  64                  3       1339.45/,
+  65   
+  66          InitialInventory(p) "initial inventory in m^3",
+  67   
+  68          ProductionLength_lower(p) "lower bound on production length"
+  69          /       1       1
+  70                  2       1
+  71                  3       1/,
+  72   
+  73          ProductionLength_upper(p) "upper bound on production length"
+  74          /       1       40
+  75                  2       40
+  76                  3       40/,
+  77   
+  78          ProductDemand_nominal(p) "nominal demand of product in m^3/year"
+  79          /       1       4190
+  80                  2       3492
+  81                  3       1397/,
+  82   
+  83          ProductDemand_stdev(p) "standard deviation of demand of product in m^3/year",
+  84   
+  85          ProductDemand(p,h) "demand of product in m^3/year",
+  86   
+  87          CampaignSetupTime(p) "campaign setup time in days"
+  88          /       1       0.4
+  89                  2       0.2
+  90                  3       0.1/,
+  91   
+  92          CampaignVariableCost(p) "tank variable cost per ton"
+  93          /       1       18.8304
+  94                  2       19.2934
+  95                  3       19.7563/,
+  96   
+  97          CampaignSetupCost(p) "campaign setup cost"
+  98          /       1       10
+  99                  2       20
+ 100                  3       30/,
+ 101   
+ 102          prob(h) "probability of each scenario",
+ 103   
+ 104          subprob(subh) "probability for each individual uncertain realization"
+ 105  ;
+ 106   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/05/18 16:59:30 Page 3
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 107  *---------------------------------------------
+ 108  *        Compute derived parameter values
+ 109  *---------------------------------------------
+ 110   
+ 111  InitialInventory(p) = 1.1*InventoryLowerBound(p);
+ 112   
+ 113  ProductDemand_stdev('1') = ProductDemand_nominal('1')*0.1;
+ 114  ProductDemand_stdev('2') = ProductDemand_nominal('2')*0.1;
+ 115  ProductDemand_stdev('3') = ProductDemand_nominal('3')*0.1;
+ 116   
+ 117  *---------------------------------------------
+ 118  *        Initialize the uncertain parameters
+ 119  *---------------------------------------------
+ 120   
+ 121  ProductDemand(p,h) = ProductDemand_nominal(p);
+ 122   
+ 123   
+ 124   
+ 125  *=========== Generate scenarios for the uncertain parameters =============
+ 126   
+ 127   
+ 128  if (card(h)=1,
+ 129          prob(h)=1;
+ 130   
+ 131  elseif (card(h)=card(subh)),
+ 132          subprob(subh)$(card(subh)>1 and ord(subh)=1) = errorf(-3+6/card(subh));
+ 133          subprob(subh)$(card(subh)>1 and ord(subh)>1 and ord(subh)<card(subh))
+ 134                  = errorf(-3+ord(subh)*6/card(subh))-errorf(-3+(ord(subh)-1)*6/card(subh));
+ 135          subprob(subh)$(card(subh)>1 and ord(subh) = card(subh))
+ 136                  = 1 - errorf(-3+(card(subh)-1)*6/card(subh));
+ 137   
+ 138          loop(subh,
+ 139                  prob(h)$(ord(h)=ord(subh)) = subprob(subh);
+ 140   
+ 141                  ProductDemand('1',h)$(ord(h)=ord(subh)) =       ProductDemand_nominal('1') -
+ 142                                                                                                          3*ProductDemand_stdev('1')*(1 - 1/card(subh)) +
+ 143                                                                                                          (ord(subh)-1)*6*ProductDemand_stdev('1')/card(subh);
+ 144          );
+ 145   
+ 146  elseif (card(h)=card(subh)*card(subh)),
+ 147          subprob(subh)$(card(subh)>1 and ord(subh)=1) = errorf(-3+6/card(subh));
+ 148          subprob(subh)$(card(subh)>1 and ord(subh)>1 and ord(subh)<card(subh))
+ 149                  = errorf(-3+ord(subh)*6/card(subh))-errorf(-3+(ord(subh)-1)*6/card(subh));
+ 150          subprob(subh)$(card(subh)>1 and ord(subh) = card(subh))
+ 151                  = 1 - errorf(-3+(card(subh)-1)*6/card(subh));
+ 152   
+ 153          loop(subh,
+ 154              loop(subh2,
+ 155                          prob(h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh))
+ 156                          = subprob(subh)*subprob(subh2);
+ 157   
+ 158                          ProductDemand('1',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh))
+ 159                          = ProductDemand_nominal('1') - 3*ProductDemand_stdev('1')*(1 - 1/card(subh)) +
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/05/18 16:59:30 Page 4
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 160                                  (ord(subh)-1)*6*ProductDemand_stdev('1')/card(subh);
+ 161   
+ 162                          ProductDemand('2',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh))
+ 163                          = ProductDemand_nominal('2') - 3*ProductDemand_stdev('2')*(1 - 1/card(subh2)) +
+ 164                                  (ord(subh2)-1)*6*ProductDemand_stdev('2')/card(subh2);
+ 165              );
+ 166          );
+ 167   
+ 168  elseif (card(h)=card(subh)*card(subh)*card(subh)),
+ 169          subprob(subh)$(card(subh)>1 and ord(subh)=1) = errorf(-3+6/card(subh));
+ 170          subprob(subh)$(card(subh)>1 and ord(subh)>1 and ord(subh)<card(subh))
+ 171                  = errorf(-3+ord(subh)*6/card(subh))-errorf(-3+(ord(subh)-1)*6/card(subh));
+ 172          subprob(subh)$(card(subh)>1 and ord(subh) = card(subh))
+ 173                  = 1 - errorf(-3+(card(subh)-1)*6/card(subh));
+ 174   
+ 175          loop(subh,
+ 176              loop(subh2,
+ 177                          loop(subh3,
+ 178                                  prob(h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh)+(ord(subh3)-1)*card(subh)*card(subh2))
+ 179                                  = subprob(subh)*subprob(subh2)*subprob(subh3);
+ 180   
+ 181                                  ProductDemand('1',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh)+(ord(subh3)-1)*card(subh)*card(subh2))
+ 182                                  = ProductDemand_nominal('1') - 3*ProductDemand_stdev('1')*(1 - 1/card(subh)) +
+ 183                                          (ord(subh)-1)*6*ProductDemand_stdev('1')/card(subh);
+ 184   
+ 185                                  ProductDemand('2',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh)+(ord(subh3)-1)*card(subh)*card(subh2))
+ 186                                  = ProductDemand_nominal('2') - 3*ProductDemand_stdev('2')*(1 - 1/card(subh2)) +
+ 187                                          (ord(subh2)-1)*6*ProductDemand_stdev('2')/card(subh2);
+ 188   
+ 189                                  ProductDemand('3',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh)+(ord(subh3)-1)*card(subh)*card(subh2))
+ 190                                  = ProductDemand_nominal('3') - 3*ProductDemand_stdev('3')*(1 - 1/card(subh3)) +
+ 191                                          (ord(subh3)-1)*6*ProductDemand_stdev('3')/card(subh3);
+ 192                          );
+ 193              );
+ 194          );
+ 195   
+ 196  else
+ 197          abort "ERROR in setting the number of scenarios! Try again"
+ 198  );
+ 199   
+ 200  *======================================================================
+ 201   
+ 202  *---------------------------------------------
+ 203  *        Compute derived parameter values
+ 204  *---------------------------------------------
+ 205   
+ 206  PARAMETERS
+ 207          DemandPerDay(p,h)               "demand/day/product [tons/day]"
+ 208          TotalDemandPerDay(h)    "total demand/day [tons/day]"
+ 209  ;
+ 210   
+ 211  DemandPerDay(p,h) = ProductDemand(p,h)/NumDaysInYear;
+ 212  TotalDemandPerDay(h) = sum(p, DemandPerDay(p,h));
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/05/18 16:59:30 Page 5
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 213  CampaignVariableCost(p) = CampaignVariableCost(p)/NumDaysInYear;
+ 214  execute_unload "results_2.gdx" DemandPerDay TotalDemandPerDay;
+ 215  *execute 'gdxxrw.exe results_1.gdx o=results_1.xls par=DemandPerDay TotalDemandPerDay'
+ 216  execute 'gdx2xls results_2.gdx'
+
+
+COMPILATION TIME     =        0.001 SECONDS      3 MB  25.1.1 r66732 LEX-LEG
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/05/18 16:59:30 Page 6
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+E x e c u t i o n
+
+
+**** Exec Error at line 216: Execute has nonzero return code RC=127
+
+
+EXECUTION TIME       =        0.003 SECONDS      4 MB  25.1.1 r66732 LEX-LEG
+
+
+USER: Eval License Carnegie Mellon University        G180112/0001AS-GEN
+      Dept. of Chemical Engineering                              DC9476
+      License for teaching and research at degree granting institutions
+
+
+**** FILE SUMMARY
+
+Input      /home/canl1/PlasmoAlgorithms/examples/TankSizing/continuous/parameter.gms
+Output     /home/canl1/PlasmoAlgorithms/examples/TankSizing/continuous/parameter.lst
+
+**** USER ERROR(S) ENCOUNTERED
