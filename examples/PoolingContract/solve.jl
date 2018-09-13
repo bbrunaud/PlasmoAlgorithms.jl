@@ -3,7 +3,7 @@ using Plasmo
 using CPLEX
 using BARON
 using Gurobi
-include("input27.jl")
+include("input3.jl")
 include("benderssub.jl")
 include("bendersmaster.jl")
 include("lagsub.jl")
@@ -12,7 +12,7 @@ include("ubsub.jl")
 
 master = generate_bendersmaster()
 g = PlasmoGraph()
-g.solver = CplexSolver(CPX_PARAM_SCRIND=0)
+g.solver = CplexSolver(CPX_PARAM_SCRIND=0, CPXPARAM_Simplex_Tolerances_Feasibility=1e-9)
 n1 = add_node(g)
 setmodel(n1, master)
 println(master)

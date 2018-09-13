@@ -14,6 +14,7 @@ BABnode() = BABnode(lgraph, bgraph, -1e6, 1e6, [], [], [], [], :notfathomed)
 
 function bab_solve(rootnode::BABnode;
 	time_limit = 1e4,
+	walltime_limit = 1e4,
 	heuristic=:lagfirst, 
 	max_iterations_lag::Int64=60, 
 	max_iterations_benders::Int64=100,
@@ -31,6 +32,7 @@ function bab_solve(rootnode::BABnode;
 	lag_δ = 0.5, # Factor to shrink step when subgradient stuck
 	lag_maxnoimprove = 1,
 	lag_cpbound=1e6)
+	starttime = time()
 	node_list = []
 	active_nodes_indices = []
 	fathomed_nodes_indices = []
@@ -70,6 +72,10 @@ function bab_solve(rootnode::BABnode;
 			break
 		end
 
+		if time() - starttime > walltime_limit
+			break
+		end
+
 		#select the node with the lowest lower bound 
 		index_selected = 1 
 		temp_LB = +Inf
@@ -85,8 +91,8 @@ function bab_solve(rootnode::BABnode;
 		
 
 		# create two new nodes 
-		lchild = copy_node(node_to_branch, UB, benders_cuts=benders_cuts)
-		rchild = copy_node(node_to_branch, UB, benders_cuts=benders_cuts)
+		lchild = copy_node(node_to_branch, UB)
+		rchild = copy_node(node_to_branch, UB)
 
 		#apply branching rule 
 		if num_iter %3 == 0
@@ -149,6 +155,7 @@ function bab_solve(rootnode::BABnode;
 	results[:solution_time] = solution_time
 	results[:LB] = LB 
 	results[:UB] = UB 
+	results[:walltime] = time() - starttime
 
 	return results
 	
@@ -293,10 +300,23 @@ function solve_node(node::BABnode, solution_time; heuristic=:lagfirst,
 			node.bgraph.attributes[:UB] = +Inf		
 		end
 	end
-
+	#reset the bounds of CGLP if :LIFT in cuts 
+	if :LIFT in benders_cuts
+		graph = node.bgraph
+    	for index in 1:length(graph.nodes)
+      		bnode = graph.nodes[index]
+      		bnode.attributes[:LP_stalled] = false 
+      		bnode.attributes[:stalled] = false
+      		if in_degree(graph, bnode) != 0 
+        		setCGLP(bnode, graph)
+      		end
+    	end
+	end
 
 	#change α in lgraph to its initial value 
 	node.lgraph.attributes[:α] = [node.lgraph.attributes[:α][1]]
+	#change λ to best λ ever found 
+	node.lgraph.attributes[:λ] = [node.lgraph.attributes[:best_λ]]
 	node.bgraph.attributes[:stalled] = false 
 	for n in values(getnodes(node.lgraph))
 		n.attributes[:Zsl] = []
@@ -313,27 +333,15 @@ function solve_node(node::BABnode, solution_time; heuristic=:lagfirst,
 
 end
 
-function copy_node(node::BABnode, UB; benders_cuts=[:LP])
+function copy_node(node::BABnode, UB)
 	newnode = deepcopy(node)
-	for n in newnode.bgraph.attributes[:roots]
+	for n in values(getnodes(newnode.bgraph))
 		model = getmodel(n)
 		model.internalModel = Void
 	end
 	newnode.lgraph.attributes[:global_UB] = UB 
 	newnode.bgraph.attributes[:global_UB] = UB
 
-	#reset the bounds of CGLP if :LIFT in cuts 
-	if :LIFT in benders_cuts
-		graph = node.bgraph
-    	for index in 1:length(graph.nodes)
-      		node = graph.nodes[index]
-      		node.attributes[:LP_stalled] = false 
-      		node.attributes[:stalled] = false
-      		if in_degree(graph, node) != 0 
-        		setCGLP(node, graph)
-      		end
-    	end
-	end
 
 	return newnode
 end

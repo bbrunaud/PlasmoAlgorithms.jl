@@ -5,7 +5,7 @@ using BARON
 #sets
 products = 1:3
 events = 1:3
-scenarios = 1:3
+scenarios = 1:27
 realizations = 1:3
 # NOTE: Use |scenarios| = |realizations| or |realizations|^2 or |realizations|^3
 
@@ -43,10 +43,11 @@ ProductionLength_lower =
 	1
 	1]
 
-ProductionLength_upper =
-	[40
-	40
-	40]
+# ProductionLength_upper =
+# 	[40
+# 	40
+# 	40]
+ProductionLength_upper = ones(3) * 10
 
 ProductDemand_nominal = 
 	[4190
@@ -146,6 +147,30 @@ DemandPerDay = ProductDemand/NumDaysInYear
 TotalDemandPerDay[:] = sum(DemandPerDay[i, :] for i in 1:length(products));
 CampaignVariableCost = CampaignVariableCost/NumDaysInYear;
 
+
+#Preprocessing compute the bounds of costPerTon and cycleTime
+include("bound.jl")
+costPerTon_ub = zeros(length(scenarios))
+costPerTon_lb = zeros(length(scenarios))
+cycleTime_ub = zeros(length(scenarios))
+cycleTime_lb = zeros(length(scenarios))
+for h in scenarios
+	subproblem = generate_boundsub(prob = prob[h], DemandPerDay = DemandPerDay[:, h], TotalDemandPerDay=TotalDemandPerDay[h])
+	costPerTon = getindex(subproblem, :costPerTon)
+	@objective(subproblem, Min, costPerTon)
+	solve(subproblem)
+	costPerTon_lb[h] = getvalue(costPerTon)
+	@objective(subproblem, Max, costPerTon)
+	solve(subproblem)
+	costPerTon_ub[h] = getvalue(costPerTon)
+	cycleTime = getindex(subproblem, :cycleTime)
+	@objective(subproblem, Min, cycleTime)
+	solve(subproblem)
+	cycleTime_lb[h] = getvalue(cycleTime)
+	@objective(subproblem, Max, cycleTime)
+	solve(subproblem)
+	cycleTime_ub[h] = getvalue(cycleTime)
+end
 
 
 

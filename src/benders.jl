@@ -33,7 +33,7 @@ function bendersolve(graph::Plasmo.PlasmoGraph; max_iterations::Int64=10, cuts::
   verbose && info("Preparing graph")
   bdprepare(graph, cuts)
   n = graph.attributes[:normalized]
-  if isnan(LB)
+  if isnan(LB) && (!is_nonconvex)
     verbose && info("Solve relaxation and set LB")
     mf = graph.attributes[:mflat]
     solve(mf,relaxation=true)
@@ -216,7 +216,7 @@ function takex(node::PlasmoNode, graph::PlasmoGraph)
     return true
   end
   xinvals = node.attributes[:xin]
-  # println(xinvals)
+
   xinvars = node.attributes[:xinvars]
   if length(xinvals) > 0
     fix.(xinvars,xinvals)
@@ -233,6 +233,18 @@ function putx(node::PlasmoNode,graph::PlasmoGraph)
 
   for child in children
     xnode = getvalue(childvars[getnodeindex(graph,child)])
+    #round xnode to bounds (sometimes numerical errors can occur)
+    for i in 1:length(childvars[getnodeindex(graph,child)])
+      var = childvars[getnodeindex(graph,child)][i]
+      ub = getupperbound(var)
+      lb = getlowerbound(var)
+      if xnode[i] > ub 
+        xnode[i] = ub 
+      end
+      if xnode[i] < lb 
+        xnode[i] = lb 
+      end
+    end
     child.attributes[:xin] = xnode
   end
 end
@@ -390,13 +402,15 @@ function bdprepare(graph::Plasmo.PlasmoGraph, cuts::Array{Symbol,1}=[:LP])
   identifylevels(graph)
   graph.attributes[:normalized] = normalizegraph(graph)
   graph.attributes[:stalled] = false
-  graph.attributes[:mflat] = create_flat_graph_model(graph)
+  if !graph.attributes[:is_nonconvex]
+    graph.attributes[:mflat] = create_flat_graph_model(graph)
+    setsolver(graph.attributes[:mflat],graph.solver)
+  end
   graph.attributes[:UB] = Inf
   graph.attributes[:global_UB] = +Inf
   graph.attributes[:fathomed_by_bound] = false
   graph.attributes[:is_infeasible] = false
   graph.attributes[:cuts] = cuts
-  setsolver(graph.attributes[:mflat],graph.solver)
 
   links = getlinkconstraints(graph)
   numlinks = length(links)

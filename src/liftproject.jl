@@ -152,6 +152,7 @@ function solveliftandprojectrelaxation(node::PlasmoNode, graph::PlasmoGraph)
                 β = getindex(CGLP, :β)
                 @objective(CGLP, Min, sum(α[ii]*x_bar[ii] for ii in 1:n)  - β)
                 # Solve the Cut Generation problem
+                # println(CGLP)
                 CGLPstatus = solve(CGLP)
                 if CGLPstatus == :Optimal
                     #add cuts to model 
@@ -159,6 +160,9 @@ function solveliftandprojectrelaxation(node::PlasmoNode, graph::PlasmoGraph)
                     β_cut = getvalue(β)
                     @constraint(model, sum(α_cut[i]*vars[i]  for i in 1:n) >= β_cut)
                 else
+                    println(CGLPstatus)
+                    println(model)
+                    println(CGLP)
                     println("ERROR: ")
                     println("ERROR: Cut Generation Linear problem not Optimal")
                     println("ERROR: It is not possible to generate Lift-and-Project cuts")
@@ -169,10 +173,18 @@ function solveliftandprojectrelaxation(node::PlasmoNode, graph::PlasmoGraph)
         end
 
         if num_frac >0 
-            solve(model, relaxation = true)
+            status = solve(model, relaxation = true)
         end
     end
-
+    if status != :Optimal
+        println("xin values")
+        xinvals = node.attributes[:xin]
+        println(xinvals)
+        println("bounds")
+        println(model.colUpper[1:5])
+        println(model.colLower[1:5])
+        error("subproblem not solved to optimality")
+    end
     dualconstraints = node.attributes[:linkconstraints]
     λnode = getdual(dualconstraints)
     nodebound = getobjectivevalue(model)

@@ -48,7 +48,7 @@ function lagrangesolve(graph;
     end
     if Zk > graph.attributes[:LB]
       graph.attributes[:LB] = Zk
-      graph.attributes[:best_λ] = λ
+      graph.attributes[:best_λ] = deepcopy(λ)
     end 
 
     if graph.attributes[:LB] > graph.attributes[:global_UB]
@@ -268,8 +268,24 @@ function solvenode(graph, node,λ,x,variant=:default)
   push!(node.attributes[:μ], new_μ)
 
   # Optional: If my residuals are zero, do nothing
+  status = :ok
+  try 
+    status = solve(m)
+  catch 
+    graph.attributes[:is_infeasible] = true
+    println(m.obj)
+    for constr in m.linconstr 
+      println(constr)
+    end 
+    for ii in 1:length(m.colUpper)
+      print(m.colNames[ii])
+      print(", ")
+      print(m.colUpper[ii])
+      print(", ")
+      println(m.colLower[ii])
+    end
+  end
 
-  status = solve(m)
   if status == :Infeasible
     println(status)
     graph.attributes[:is_infeasible] = true
@@ -333,8 +349,17 @@ function subgradient(graph,λ,res,lagrangeheuristic)
   if bound < graph.attributes[:UB]
     graph.attributes[:UB] = bound
   end
-  step = α*abs(graph.attributes[:UB]-graph.attributes[:LB])/(norm(res)^2)
+  step = α*abs(graph.attributes[:UB]-graph.attributes[:LB])/(norm(res)^2) 
   λ += step*res
+  # println("res=======")
+  # println(res)
+  # println("UB")
+  # println(graph.attributes[:UB])
+  # println("LB")
+  # println(graph.attributes[:LB])
+  # println("step")
+  # println(step)
+
   return λ,bound
 end
 

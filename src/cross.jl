@@ -44,24 +44,46 @@ function crosssolve(bgraph::Plasmo.PlasmoGraph, lgraph::Plasmo.PlasmoGraph;
 			end
 		else
 			results[:LB] = +Inf 
-			results[:UB] = 0
+			results[:UB] = 1e8
 			results[:best_avg_x] = []
 			results[:best_feasible_x] = []
 			return results
 		end
+		results[:LB] = bgraph.attributes[:LB]
+		results[:best_avg_x] = lgraph.attributes[:best_avg_x]
+		if lgraph.attributes[:UB] < bgraph.attributes[:UB]
+			results[:UB] = lgraph.attributes[:UB]
+			results[:best_feasible_x] = lgraph.attributes[:best_feasible_x]
+			results[:best_solution_source] = :lgraph
+		else 
+			results[:UB] = bgraph.attributes[:UB]
+			results[:best_feasible_x] = bgraph.attributes[:best_feasible_x]
+			results[:best_solution_source] = :bgraph
+		end		
 	end
-	
-	results[:LB] = bgraph.attributes[:LB]
-	results[:best_avg_x] = lgraph.attributes[:best_avg_x]
-	if lgraph.attributes[:UB] < bgraph.attributes[:UB]
+
+	if heuristic == :lagonly
+		solution = lagrangesolve(lgraph, max_iterations=max_iterations_lag, ϵ=ϵ, rel_gap=rel_gap, initialmultipliers=lag_initialmultipliers, lagrangeheuristic=lagrangeheuristic,  maxnoimprove = lag_maxnoimprove, δ = lag_δ, α = lag_α, cpbound = lag_cpbound )
+		results[:lagrangean_time] += solution.clocktime[end]
+		if !lgraph.attributes[:is_infeasible]
+			if !haskey(bgraph.attributes,:preprocessed)
+				solution = bendersolve(bgraph, cuts=benders_cuts, max_iterations=1, is_nonconvex=is_nonconvex, timelimit=benders_timelimit, LB=benders_LB, ϵ=ϵ, rel_gap=rel_gap, UBupdatefrequency=benders_UBupdatefrequency, verbose=benders_verbose)
+			end
+		else
+			results[:LB] = +Inf 
+			results[:UB] = 1e8
+			results[:best_avg_x] = []
+			results[:best_feasible_x] = []
+			return results
+		end
+		results[:best_avg_x] = lgraph.attributes[:best_avg_x]
+		results[:LB] = lgraph.attributes[:LB]
 		results[:UB] = lgraph.attributes[:UB]
 		results[:best_feasible_x] = lgraph.attributes[:best_feasible_x]
 		results[:best_solution_source] = :lgraph
-	else 
-		results[:UB] = bgraph.attributes[:UB]
-		results[:best_feasible_x] = bgraph.attributes[:best_feasible_x]
-		results[:best_solution_source] = :bgraph
 	end
+
+
 	return results
 end
 
