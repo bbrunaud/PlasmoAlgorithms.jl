@@ -5,6 +5,8 @@ function generate_model()
 	@variable(m, pickCrude[c in crudes], Bin)
 
 	@variable(m, crudeQuantity[c in crudes]>=0)
+	@variable(m, slack1[c in crudes, h in scenarios]>=0)
+	@variable(m, slack2[c in crudes, h in scenarios]>=0)
 	@variable(m, Reformer95_lower<=flow_Reformer95[h in scenarios]<=Reformer_capacity)
 	@variable(m, 0<=flow_Reformer100[h in scenarios]<=Reformer_capacity - Reformer95_lower)
 	@variable(m, 0<=flow_Cracker_Mogas[h in scenarios]<=Cracker_capacity)
@@ -68,7 +70,7 @@ function generate_model()
 						Desulphurisation_fraction2[2]*flow_Desulphurisation_CGO[h] -
 						flow_Burn[1,h] +
 						sum(
-							Crude_yield_data[c,1,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels +
+							Crude_yield_data[c,1,h]*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels +
 							Desulphurisation_fraction[c,2]*flow_Desulphurisation_1[c,h]  for c in crudes
 						) == 0)
 
@@ -80,7 +82,7 @@ function generate_model()
 						flow_LG_producing[h] - flow_PG98[1,h] -
 						flow_ES95[1,h] - flow_Burn[2,h] +
 						sum(
-							Crude_yield_data[c,2,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,2,h]*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
 						) == 0)
 
 
@@ -89,7 +91,7 @@ function generate_model()
 						flow_Isomerisation[h] - flow_JPF[1,h]*JPF_fraction[1,1] -
 						flow_JPF[2,h]*JPF_fraction[1,2] +
 						sum(
-							Crude_yield_data[c,3,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,3,h]*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
 						) == 0)
 
 
@@ -97,7 +99,7 @@ function generate_model()
 						flow_JPF[2,h]*JPF_fraction[2,2] -
 						flow_Reformer95[h] - flow_Reformer100[h] +
 						sum(
-							Crude_yield_data[c,4,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,4,h]*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
 						) == 0)
 
 
@@ -105,21 +107,21 @@ function generate_model()
 						flow_JPF[2,h]*JPF_fraction[3,2] -
 						flow_AGO_3[1,h] +
 						sum(
-							Crude_yield_data[c,5,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,5,h]*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
 						) == 0)
 
 
 	@constraint(m, Mass_balance7[h in scenarios], -flow_Cracker_Mogas[h] - flow_Cracker_AGO[h] +
 						sum(
-							Crude_yield_data[c,7,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,7,h]*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
 						) == 0)
 
 
 	@constraint(m, GO_balance[c in crudes,h in scenarios], -flow_AGO_1[c,h] - flow_Desulphurisation_1[c,h] - flow_HF_3[c,h] +
-						Crude_yield_data[c,6,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels == 0)
+						Crude_yield_data[c,6,h]*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels == 0)
 
 
-	@constraint(m, VR_balance[c in crudes,h in scenarios], 	Crude_yield_data[c,8,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels == flow_HF_1[c,h])
+	@constraint(m, VR_balance[c in crudes,h in scenarios], 	Crude_yield_data[c,8,h]*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels == flow_HF_1[c,h])
 
 
 	@constraint(m, Desulphurisation_balance[c in crudes,h in scenarios], Desulphurisation_fraction[c,1]*flow_Desulphurisation_1[c,h] == flow_AGO_2[c,h])
@@ -253,7 +255,7 @@ function generate_model()
 
 	@constraint(m, LG_balance[h in scenarios], 	sum(blin_CDU_LG[k,h] for k in LG_out) ==
 						sum(
-							Crude_yield_data[c,2,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels
+							Crude_yield_data[c,2,h]*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels
 						for c in crudes))
 
 
@@ -450,7 +452,7 @@ function generate_model()
 						flow_Isomerisation[h]*Isomerisation_fraction[3] -
 						flow_Desulphurisation_CGO[h]*Desulphurisation_fraction2[3] - 15.2 -
 						sum(
-							0.018*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels +
+							0.018*(crudeQuantity[c] + slack1[c,h] - slack2[c,h])*BarrelToKT[c]/GranularityOfBarrels +
 							flow_Desulphurisation_1[c,h]*Desulphurisation_fraction[c,3] for c in crudes
 						) >= 0)
 
@@ -478,7 +480,7 @@ function generate_model()
 									AGO_sale*flow_AGO_2[c,h] -
 									HF_sale*flow_HF_1[c,h] -
 									HF_sale*flow_HF_3[c,h] +
-									(crudeQuantity[c]/1000)*(Crude_price[c]+1) for c in crudes
+									((crudeQuantity[c] + 100 * slack1[c,h] + 100*slack2[c,h])/1000)*(Crude_price[c]+1) for c in crudes
 								) -
 								sum(
 									PG98_sale*flow_PG98[k,h] +
