@@ -1,45 +1,45 @@
 include("input.jl")
 function generate_model()
 	
-
+	m = Model(solver=BaronSolver(maxtime=1e4, epsr= 1e-5, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
 	@variable(m, pickCrude[c in crudes], Bin)
 
-	@variable(m, crudeQuantity[c]>=0)
-	@variable(m, flow_Reformer95[h in scenarios]>=0)
-	@variable(m, flow_Reformer100[h in scenarios]>=0)
-	@variable(m, flow_Cracker_Mogas[h in scenarios]>=0)
-	@variable(m, flow_Cracker_AGO[h in scenarios]>=0)
-	@variable(m, flow_Isomerisation[h in scenarios]>=0)
-	@variable(m, flow_Desulph in scenariosurisation_CGO[h in scenarios]>=0)
-	@variable(m, flow_LG_producing[h in scenarios]>=0)
-	@variable(m, flow_LN_producing[h in scenarios]>=0)
-	@variable(m, flow_HF_2[h in scenarios]>=0)
-	@variable(m, volume_PG98[h in scenarios]>=0)
-	@variable(m, volume_ES95[h in scenarios]>=0)
-	@variable(m, volume_HF[h in scenarios]>=0)
+	@variable(m, crudeQuantity[c in crudes]>=0)
+	@variable(m, Reformer95_lower<=flow_Reformer95[h in scenarios]<=Reformer_capacity)
+	@variable(m, 0<=flow_Reformer100[h in scenarios]<=Reformer_capacity - Reformer95_lower)
+	@variable(m, 0<=flow_Cracker_Mogas[h in scenarios]<=Cracker_capacity)
+	@variable(m, 0<=flow_Cracker_AGO[h in scenarios]<=Cracker_capacity)
+	@variable(m, 0<=flow_Isomerisation[h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=flow_Desulphurisation_CGO[h in scenarios]<=Cracker_capacity)
+	@variable(m, 0<=flow_LG_producing[h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=flow_LN_producing[h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=flow_HF_2[h in scenarios]<=Cracker_capacity)
+	@variable(m, 0<=volume_PG98[h in scenarios]<=CDU_capacity/Density_PG98_input[1])
+	@variable(m, 0<=volume_ES95[h in scenarios]<=CDU_capacity/Density_PG98_input[1])
+	@variable(m, 0<=volume_HF[h in scenarios]<=CDU_capacity/GO_density[7])
 
-	@variable(m, blin_CDU_LG[k in LG_out,h in scenarios]>=0)
-	@variable(m, blin_Reformer95_LG[k in LG_out,h in scenarios]>=0)
-	@variable(m, blin_Reformer100_LG[k in LG_out,h in scenarios]>=0)
-	@variable(m, blin_Mogas_LG[k in LG_out,h in scenarios]>=0)
-	@variable(m, blin_AGO_LG[k in LG_out,h in scenarios]>=0)
-	@variable(m, blin_Cracker_Mogas[Cr_CGO,h in scenarios]>=0)
-	@variable(m, blin_Cracker_AGO[Cr_CGO,h in scenarios]>=0)
+	@variable(m, 0<=blin_CDU_LG[k in LG_out,h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=blin_Reformer95_LG[k in LG_out,h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=blin_Reformer100_LG[k in LG_out,h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=blin_Mogas_LG[k in LG_out,h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=blin_AGO_LG[k in LG_out,h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=blin_Cracker_Mogas[k in Cr_CGO,h in scenarios]<=Cracker_capacity)
+	@variable(m, 0<=blin_Cracker_AGO[k in Cr_CGO,h in scenarios]<=Cracker_capacity)
 
-	@variable(m, flow_Desulphurisation_1[c in crudes, h in scenarios]>=0)
-	@variable(m, flow_AGO_1[c in crudes, h in scenarios]>=0)
-	@variable(m, flow_AGO_2[c in crudes, h in scenarios]>=0)
-	@variable(m, flow_HF_1[c in crudes, h in scenarios]>=0)
-	@variable(m, flow_HF_3[c in crudes, h in scenarios]>=0)
-	@variable(m, flow_Burn[k in Burn,h in scenarios]>=0)
-	@variable(m, flow_PG98[k in PG98_in,h in scenarios]>=0)
-	@variable(m, flow_ES95[k in PG98_in,h in scenarios]>=0)
-	@variable(m, flow_AGO_3[k in AGO_in,h in scenarios]>=0)
-	@variable(m, flow_JPF[k in JPF_out,h in scenarios]>=0)
-	@variable(m, flow_Import[p in products,h in scenarios]>=0)
-	@variable(m, fraction_LG[k in LG_in,h in scenarios]>=0)
-	@variable(m, fraction_CGO[k in Cr_mode,h in scenarios>=0)
-	@variable(m, objvar)
+	@variable(m, 0<=flow_Desulphurisation_1[c in crudes, h in scenarios]<=Desulphurisation_capacity)
+	@variable(m, 0<=flow_AGO_1[c in crudes, h in scenarios]<=Crude_upper_bound[c])
+	@variable(m, 0<=flow_AGO_2[c in crudes, h in scenarios]<=Desulphurisation_capacity)
+	@variable(m, 0<=flow_HF_1[c in crudes, h in scenarios]<=Crude_upper_bound[c])
+	@variable(m, 0<=flow_HF_3[c in crudes, h in scenarios]<=Crude_upper_bound[c])
+	@variable(m, 0<=flow_Burn[k in Burn,h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=flow_PG98[k in PG98_in,h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=flow_ES95[k in PG98_in,h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=flow_AGO_3[k in AGO_in,h in scenarios]<=Cracker_capacity)
+	setupperbound.(flow_AGO_3[1, :], CDU_capacity)
+	@variable(m, 0<=flow_JPF[k in JPF_out,h in scenarios]<=CDU_capacity)
+	@variable(m, 0<=flow_Import[p in products,h in scenarios]<=Import_upper[p])
+	@variable(m, 0<=fraction_LG[k in LG_in,h in scenarios]<=1)
+	@variable(m, 0<=fraction_CGO[k in Cr_mode,h in scenarios]<=1)
 
 
 
@@ -51,10 +51,10 @@ function generate_model()
 	@constraint(m, CDU_capacity_bound, 	sum(crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels for c in crudes) <= CDU_capacity)
 
 
-	@constraint(m, Crude_selection[c], crudeQuantity[c] >= pickCrude[c]*Barrel_lower_bound)
+	@constraint(m, Crude_selection[c in crudes], crudeQuantity[c] >= pickCrude[c]*Barrel_lower_bound)
 
 
-	@constraint(m, Crude_bound[c], 	CrudeQuantity[c] <= pickCrude[c]*Barrel_upper_bound)
+	@constraint(m, Crude_bound[c in crudes], 	crudeQuantity[c] <= pickCrude[c]*Barrel_upper_bound)
 
 
 	@constraint(m, Desulphurisation_capacity_bound[h in scenarios], flow_Desulphurisation_CGO[h] + sum(flow_Desulphurisation_1[c,h] for c in crudes) <= Desulphurisation_capacity)
@@ -115,14 +115,14 @@ function generate_model()
 						) == 0)
 
 
-	@constraint(m, GO_balance[c,h], -flow_AGO_1[c,h] - flow_Desulphurisation_1[c,h] - flow_HF_3[c,h] +
+	@constraint(m, GO_balance[c in crudes,h in scenarios], -flow_AGO_1[c,h] - flow_Desulphurisation_1[c,h] - flow_HF_3[c,h] +
 						Crude_yield_data[c,6,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels == 0)
 
 
-	@constraint(m, VR_balance[c,h], 	Crude_yield_data[c,8,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels == flow_HF_1[c,h])
+	@constraint(m, VR_balance[c in crudes,h in scenarios], 	Crude_yield_data[c,8,h]*crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels == flow_HF_1[c,h])
 
 
-	@constraint(m, Desulphurisation_balance[c,h], Desulphurisation_fraction[c,1]*flow_Desulphurisation_1[c,h] == flow_AGO_2[c,h])
+	@constraint(m, Desulphurisation_balance[c in crudes,h in scenarios], Desulphurisation_fraction[c,1]*flow_Desulphurisation_1[c,h] == flow_AGO_2[c,h])
 
 
 	@constraint(m, Reformer95_balance[h in scenarios], 	flow_Reformer95[h]*Reformer_fraction[1,3] +
@@ -135,13 +135,13 @@ function generate_model()
 								flow_PG98[5,h] + flow_ES95[5,h])
 
 
-	@constraint(m, Isomerisation_balance[h in scenarios], flow_Isomerisation[h]*Isomerisation_fraction[2] ==)
-								flow_PG98[2,h] + flow_ES95[2,h]
+	@constraint(m, Isomerisation_balance[h in scenarios], flow_Isomerisation[h]*Isomerisation_fraction[2] ==
+								flow_PG98[2,h] + flow_ES95[2,h])
 
 
 	@constraint(m, CN_balance[h in scenarios], 	flow_Cracker_Mogas[h]*Cracker_fraction[1,3] +
-						flow_Cracker_AGO[h]*Cracker_fraction[2,3] ==)
-						flow_PG98[6,h] + flow_ES95[6,h]
+						flow_Cracker_AGO[h]*Cracker_fraction[2,3] ==
+						flow_PG98[6,h] + flow_ES95[6,h])
 
 
 	@constraint(m, CGO_balance[h in scenarios], 	flow_Cracker_Mogas[h]*Cracker_fraction[1,4] +
@@ -191,64 +191,64 @@ function generate_model()
 								0.03*flow_Import[1,h]/Density_products[2] <= 0.05*volume_PG98[h])
 
 
-	@constraint(m, blincon_CDU_LG1[h in scenarios], blin_CDU_LG[1,h] == fraction_LG[1,h]*flow_ES95[1,h])
+	@NLconstraint(m, blincon_CDU_LG1[h in scenarios], blin_CDU_LG[1,h] == fraction_LG[1,h]*flow_ES95[1,h])
 
 
-	@constraint(m, blincon_CDU_LG2[h in scenarios], blin_CDU_LG[2,h] == fraction_LG[1,h]*flow_PG98[1,h])
+	@NLconstraint(m, blincon_CDU_LG2[h in scenarios], blin_CDU_LG[2,h] == fraction_LG[1,h]*flow_PG98[1,h])
 
 
-	@constraint(m, blincon_CDU_LG3[h in scenarios], blin_CDU_LG[3,h] == fraction_LG[1,h]*flow_Burn[2,h])
+	@NLconstraint(m, blincon_CDU_LG3[h in scenarios], blin_CDU_LG[3,h] == fraction_LG[1,h]*flow_Burn[2,h])
 
 
-	@constraint(m, blincon_CDU_LG4[h in scenarios], blin_CDU_LG[4,h] == fraction_LG[1,h]*flow_LG_producing[h])
+	@NLconstraint(m, blincon_CDU_LG4[h in scenarios], blin_CDU_LG[4,h] == fraction_LG[1,h]*flow_LG_producing[h])
 
 
-	@constraint(m, blincon_Reformer95_LG1[h in scenarios], blin_Reformer95_LG[1,h] == fraction_LG[2,h]*flow_ES95[1,h])
+	@NLconstraint(m, blincon_Reformer95_LG1[h in scenarios], blin_Reformer95_LG[1,h] == fraction_LG[2,h]*flow_ES95[1,h])
 
 
-	@constraint(m, blincon_Reformer95_LG2[h in scenarios], blin_Reformer95_LG[2,h] == fraction_LG[2,h]*flow_PG98[1,h])
+	@NLconstraint(m, blincon_Reformer95_LG2[h in scenarios], blin_Reformer95_LG[2,h] == fraction_LG[2,h]*flow_PG98[1,h])
 
 
-	@constraint(m, blincon_Reformer95_LG3[h in scenarios], blin_Reformer95_LG[3,h] == fraction_LG[2,h]*flow_Burn[2,h])
+	@NLconstraint(m, blincon_Reformer95_LG3[h in scenarios], blin_Reformer95_LG[3,h] == fraction_LG[2,h]*flow_Burn[2,h])
 
 
-	@constraint(m, blincon_Reformer95_LG4[h in scenarios], blin_Reformer95_LG[4,h] == fraction_LG[2,h]*flow_LG_producing[h])
+	@NLconstraint(m, blincon_Reformer95_LG4[h in scenarios], blin_Reformer95_LG[4,h] == fraction_LG[2,h]*flow_LG_producing[h])
 
 
-	@constraint(m, blincon_Reformer100_LG1[h in scenarios], blin_Reformer100_LG[1,h] == fraction_LG[3,h]*flow_ES95[1,h])
+	@NLconstraint(m, blincon_Reformer100_LG1[h in scenarios], blin_Reformer100_LG[1,h] == fraction_LG[3,h]*flow_ES95[1,h])
 
 
-	@constraint(m, blincon_Reformer100_LG2[h in scenarios], blin_Reformer100_LG[2,h] == fraction_LG[3,h]*flow_PG98[1,h])
+	@NLconstraint(m, blincon_Reformer100_LG2[h in scenarios], blin_Reformer100_LG[2,h] == fraction_LG[3,h]*flow_PG98[1,h])
 
 
-	@constraint(m, blincon_Reformer100_LG3[h in scenarios], blin_Reformer100_LG[3,h] == fraction_LG[3,h]*flow_Burn[2,h])
+	@NLconstraint(m, blincon_Reformer100_LG3[h in scenarios], blin_Reformer100_LG[3,h] == fraction_LG[3,h]*flow_Burn[2,h])
 
 
-	@constraint(m, blincon_Reformer100_LG4[h in scenarios], blin_Reformer100_LG[4,h] == fraction_LG[3,h]*flow_LG_producing[h])
+	@NLconstraint(m, blincon_Reformer100_LG4[h in scenarios], blin_Reformer100_LG[4,h] == fraction_LG[3,h]*flow_LG_producing[h])
 
 
-	@constraint(m, blincon_Mogas_LG1[h in scenarios], blin_Mogas_LG[1,h] == fraction_LG[4,h]*flow_ES95[1,h])
+	@NLconstraint(m, blincon_Mogas_LG1[h in scenarios], blin_Mogas_LG[1,h] == fraction_LG[4,h]*flow_ES95[1,h])
 
 
-	@constraint(m, blincon_Mogas_LG2[h in scenarios], blin_Mogas_LG[2,h] == fraction_LG[4,h]*flow_PG98[1,h])
+	@NLconstraint(m, blincon_Mogas_LG2[h in scenarios], blin_Mogas_LG[2,h] == fraction_LG[4,h]*flow_PG98[1,h])
 
 
-	@constraint(m, blincon_Mogas_LG3[h in scenarios], blin_Mogas_LG[3,h] == fraction_LG[4,h]*flow_Burn[2,h])
+	@NLconstraint(m, blincon_Mogas_LG3[h in scenarios], blin_Mogas_LG[3,h] == fraction_LG[4,h]*flow_Burn[2,h])
 
 
-	@constraint(m, blincon_Mogas_LG4[h in scenarios], blin_Mogas_LG[4,h] == fraction_LG[4,h]*flow_LG_producing[h])
+	@NLconstraint(m, blincon_Mogas_LG4[h in scenarios], blin_Mogas_LG[4,h] == fraction_LG[4,h]*flow_LG_producing[h])
 
 
-	@constraint(m, blincon_AGO_LG1[h in scenarios], blin_AGO_LG[1,h] == fraction_LG[5,h]*flow_ES95[1,h])
+	@NLconstraint(m, blincon_AGO_LG1[h in scenarios], blin_AGO_LG[1,h] == fraction_LG[5,h]*flow_ES95[1,h])
 
 
-	@constraint(m, blincon_AGO_LG2[h in scenarios], blin_AGO_LG[2,h] == fraction_LG[5,h]*flow_PG98[1,h])
+	@NLconstraint(m, blincon_AGO_LG2[h in scenarios], blin_AGO_LG[2,h] == fraction_LG[5,h]*flow_PG98[1,h])
 
 
-	@constraint(m, blincon_AGO_LG3[h in scenarios], blin_AGO_LG[3,h] == fraction_LG[5,h]*flow_Burn[2,h])
+	@NLconstraint(m, blincon_AGO_LG3[h in scenarios], blin_AGO_LG[3,h] == fraction_LG[5,h]*flow_Burn[2,h])
 
 
-	@constraint(m, blincon_AGO_LG4[h in scenarios], blin_AGO_LG[4,h] == fraction_LG[5,h]*flow_LG_producing[h])
+	@NLconstraint(m, blincon_AGO_LG4[h in scenarios], blin_AGO_LG[4,h] == fraction_LG[5,h]*flow_LG_producing[h])
 
 
 	@constraint(m, LG_balance[h in scenarios], 	sum(blin_CDU_LG[k,h] for k in LG_out) ==
@@ -368,22 +368,22 @@ function generate_model()
 							(LG_parameters[2,5] - LG_parameters[3,5])*blin_AGO_LG[1,h]/Density_PG98_input[1] <= 0)
 
 
-	@constraint(m, blincon_Cracker_Mogas1[h in scenarios], blin_Cracker_Mogas[1,h] == fraction_CGO[1,h]*flow_AGO_3[2,h])
+	@NLconstraint(m, blincon_Cracker_Mogas1[h in scenarios], blin_Cracker_Mogas[1,h] == fraction_CGO[1,h]*flow_AGO_3[2,h])
 
 
-	@constraint(m, blincon_Cracker_Mogas2[h in scenarios], blin_Cracker_Mogas[2,h] == fraction_CGO[1,h]*flow_HF_2[h])
+	@NLconstraint(m, blincon_Cracker_Mogas2[h in scenarios], blin_Cracker_Mogas[2,h] == fraction_CGO[1,h]*flow_HF_2[h])
 
 
-	@constraint(m, blincon_Cracker_Mogas3[h in scenarios], blin_Cracker_Mogas[3,h] == fraction_CGO[1,h]*flow_Desulphurisation_CGO[h])
+	@NLconstraint(m, blincon_Cracker_Mogas3[h in scenarios], blin_Cracker_Mogas[3,h] == fraction_CGO[1,h]*flow_Desulphurisation_CGO[h])
 
 
-	@constraint(m, blincon_Cracker_AGO1[h in scenarios], blin_Cracker_AGO[1,h] == fraction_CGO[2,h]*flow_AGO_3[2,h])
+	@NLconstraint(m, blincon_Cracker_AGO1[h in scenarios], blin_Cracker_AGO[1,h] == fraction_CGO[2,h]*flow_AGO_3[2,h])
 
 
-	@constraint(m, blincon_Cracker_AGO2[h in scenarios], blin_Cracker_AGO[2,h] == fraction_CGO[2,h]*flow_HF_2[h])
+	@NLconstraint(m, blincon_Cracker_AGO2[h in scenarios], blin_Cracker_AGO[2,h] == fraction_CGO[2,h]*flow_HF_2[h])
 
 
-	@constraint(m, blincon_Cracker_AGO3[h in scenarios], blin_Cracker_AGO[3,h] == fraction_CGO[2,h]*flow_Desulphurisation_CGO[h])
+	@NLconstraint(m, blincon_Cracker_AGO3[h in scenarios], blin_Cracker_AGO[3,h] == fraction_CGO[2,h]*flow_Desulphurisation_CGO[h])
 
 
 	@constraint(m, Cracker_Mogas_CGO_balance[h in scenarios], blin_Cracker_Mogas[1,h] + blin_Cracker_Mogas[2,h] +
@@ -429,16 +429,16 @@ function generate_model()
 								33*volume_HF[h] <= 0)
 
 
-	@constraint(m, AGO_sulphur_balance[h in scenarios], 	flow_Import[4,h]*Product_sulphur[4] - Sulphur_spec*flow_Import[4,h] +
+	@constraint(m, AGO_sulphur_balance[h in scenarios], 	flow_Import[4,h]*Product_Sulphur[4] - Sulphur_spec*flow_Import[4,h] +
 								sum(
 									(Sulphur_GO_data[c,h] - Sulphur_spec)*flow_AGO_1[c,h] +
 									(Sulphur_2[c,h] - Sulphur_spec)*flow_AGO_2[c,h] for c in crudes
 								) +
 								flow_AGO_3[1,h]*(Sulphur_3[1] - Sulphur_spec) +
-								blin_Cracker_AGO[1,h]*(AGO_sulphur - Sulphur_spec) +
-								blin_Cracker_Mogas[1,h]*(Mogas_sulphur - Sulphur_spec) +
-								blin_Cracker_AGO[3,h]*AGO_sulphur*0.005 +
-								blin_Cracker_Mogas[3,h]*Mogas_sulphur*0.005 -
+								blin_Cracker_AGO[1,h]*(AGO_Sulphur - Sulphur_spec) +
+								blin_Cracker_Mogas[1,h]*(Mogas_Sulphur - Sulphur_spec) +
+								blin_Cracker_AGO[3,h]*AGO_Sulphur*0.005 +
+								blin_Cracker_Mogas[3,h]*Mogas_Sulphur*0.005 -
 								Sulphur_spec*flow_AGO_3[3,h] <= 0)
 
 
@@ -462,7 +462,7 @@ function generate_model()
 
 
 
-   	@constraint(m, objfn, objvar == sum(prob[h]*(
+   	@objective(m, Min, sum(prob[h]*(
 								Cracker_Mogas_cost*flow_Cracker_Mogas[h] +
 								Cracker_AGO_cost*flow_Cracker_AGO[h] +
 								Reformer95_cost*flow_Reformer95[h] +
@@ -492,3 +492,8 @@ function generate_model()
 								)
 							) for h in scenarios))
 
+   	return m
+end
+
+model = generate_model()
+solve(model)

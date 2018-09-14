@@ -1,6 +1,6 @@
 include("input.jl")
 function generate_model()
-	m = Model(solver=BaronSolver(maxtime=1e4, epsr= 0.1, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
+	m = Model(solver=BaronSolver(maxtime=1e4, epsr= 1e-3, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
 	# m = Model(solver=IpoptSolver())
 	@variable(m, InventoryLowerBound[p]<=productTankSize[p in products]<=InventoryUpperBound[p])
 	@variable(m, 0<=campaignDuration[n in events, h in scenarios]<= maximum(ProductionLength_upper))

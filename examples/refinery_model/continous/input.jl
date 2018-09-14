@@ -1,3 +1,7 @@
+using JuMP
+using BARON 
+using CPLEX
+
 #define sets 
 crudes = 1:10 
 components = 1:8 
@@ -38,7 +42,7 @@ Mogas_viscosity  = 12.2
 AGO_viscosity  = 11.65 
 Mogas_Sulphur  = 2.1 
 AGO_Sulphur  = 1.68 
-Desulphurisation_CGO_cost,
+
 Isomerisation_cost  = 6 
 Reformer95_cost  = 2.7 
 Reformer100_cost  = 3.2 
@@ -55,12 +59,12 @@ Desulphurisation_CGO_cost = ((Mogas_Sulphur*109.0909 + 365.4546)/1000)*(0.85/0.1
 
 Reformer_fraction =[	
 	0.08  0.09  0.83  0     0.019 2.7
-	0.09  0.12  0     0.79  0.026 3.2
+	0.09  0.12  0     0.79  0.026 3.2]
 
 
 Cracker_fraction =[	
 	0.015 0.053 0.436 0.446 0.007 3.2
-	0.012 0.046 0.381 0.511 0.007 3.0
+	0.012 0.046 0.381 0.511 0.007 3.0]
 
 
 Desulphurisation_fraction =[	
@@ -102,20 +106,17 @@ LG_parameters =[
 
 #parameters 
 
-Isomerisation_fraction
-=[	0.03
+Isomerisation_fraction=[	0.03
 0.97
 0.04
 6.0]
 
-Desulphurisation_fraction2
-=[	0.96
+Desulphurisation_fraction2=[	0.96
 0.04
 0.02
 20.0]
 
-Crude_density
-=[	0.8441
+Crude_density=[	0.8441
 0.8910
 0.8441
 0.8369
@@ -128,8 +129,7 @@ Crude_density
 
 
 
-Sulphur_GO_nominal
-=[	0.157
+Sulphur_GO_nominal=[	0.157
 0.293
 0.162
 0.200
@@ -140,8 +140,7 @@ Sulphur_GO_nominal
 0.326
 	1.090]
 
-Crude_price
-=[	115.0
+Crude_price=[	115.0
 107.5
 109.7
 110.7
@@ -152,8 +151,7 @@ Crude_price
 109.4
 	104.09]
 
-Demand_quantity
-=[	5
+Demand_quantity=[	5
 0
 0
 100
@@ -161,16 +159,14 @@ Demand_quantity
 0
 0]
 
-Density_PG98_input
-=[	0.58
+Density_PG98_input=[	0.58
 0.665
 0.65
 0.77
 0.80
 0.75]
 
-Density_products
-=[	0.79
+Density_products=[	0.79
 0.76
 0.75
 0.87
@@ -178,8 +174,7 @@ Density_products
 0.54
 0.65]
 
-Product_VP
-=[	0.65
+Product_VP=[	0.65
 0.65
 0
 0
@@ -187,8 +182,7 @@ Product_VP
 0
 0]
 
-Product_RON
-=[	105
+Product_RON=[	105
 100
 0
 0
@@ -196,8 +190,7 @@ Product_RON
 0
 0]
 
-Product_MON
-=[	100
+Product_MON=[	100
 96
 0
 0
@@ -205,8 +198,7 @@ Product_MON
 0
 0]
 
-Product_Sulphur
-=[	0
+Product_Sulphur=[	0
 0
 0.001
 0
@@ -214,8 +206,7 @@ Product_Sulphur
 0
 0]
 
-Import_upper
-=[	0
+Import_upper=[	0
 0
 0
 0
@@ -223,32 +214,28 @@ Import_upper
 0
 0]
 
-RON
-=[	0
+RON=[	0
 91
 71
 95
 100
 93]
 
-MON
-=[	0
+MON=[	0
 86
 68
 86
 91
 82]
 
-VP
-=[	0
+VP=[	0
 0.4
 0.8
 0.5
 0.5
 0.65]
 
-HFO_density
-=[	0.9385
+HFO_density=[	0.9385
 0.9682
 0.9423
 0.9433
@@ -259,8 +246,7 @@ HFO_density
 0.9562
 	0.9685]
 
-GO_density
-=[	0.8506
+GO_density=[	0.8506
 0.8590
 0.8413
 0.8450
@@ -271,8 +257,7 @@ GO_density
 0.8477
 	0.8558]
 
-Viscosity_HF1
-=[	32.5
+Viscosity_HF1=[	32.5
 69.6
 38.2
 42.7
@@ -283,8 +268,7 @@ Viscosity_HF1
 53.5
 	55.2]
 
-Viscosity_HF3
-=[	2.52
+Viscosity_HF3=[	2.52
 2.92
 2.61
 2.56
@@ -298,8 +282,7 @@ Viscosity_HF3
 Viscosity_products = zeros(length(products))
 Viscosity_products[4] = 31.5
 
-Sulphur_3
-=[	0.1]
+Sulphur_3 =[	0.1]
 
 BarrelToKT = zeros(length(crudes))
 Sulphur_GO_stdev = zeros(length(crudes))
@@ -316,12 +299,12 @@ Crude_lower_bound = (Barrel_lower_bound/GranularityOfBarrels)*BarrelToKT;
 Crude_upper_bound = (Barrel_upper_bound/GranularityOfBarrels)*BarrelToKT;
 
 
-scenarios = 1:20
-include("refinery1_data/20.jl")
+scenarios = 1:5
+include("refinery1_data/5.jl")
 
 Crude_yield_data = zeros(length(crudes), length(components), length(scenarios))
-Desulphurisation_cost = zeros(length(components), length(scenarios))
-Sulphur_2 = zeros(length(components), length(scenarios))
+Desulphurisation_cost = zeros(length(crudes), length(scenarios))
+Sulphur_2 = zeros(length(crudes), length(scenarios))
 
 for h in scenarios
 	for c in crudes
