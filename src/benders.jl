@@ -1,4 +1,4 @@
-include("liftproject.jl")
+include("dualliftproject.jl")
 include("gomory.jl")
 abstract type CutData end
 

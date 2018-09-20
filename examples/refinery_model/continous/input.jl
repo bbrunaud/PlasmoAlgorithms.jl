@@ -295,8 +295,8 @@ VaccuumResidue_nominal = Crude_yield[:,length(components)];
 VaccuumResidue_stdev = 0.1*VaccuumResidue_nominal;
 
 
-Crude_lower_bound = (Barrel_lower_bound/GranularityOfBarrels)*BarrelToKT;
-Crude_upper_bound = (Barrel_upper_bound/GranularityOfBarrels)*BarrelToKT;
+Crude_lower_bound =  (Barrel_lower_bound/GranularityOfBarrels)*BarrelToKT;
+Crude_upper_bound =   (Barrel_upper_bound/GranularityOfBarrels)*BarrelToKT;
 
 
 scenarios = 1:5

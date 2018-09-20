@@ -3,9 +3,9 @@ using CPLEX
 using Plasmo
 using PlasmoAlgorithms
 
-mp = Model(solver = CplexSolver())
-sp1 = Model(solver = CplexSolver())
-sp2 = Model(solver = CplexSolver())
+mp = Model(solver = CplexSolver(CPX_PARAM_SCRIND=0))
+sp1 = Model(solver = CplexSolver(CPX_PARAM_SCRIND=0))
+sp2 = Model(solver = CplexSolver(CPX_PARAM_SCRIND=0))
 
 
 @variable(mp,x1, Bin)
@@ -46,4 +46,4 @@ edge2 = Plasmo.add_edge(g,n1,n3)
 @linkconstraint(g, n1[:x1] == n3[:x1])
 
 
-bendersolve(g,max_iterations = 10, cuts =[:LP])
+bendersolve(g,max_iterations = 10, cuts =[:LIFT])

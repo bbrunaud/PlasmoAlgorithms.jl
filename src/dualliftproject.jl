@@ -9,45 +9,45 @@ function getmatrixform(node::PlasmoNode)
     RHS = conBounds[2]
     b = zeros(m)
 
-    # #rescale A and b 
-    # for i =1:m
-    #     smallest_abs = Inf
-    #     largest_abs = 0
-    #     for val in nonzeros(A[i,:]) 
-    #         if abs(val) > largest_abs 
-    #             largest_abs = abs(val)
-    #         end
-    #         if abs(val) < smallest_abs
-    #             smallest_abs = abs(val)
-    #         end
-    #     end
-    #     if largest_abs / smallest_abs >1e9 
-    #         warn("should try to rescale the primal problem")
-    #         println(sp.linconstr[i])
-    #     end
+    #rescale A and b 
+    for i =1:m
+        smallest_abs = Inf
+        largest_abs = 0
+        for val in nonzeros(A[i,:]) 
+            if abs(val) > largest_abs 
+                largest_abs = abs(val)
+            end
+            if abs(val) < smallest_abs
+                smallest_abs = abs(val)
+            end
+        end
+        if largest_abs / smallest_abs >1e9 
+            warn("should try to rescale the primal problem")
+            println(sp.linconstr[i])
+        end
 
-    #     if largest_abs > 1e4 
-    #         # println("initial A[i]")
-    #         # println(A[i,:])
-    #         A[i, :] = A[i, :] * (1e4/largest_abs) 
-    #         b[i] = b[i] * (1e4/largest_abs) 
-    #         LHS[i] = LHS[i] * (1e4/largest_abs) 
-    #         RHS[i] = RHS[i] * (1e4/largest_abs) 
-    #         # println("rescale A[i]")
-    #         # println(A[i,:])
-    #     end
+        if largest_abs > 1e4 
+            println("initial A[i]")
+            println(A[i,:])
+            A[i, :] = A[i, :] * (1e4/largest_abs) 
+            b[i] = b[i] * (1e4/largest_abs) 
+            LHS[i] = LHS[i] * (1e4/largest_abs) 
+            RHS[i] = RHS[i] * (1e4/largest_abs) 
+            println("rescale A[i]")
+            println(A[i,:])
+        end
 
-    #     if smallest_abs < 1e-4 
-    #         # println("initial A[i]")
-    #         # println(A[i,:])            
-    #         A[i, :] = A[i, :] * (1e-4 / smallest_abs) 
-    #         b[i] = b[i] * (1e-4 / smallest_abs) 
-    #         LHS[i] = LHS[i] * (1e-4 / smallest_abs) 
-    #         RHS[i] = RHS[i] * (1e-4 / smallest_abs) 
-    #         # println("rescale A[i]")
-    #         # println(A[i,:])            
-    #     end
-    # end
+        if smallest_abs < 1e-4 
+            println("initial A[i]")
+            println(A[i,:])            
+            A[i, :] = A[i, :] * (1e-4 / smallest_abs) 
+            b[i] = b[i] * (1e-4 / smallest_abs) 
+            LHS[i] = LHS[i] * (1e-4 / smallest_abs) 
+            RHS[i] = RHS[i] * (1e-4 / smallest_abs) 
+            println("rescale A[i]")
+            println(A[i,:])            
+        end
+    end
     # Re-arrenge Matrix in the canonical form Ax>=b
     # TO DO : handle equality constraits
     eq_counter = 0
@@ -148,30 +148,24 @@ function setCGLP(node::PlasmoNode, graph::PlasmoGraph)
         CGLP = Model()
         CGLP.solver = graph.solver
         @variables CGLP begin
-            y[1:n]
-            z[1:n]
-            λ>=0
-            μ>=0
-            η
-
+            α[1:n]
+            β
+            u[1:m_lp] >= 0
+            v[1:m_lp] >= 0
+            u0 >= 0
+            v0 >= 0
         end     
 
-        # CGLP formulation (Kilinc)
-        index = map_binary[var]      
+        # CGLP formulation (Balas)
+        ek = zeros(n)
+        ek[map_binary[var]] = 1         # Pick the disjunction on the j fractional variable
         # Convex Hull reformulation
-        @constraint(CGLP, primal1[row in 1:m_lp], sum(A_lp[row, ii]* y[ii] for ii in 1:n) + η >= λ * b_lp[row])
-        @constraint(CGLP, primal2[row in 1:m_lp], sum(A_lp[row, ii]* z[ii] for ii in 1:n) + η >= μ * b_lp[row])
-        @constraint(CGLP, binary1, y[index] <= η)
-        @constraint(CGLP, binary2, -z[index]- η + μ <=0)
-        @constraint(CGLP, link1[i in 1:n], y[i] + z[i] == 0)
-        @constraint(CGLP, link2, λ + μ == 1)
-        @objective(CGLP, Min, η)
-        # @constraint(CGLP, convexDual1[row in 1:n], α[row] - sum(u[ii]*A_lp[ii,row]  for ii in 1:m_lp) + u0*ek[row] == 0)
-        # @constraint(CGLP, convexDual2[row in 1:n], α[row] - sum(v[ii]*A_lp[ii,row]  for ii in 1:m_lp) - v0*ek[row] == 0)
-        # @constraint(CGLP, convexDual3, -β + sum(u[ii]*b_lp[ii] for ii in 1:m_lp)      == 0)
-        # @constraint(CGLP, convexDual4, -β + sum(v[ii]*b_lp[ii] for ii in 1:m_lp) + v0 == 0)
-        # # normalization constraint
-        # @constraint(CGLP, normalization, sum(u[ii] + v[ii] for ii in 1:m_lp) + u0 + v0 == 1)   
+        @constraint(CGLP, convexDual1[row in 1:n], α[row] - sum(u[ii]*A_lp[ii,row]  for ii in 1:m_lp) + u0*ek[row] == 0)
+        @constraint(CGLP, convexDual2[row in 1:n], α[row] - sum(v[ii]*A_lp[ii,row]  for ii in 1:m_lp) - v0*ek[row] == 0)
+        @constraint(CGLP, convexDual3, -β + sum(u[ii]*b_lp[ii] for ii in 1:m_lp)      == 0)
+        @constraint(CGLP, convexDual4, -β + sum(v[ii]*b_lp[ii] for ii in 1:m_lp) + v0 == 0)
+        # normalization constraint
+        @constraint(CGLP, normalization, sum(u[ii] + v[ii] for ii in 1:m_lp) + u0 + v0 == 1)   
         node.attributes[:CGLPs][map_binary[var]] = CGLP
     end
 
@@ -189,22 +183,28 @@ function solveliftandprojectrelaxation(node::PlasmoNode, graph::PlasmoGraph)
         x_bar = getvalue(vars)
         num_frac = 0 
         for index in values(node.attributes[:map_binary])
-            if abs(x_bar[index]%1)>1e-3 && abs(x_bar[index]%1) < 1-1e-3
+            if abs(x_bar[index]%1)>1e-2 && abs(x_bar[index]%1) < 1-1e-2
                 num_frac += 1
                 CGLP = node.attributes[:CGLPs][index]
-                link2 = getindex(CGLP, :link2)
-                link1 = getindex(CGLP, :link1)
-                for i in 1:n
-                    JuMP.setRHS(link1[i], x_bar[i])
-                end
+                α = getindex(CGLP, :α)
+                β = getindex(CGLP, :β)
+                @objective(CGLP, Min, sum(α[ii]*x_bar[ii] for ii in 1:n)  - β)
                 # Solve the Cut Generation problem
                 # println(CGLP)
                 CGLPstatus = solve(CGLP)
                 if CGLPstatus == :Optimal
                     #add cuts to model 
-                    α_cut = getdual(link1)
-                    β_cut = getdual(link2)
-                    @constraint(model, sum(α_cut[i]*vars[i]  for i in 1:n) <= β_cut)
+                    α_cut = getvalue(α)
+                    β_cut = getvalue(β)
+                    add_cut = true
+                    for coeff in α_cut
+                        if abs(coeff) < 1e-6 && abs(coeff) >0
+                            add_cut = false
+                        end
+                    end
+                    if add_cut
+                        @constraint(model, sum(α_cut[i]*vars[i]  for i in 1:n) >= β_cut)
+                    end
                 else
                     println(CGLPstatus)
                     println(model)

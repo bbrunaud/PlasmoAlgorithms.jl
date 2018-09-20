@@ -1,9 +1,9 @@
 function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,1], Desulphurisation_cost=Desulphurisation_cost[:,1], Sulphur_2=[:,1], Sulphur_GO_data= Sulphur_GO_data[:,1])
 	
-	m = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0))
+	m = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0, CPX_PARAM_EPRHS=1e-5))
 	@variable(m, pickCrude[c in crudes], Bin)
 
-	@variable(m, crudeQuantity[c in crudes]>=0)
+	@variable(m, 0<=crudeQuantity[c in crudes]<=Crude_upper_bound[c])
 	@variable(m, slack1[c in crudes]>=0)
 	@variable(m, slack2[c in crudes]>=0)
 	@variable(m, Reformer95_lower<=flow_Reformer95<=Reformer_capacity)
@@ -49,13 +49,7 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
 
 
 
-	# @constraint(m, CDU_capacity_bound, 	sum(crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels for c in crudes) <= CDU_capacity)
 
-
-	# @constraint(m, Crude_selection[c in crudes], crudeQuantity[c] >= pickCrude[c]*Barrel_lower_bound)
-
-
-	# @constraint(m, Crude_bound[c in crudes], 	crudeQuantity[c] <= pickCrude[c]*Barrel_upper_bound)
 
 
 	@constraint(m, Desulphurisation_capacity_bound, flow_Desulphurisation_CGO + sum(flow_Desulphurisation_1[c] for c in crudes) <= Desulphurisation_capacity)
@@ -69,7 +63,7 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
 						Desulphurisation_fraction2[2]*flow_Desulphurisation_CGO -
 						flow_Burn[1] +
 						sum(
-							Crude_yield_data[c,1]*(crudeQuantity[c] + slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels +
+							Crude_yield_data[c,1]*(crudeQuantity[c] + slack1[c] - slack2[c]) +
 							Desulphurisation_fraction[c,2]*flow_Desulphurisation_1[c]  for c in crudes
 						) == 0)
 
@@ -81,7 +75,7 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
 						flow_LG_producing - flow_PG98[1] -
 						flow_ES95[1] - flow_Burn[2] +
 						sum(
-							Crude_yield_data[c,2]*(crudeQuantity[c] + slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,2]*(crudeQuantity[c] + slack1[c] - slack2[c]) for c in crudes
 						) == 0)
 
 
@@ -90,7 +84,7 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
 						flow_Isomerisation - flow_JPF[1]*JPF_fraction[1,1] -
 						flow_JPF[2]*JPF_fraction[1,2] +
 						sum(
-							Crude_yield_data[c,3]*(crudeQuantity[c]+slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,3]*(crudeQuantity[c]+slack1[c] - slack2[c]) for c in crudes
 						) == 0)
 
 
@@ -98,7 +92,7 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
 						flow_JPF[2]*JPF_fraction[2,2] -
 						flow_Reformer95 - flow_Reformer100 +
 						sum(
-							Crude_yield_data[c,4]*(crudeQuantity[c]+slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,4]*(crudeQuantity[c]+slack1[c] - slack2[c]) for c in crudes
 						) == 0)
 
 
@@ -106,21 +100,21 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
 						flow_JPF[2]*JPF_fraction[3,2] -
 						flow_AGO_3[1] +
 						sum(
-							Crude_yield_data[c,5]*(crudeQuantity[c]+slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,5]*(crudeQuantity[c]+slack1[c] - slack2[c]) for c in crudes
 						) == 0)
 
 
 	@constraint(m, Mass_balance7, -flow_Cracker_Mogas - flow_Cracker_AGO +
 						sum(
-							Crude_yield_data[c,7]*(crudeQuantity[c]+slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels for c in crudes
+							Crude_yield_data[c,7]*(crudeQuantity[c]+slack1[c] - slack2[c]) for c in crudes
 						) == 0)
 
 
 	@constraint(m, GO_balance[c in crudes], -flow_AGO_1[c] - flow_Desulphurisation_1[c] - flow_HF_3[c] +
-						Crude_yield_data[c,6]*(crudeQuantity[c]+slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels == 0)
+						Crude_yield_data[c,6]*(crudeQuantity[c]+slack1[c] - slack2[c]) == 0)
 
 
-	@constraint(m, VR_balance[c in crudes], 	Crude_yield_data[c,8]*(crudeQuantity[c]+slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels == flow_HF_1[c])
+	@constraint(m, VR_balance[c in crudes], 	Crude_yield_data[c,8]*(crudeQuantity[c]+slack1[c] - slack2[c]) == flow_HF_1[c])
 
 
 	@constraint(m, Desulphurisation_balance[c in crudes], Desulphurisation_fraction[c,1]*flow_Desulphurisation_1[c] == flow_AGO_2[c])
@@ -197,7 +191,7 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
 
 	@constraint(m, LG_balance, 	sum(blin_CDU_LG[k] for k in LG_out) ==
 						sum(
-							Crude_yield_data[c,2]*(crudeQuantity[c]+slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels
+							Crude_yield_data[c,2]*(crudeQuantity[c]+slack1[c] - slack2[c])
 						for c in crudes))
 
 
@@ -374,7 +368,7 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
 						flow_Isomerisation*Isomerisation_fraction[3] -
 						flow_Desulphurisation_CGO*Desulphurisation_fraction2[3] - 15.2 -
 						sum(
-							0.018*(crudeQuantity[c]+slack1[c] - slack2[c])*BarrelToKT[c]/GranularityOfBarrels +
+							0.018*(crudeQuantity[c]+slack1[c] - slack2[c]) +
 							flow_Desulphurisation_1[c]*Desulphurisation_fraction[c,3] for c in crudes
 						) >= 0)
 
@@ -460,7 +454,7 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
 									AGO_sale*flow_AGO_2[c] -
 									HF_sale*flow_HF_1[c] -
 									HF_sale*flow_HF_3[c] +
-									((100*slack1[c] + 100 *slack2[c])/1000)*(Crude_price[c]+1) for c in crudes
+									((100*slack1[c] + 100 *slack2[c])/1000)/BarrelToKT[c]*GranularityOfBarrels*(Crude_price[c]+1) for c in crudes
 								) -
 								sum(
 									PG98_sale*flow_PG98[k] +
