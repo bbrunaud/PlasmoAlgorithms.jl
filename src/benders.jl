@@ -308,7 +308,7 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
   if :LP in cuts 
     node.attributes[:stalled] = reduce(*,nodesamecuts)
     #bound does not improve for 5 iterations is also considered as stalled
-    if length(graph.attributes[:solution].iterbound) > 6 && abs(graph.attributes[:LB] - graph.attributes[:solution].iterbound[end-5]) < 1e-3
+    if length(graph.attributes[:solution].iterbound) > 6 && abs(graph.attributes[:LB] - graph.attributes[:solution].iterbound[end-5]) < 1e-3 && abs(graph.attributes[:solution].iterval[end] - graph.attributes[:solution].iterval[end-5]) < 1e-3
       node.attributes[:stalled] = true
     end 
     node.attributes[:stalled] && warn("Node $(node.label) stalled")
@@ -317,7 +317,7 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
   #only stalled when LP has already stalled
   if (:GMI in cuts || :LIFT in cuts) && node.attributes[:LP_stalled]
     node.attributes[:stalled] = reduce(*,nodesamecuts)
-    if length(graph.attributes[:solution].iterbound) > 6 && abs(graph.attributes[:LB] - graph.attributes[:solution].iterbound[end-5]) < 1e-3 && node.attributes[:LP_stalled_iterations] > 2
+    if length(graph.attributes[:solution].iterbound) > 6 && abs(graph.attributes[:LB] - graph.attributes[:solution].iterbound[end-5]) < 1e-3 && abs(graph.attributes[:solution].iterval[end] - graph.attributes[:solution].iterval[end-5]) < 1e-3 && node.attributes[:LP_stalled_iterations] > 2
       node.attributes[:stalled] = true
     end    
     node.attributes[:LP_stalled_iterations] += 1 
@@ -325,7 +325,7 @@ function generatecuts(node::PlasmoNode,graph::PlasmoGraph)
   end 
   if (:GMI in cuts || :LIFT in cuts) && (!node.attributes[:LP_stalled])
     node.attributes[:LP_stalled] = reduce(*,nodesamecuts)
-    if length(graph.attributes[:solution].iterbound) > 6 && abs(graph.attributes[:LB] - graph.attributes[:solution].iterbound[end-5]) < 1e-3
+    if length(graph.attributes[:solution].iterbound) > 6 && abs(graph.attributes[:LB] - graph.attributes[:solution].iterbound[end-5]) < 1e-3 && abs(graph.attributes[:solution].iterval[end] - graph.attributes[:solution].iterval[end-5]) < 1e-3
       node.attributes[:LP_stalled] = true
     end      
     println("LP_stalled status")

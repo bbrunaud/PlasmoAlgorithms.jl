@@ -9,7 +9,45 @@ function getmatrixform(node::PlasmoNode)
     RHS = conBounds[2]
     b = zeros(m)
 
+    #rescale A and b 
+    for i =1:m
+        smallest_abs = Inf
+        largest_abs = 0
+        for val in nonzeros(A[i,:]) 
+            if abs(val) > largest_abs 
+                largest_abs = abs(val)
+            end
+            if abs(val) < smallest_abs
+                smallest_abs = abs(val)
+            end
+        end
+        if largest_abs / smallest_abs >1e9 
+            warn("should try to rescale the primal problem")
+            println(sp.linconstr[i])
+        end
 
+        if largest_abs > 1e4 
+            println("initial A[i]")
+            println(A[i,:])
+            A[i, :] = A[i, :] * (1e4/largest_abs) 
+            b[i] = b[i] * (1e4/largest_abs) 
+            LHS[i] = LHS[i] * (1e4/largest_abs) 
+            RHS[i] = RHS[i] * (1e4/largest_abs) 
+            println("rescale A[i]")
+            println(A[i,:])
+        end
+
+        if smallest_abs < 1e-4 
+            println("initial A[i]")
+            println(A[i,:])            
+            A[i, :] = A[i, :] * (1e-4 / smallest_abs) 
+            b[i] = b[i] * (1e-4 / smallest_abs) 
+            LHS[i] = LHS[i] * (1e-4 / smallest_abs) 
+            RHS[i] = RHS[i] * (1e-4 / smallest_abs) 
+            println("rescale A[i]")
+            println(A[i,:])            
+        end
+    end
     # Re-arrenge Matrix in the canonical form Ax>=b
     # TO DO : handle equality constraits
     eq_counter = 0

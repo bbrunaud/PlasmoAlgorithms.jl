@@ -18,8 +18,10 @@ calculate_gap,
 saveiteration,
 
 # Utils
-normalizegraph, smpsread
+normalizegraph, smpsread,
 
+#convexification
+add_PiecewiseMcCormick, add_McCormick
 
 include("lagrange.jl")
 include("benders.jl")
@@ -27,6 +29,6 @@ include("cross.jl")
 include("solution.jl")
 include("utils.jl")
 include("spatialbranchandbound.jl")
-
+include("convexrelaxations.jl")
 
 end

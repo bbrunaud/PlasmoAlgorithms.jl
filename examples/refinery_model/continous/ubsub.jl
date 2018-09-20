@@ -1,4 +1,4 @@
-function generate_lagsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,1], Desulphurisation_cost=Desulphurisation_cost[:,1], Sulphur_2=[:,1], Sulphur_GO_data= Sulphur_GO_data[:,1])
+function generate_ubsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,1], Desulphurisation_cost=Desulphurisation_cost[:,1], Sulphur_2=[:,1], Sulphur_GO_data= Sulphur_GO_data[:,1])
 	
 	m = Model(solver=BaronSolver(maxtime=1e4, epsr= 1e-4, prlevel=0, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
 	@variable(m, pickCrude[c in crudes], Bin)

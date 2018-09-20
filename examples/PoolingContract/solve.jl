@@ -3,7 +3,7 @@ using Plasmo
 using CPLEX
 using BARON
 using Gurobi
-include("input3.jl")
+include("input27.jl")
 include("benderssub.jl")
 include("bendersmaster.jl")
 include("lagsub.jl")
@@ -84,10 +84,12 @@ end
 
 #start debug spatial bab
 rootnode = BABnode(lag_g, g, -1e6, 1e6, [], [], [], [], :notfathomed)
-results = bab_solve(rootnode, time_limit=2e4, benders_cuts=[:LP], max_iterations_lag=10, max_iterations_benders=60, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3, rel_gap=1e-3)
-
-
-
+start = time()
+results = bab_solve(rootnode,  benders_cuts=[:LP], max_iterations_lag=10, max_iterations_benders=60, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3, rel_gap=1e-3)
+# results = bab_solve(rootnode,  benders_cuts=[:LIFT], max_iterations_lag=10, max_iterations_benders=60, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3, rel_gap=1e-3)
+# results = bab_solve(rootnode,  heuristic=:lagonly, benders_cuts=[:LP], max_iterations_lag=10, max_iterations_benders=60, is_nonconvex=true, lag_α = 1.5, lag_δ = 0.3, rel_gap=1e-3)
+endd = time()
+walltime = endd - start
 
 
 

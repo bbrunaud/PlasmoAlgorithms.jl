@@ -1,0 +1,99 @@
+--- Job refinery1_continuous.gms Start 09/17/18 15:09:12 25.1.1 r66732 LEX-LEG x86 64bit/Linux
+GAMS 25.1.1   Copyright (C) 1987-2018 GAMS Development. All rights reserved
+Licensee: Eval License Carnegie Mellon University        G180112/0001AS-GEN
+          Dept. of Chemical Engineering                              DC9476
+          License for teaching and research at degree granting institutions
+          License Admin: Ignacio E. Grossmann                              
+--- Starting compilation
+--- refinery1_continuous.gms(391) 3 Mb
+--- . refinery1_data/5.gms(125) 3 Mb
+--- refinery1_continuous.gms(1083) 3 Mb
+--- Starting execution: elapsed 0:00:00.010
+--- refinery1_continuous.gms(1188) 4 Mb
+--- Generating MINLP model refinery1
+--- refinery1_continuous.gms(1196) 6 Mb
+---   577 rows  631 columns  3,871 non-zeroes
+---   650 nl-code  260 nl-non-zeroes
+---   10 discrete-columns
+--- refinery1_continuous.gms(1196) 4 Mb
+--- Executing BARON: elapsed 0:00:00.020
+
+GAMS/BARON       25.1.1 r66732 Released May 19, 2018 LEG x86 64bit/Linux      
+
+===========================================================================
+ BARON version 18.5.8. Built: LNX-64 Tue May 8 15:56:42 EDT 2018 
+
+ BARON is a product of The Optimization Firm, LLC. http://www.minlp.com/
+
+ If you use this software, please cite publications from
+ http://www.minlp.com/about-baron, such as: 
+
+ Kilinc, M. and N. V. Sahinidis, Exploiting integrality in the global
+ optimization of mixed-integer nonlinear programming problems in BARON,
+ Optimization Methods and Software, 33, 540-562, 2018.
+===========================================================================
+ This BARON run may utilize the following subsolver(s)
+ For LP/MIP: ILOG CPLEX                                      
+ For NLP: MINOS, SNOPT, GAMS external NLP, IPOPT, FILTERSD, FILTERSQP
+===========================================================================
+ Doing local search
+ Solving bounding LP
+ Starting multi-start local search
+ Preprocessing found feasible solution with value -18349.4343428     
+ Done with local search
+===========================================================================
+  Iteration    Open nodes         Time (s)    Lower bound      Upper bound
+          1             1             3.35    -18576.0         -18349.4    
+        739+          449            33.42    -18538.2         -18349.4    
+       1576           874            63.45    -18502.8         -18349.4    
+       2345+         1240            93.46    -18494.9         -18349.4    
+*      2666          1367           105.20    -18491.7         -18350.1    
+*      2675          1373           106.06    -18491.7         -18350.1    
+       3050+         1503           136.14    -18489.1         -18350.1    
+       3115+         1462           166.14    -18488.7         -18350.1    
+       3194+         1413           196.18    -18487.6         -18350.1    
+       3255+         1374           226.25    -18485.4         -18350.1    
+       3299+         1347           256.31    -18484.3         -18350.1    
+       3385+         1293           286.33    -18483.0         -18350.1    
+       3482+         1234           316.38    -18476.1         -18350.1    
+       3551+         1195           346.40    -18466.2         -18350.1    
+       3652+         1123           376.40    -18450.4         -18350.1    
+       3736          1073           406.45    -18446.7         -18350.1    
+       3843+         1002           436.50    -18436.6         -18350.1    
+       3967+          917           466.58    -18431.8         -18350.1    
+       4107+          823           496.65    -18428.1         -18350.1    
+       4238+          738           526.67    -18422.3         -18350.1    
+       4322+          680           556.69    -18419.5         -18350.1    
+       4438           592           586.73    -18416.5         -18350.1    
+*      4524           531           600.02    -18414.2         -18350.1    
+       4693+          407           630.06    -18408.6         -18350.1    
+       4946           197           660.08    -18394.3         -18350.1    
+       5187             0           684.63    -18368.5         -18350.1    
+
+ Cleaning up
+
+                         *** Normal completion ***            
+
+ Wall clock time:                   685.00
+ Total CPU time used:               684.64
+
+ Total no. of BaR iterations:    5187
+ Best solution found at node:    5187
+ Max. no. of nodes in memory:    1514
+ 
+ All done
+===========================================================================
+
+Solution      = -18350.1469296115  found at node 5187
+Best possible = -18368.5154451
+Absolute gap  = 18.3685154884843  optca = 1E-9
+Relative gap  = 0.00100000000236188  optcr = 0.001
+  (Note that BARON uses a different formula to compute the relative gap as
+   was used for the above reported value.)
+
+--- Restarting execution
+--- refinery1_continuous.gms(1196) 2 Mb
+--- Reading solution for model refinery1
+--- refinery1_continuous.gms(1208) 3 Mb
+*** Status: Normal completion
+--- Job refinery1_continuous.gms Stop 09/17/18 15:20:37 elapsed 0:11:24.801

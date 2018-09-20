@@ -1,6 +1,6 @@
-function generate_lagsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,1], Desulphurisation_cost=Desulphurisation_cost[:,1], Sulphur_2=[:,1], Sulphur_GO_data= Sulphur_GO_data[:,1])
+function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,1], Desulphurisation_cost=Desulphurisation_cost[:,1], Sulphur_2=[:,1], Sulphur_GO_data= Sulphur_GO_data[:,1])
 	
-	m = Model(solver=BaronSolver(maxtime=1e4, epsr= 1e-4, prlevel=0, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
+	m = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0))
 	@variable(m, pickCrude[c in crudes], Bin)
 
 	@variable(m, crudeQuantity[c in crudes]>=0)
@@ -49,13 +49,13 @@ function generate_lagsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:
 
 
 
-	@constraint(m, CDU_capacity_bound, 	sum(crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels for c in crudes) <= CDU_capacity)
+	# @constraint(m, CDU_capacity_bound, 	sum(crudeQuantity[c]*BarrelToKT[c]/GranularityOfBarrels for c in crudes) <= CDU_capacity)
 
 
-	@constraint(m, Crude_selection[c in crudes], crudeQuantity[c] >= pickCrude[c]*Barrel_lower_bound)
+	# @constraint(m, Crude_selection[c in crudes], crudeQuantity[c] >= pickCrude[c]*Barrel_lower_bound)
 
 
-	@constraint(m, Crude_bound[c in crudes], 	crudeQuantity[c] <= pickCrude[c]*Barrel_upper_bound)
+	# @constraint(m, Crude_bound[c in crudes], 	crudeQuantity[c] <= pickCrude[c]*Barrel_upper_bound)
 
 
 	@constraint(m, Desulphurisation_capacity_bound, flow_Desulphurisation_CGO + sum(flow_Desulphurisation_1[c] for c in crudes) <= Desulphurisation_capacity)
@@ -192,64 +192,7 @@ function generate_lagsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:
 								0.03*flow_Import[1]/Density_products[2] <= 0.05*volume_PG98)
 
 
-	@NLconstraint(m, blincon_CDU_LG1, blin_CDU_LG[1] == fraction_LG[1]*flow_ES95[1])
-
-
-	@NLconstraint(m, blincon_CDU_LG2, blin_CDU_LG[2] == fraction_LG[1]*flow_PG98[1])
-
-
-	@NLconstraint(m, blincon_CDU_LG3, blin_CDU_LG[3] == fraction_LG[1]*flow_Burn[2])
-
-
-	@NLconstraint(m, blincon_CDU_LG4, blin_CDU_LG[4] == fraction_LG[1]*flow_LG_producing)
-
-
-	@NLconstraint(m, blincon_Reformer95_LG1, blin_Reformer95_LG[1] == fraction_LG[2]*flow_ES95[1])
-
-
-	@NLconstraint(m, blincon_Reformer95_LG2, blin_Reformer95_LG[2] == fraction_LG[2]*flow_PG98[1])
-
-
-	@NLconstraint(m, blincon_Reformer95_LG3, blin_Reformer95_LG[3] == fraction_LG[2]*flow_Burn[2])
-
-
-	@NLconstraint(m, blincon_Reformer95_LG4, blin_Reformer95_LG[4] == fraction_LG[2]*flow_LG_producing)
-
-
-	@NLconstraint(m, blincon_Reformer100_LG1, blin_Reformer100_LG[1] == fraction_LG[3]*flow_ES95[1])
-
-
-	@NLconstraint(m, blincon_Reformer100_LG2, blin_Reformer100_LG[2] == fraction_LG[3]*flow_PG98[1])
-
-
-	@NLconstraint(m, blincon_Reformer100_LG3, blin_Reformer100_LG[3] == fraction_LG[3]*flow_Burn[2])
-
-
-	@NLconstraint(m, blincon_Reformer100_LG4, blin_Reformer100_LG[4] == fraction_LG[3]*flow_LG_producing)
-
-
-	@NLconstraint(m, blincon_Mogas_LG1, blin_Mogas_LG[1] == fraction_LG[4]*flow_ES95[1])
-
-
-	@NLconstraint(m, blincon_Mogas_LG2, blin_Mogas_LG[2] == fraction_LG[4]*flow_PG98[1])
-
-
-	@NLconstraint(m, blincon_Mogas_LG3, blin_Mogas_LG[3] == fraction_LG[4]*flow_Burn[2])
-
-
-	@NLconstraint(m, blincon_Mogas_LG4, blin_Mogas_LG[4] == fraction_LG[4]*flow_LG_producing)
-
-
-	@NLconstraint(m, blincon_AGO_LG1, blin_AGO_LG[1] == fraction_LG[5]*flow_ES95[1])
-
-
-	@NLconstraint(m, blincon_AGO_LG2, blin_AGO_LG[2] == fraction_LG[5]*flow_PG98[1])
-
-
-	@NLconstraint(m, blincon_AGO_LG3, blin_AGO_LG[3] == fraction_LG[5]*flow_Burn[2])
-
-
-	@NLconstraint(m, blincon_AGO_LG4, blin_AGO_LG[4] == fraction_LG[5]*flow_LG_producing)
+	
 
 
 	@constraint(m, LG_balance, 	sum(blin_CDU_LG[k] for k in LG_out) ==
@@ -369,23 +312,6 @@ function generate_lagsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:
 							(LG_parameters[2,5] - LG_parameters[3,5])*blin_AGO_LG[1]/Density_PG98_input[1] <= 0)
 
 
-	@NLconstraint(m, blincon_Cracker_Mogas1, blin_Cracker_Mogas[1] == fraction_CGO[1]*flow_AGO_3[2])
-
-
-	@NLconstraint(m, blincon_Cracker_Mogas2, blin_Cracker_Mogas[2] == fraction_CGO[1]*flow_HF_2)
-
-
-	@NLconstraint(m, blincon_Cracker_Mogas3, blin_Cracker_Mogas[3] == fraction_CGO[1]*flow_Desulphurisation_CGO)
-
-
-	@NLconstraint(m, blincon_Cracker_AGO1, blin_Cracker_AGO[1] == fraction_CGO[2]*flow_AGO_3[2])
-
-
-	@NLconstraint(m, blincon_Cracker_AGO2, blin_Cracker_AGO[2] == fraction_CGO[2]*flow_HF_2)
-
-
-	@NLconstraint(m, blincon_Cracker_AGO3, blin_Cracker_AGO[3] == fraction_CGO[2]*flow_Desulphurisation_CGO)
-
 
 	@constraint(m, Cracker_Mogas_CGO_balance, blin_Cracker_Mogas[1] + blin_Cracker_Mogas[2] +
 									blin_Cracker_Mogas[3] == flow_Cracker_Mogas*Cracker_fraction[1,4])
@@ -458,7 +384,65 @@ function generate_lagsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:
 
 	@constraint(m, Reformer_capacity_bound, flow_Reformer95 + flow_Reformer100 <= Reformer_capacity)
 
+	#add convex relaxations
+	npoints = 10
+	# add_McCormick(m::JuMP::Model, x::JuMP::Variable, y::JuMP::Variable, xy::JuMP::Variable)
+	# add_PiecewiseMcCormick(m::JuMP::Model, x::JuMP::Variable, y::JuMP::Variable, xy::JuMP::Variable, n::Int64, xmap::Dict)
+	# add_McCormick(m, fraction_LG[1], flow_ES95[1], blin_CDU_LG[1])
+	# add_McCormick(m, fraction_LG[1],flow_PG98[1], blin_CDU_LG[2] )
+	# add_McCormick(m,  fraction_LG[1],flow_Burn[2], blin_CDU_LG[3] )
+	# add_McCormick(m,  fraction_LG[1],flow_LG_producing, blin_CDU_LG[4] )
+	# add_McCormick(m,  fraction_LG[2],flow_ES95[1], blin_Reformer95_LG[1] )
+	# add_McCormick(m,  fraction_LG[2],flow_PG98[1], blin_Reformer95_LG[2] )
+	# add_McCormick(m,  fraction_LG[2],flow_Burn[2], blin_Reformer95_LG[3] )
+	# add_McCormick(m,  fraction_LG[2],flow_LG_producing, blin_Reformer95_LG[4] )
+	# add_McCormick(m,  fraction_LG[3],flow_ES95[1], blin_Reformer100_LG[1] )
+	# add_McCormick(m,  fraction_LG[3],flow_PG98[1], blin_Reformer100_LG[2] )
+	# add_McCormick(m,  fraction_LG[3],flow_Burn[2], blin_Reformer100_LG[3] )
+	# add_McCormick(m,  fraction_LG[3],flow_LG_producing, blin_Reformer100_LG[4] )
+	# add_McCormick(m,  fraction_LG[4],flow_ES95[1], blin_Mogas_LG[1] )
+	# add_McCormick(m,  fraction_LG[4],flow_PG98[1], blin_Mogas_LG[2] )
+	# add_McCormick(m,  fraction_LG[4],flow_Burn[2], blin_Mogas_LG[3] )
+	# add_McCormick(m,  fraction_LG[4],flow_LG_producing, blin_Mogas_LG[4] )
+	# add_McCormick(m,  fraction_LG[5],flow_ES95[1], blin_AGO_LG[1] )
+	# add_McCormick(m,  fraction_LG[5],flow_PG98[1], blin_AGO_LG[2] )
+	# add_McCormick(m,  fraction_LG[5],flow_Burn[2], blin_AGO_LG[3] )
+	# add_McCormick(m,  fraction_LG[5],flow_LG_producing, blin_AGO_LG[4] )
+	# add_McCormick(m,  fraction_CGO[1],flow_AGO_3[2], blin_Cracker_Mogas[1] )
+	# add_McCormick(m,  fraction_CGO[1],flow_HF_2, blin_Cracker_Mogas[2] )
+	# add_McCormick(m,  fraction_CGO[1],flow_Desulphurisation_CGO, blin_Cracker_Mogas[3] )
+	# add_McCormick(m,  fraction_CGO[2],flow_AGO_3[2], blin_Cracker_AGO[1] )
+	# add_McCormick(m,  fraction_CGO[2],flow_HF_2, blin_Cracker_AGO[2] )
+	# add_McCormick(m,  fraction_CGO[2],flow_Desulphurisation_CGO, blin_Cracker_AGO[3] )
 
+	xmap = Dict()
+	add_PiecewiseMcCormick(m, fraction_LG[1], flow_ES95[1], blin_CDU_LG[1], npoints, xmap)
+	add_PiecewiseMcCormick(m, fraction_LG[1],flow_PG98[1], blin_CDU_LG[2] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[1],flow_Burn[2], blin_CDU_LG[3] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[1],flow_LG_producing, blin_CDU_LG[4] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[2],flow_ES95[1], blin_Reformer95_LG[1] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[2],flow_PG98[1], blin_Reformer95_LG[2] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[2],flow_Burn[2], blin_Reformer95_LG[3] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[2],flow_LG_producing, blin_Reformer95_LG[4] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[3],flow_ES95[1], blin_Reformer100_LG[1] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[3],flow_PG98[1], blin_Reformer100_LG[2] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[3],flow_Burn[2], blin_Reformer100_LG[3] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[3],flow_LG_producing, blin_Reformer100_LG[4] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[4],flow_ES95[1], blin_Mogas_LG[1] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[4],flow_PG98[1], blin_Mogas_LG[2] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[4],flow_Burn[2], blin_Mogas_LG[3] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[4],flow_LG_producing, blin_Mogas_LG[4] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[5],flow_ES95[1], blin_AGO_LG[1] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[5],flow_PG98[1], blin_AGO_LG[2] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[5],flow_Burn[2], blin_AGO_LG[3] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_LG[5],flow_LG_producing, blin_AGO_LG[4] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_CGO[1],flow_AGO_3[2], blin_Cracker_Mogas[1] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_CGO[1],flow_HF_2, blin_Cracker_Mogas[2] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_CGO[1],flow_Desulphurisation_CGO, blin_Cracker_Mogas[3] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_CGO[2],flow_AGO_3[2], blin_Cracker_AGO[1] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_CGO[2],flow_HF_2, blin_Cracker_AGO[2] , npoints,xmap)
+	add_PiecewiseMcCormick(m,  fraction_CGO[2],flow_Desulphurisation_CGO, blin_Cracker_AGO[3] , npoints,xmap)
+	
 
    	@objective(m, Min, prob*(
 								Cracker_Mogas_cost*flow_Cracker_Mogas +
@@ -476,7 +460,7 @@ function generate_lagsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:
 									AGO_sale*flow_AGO_2[c] -
 									HF_sale*flow_HF_1[c] -
 									HF_sale*flow_HF_3[c] +
-									((crudeQuantity[c]+100*slack1[c] + 100 *slack2[c])/1000)*(Crude_price[c]+1) for c in crudes
+									((100*slack1[c] + 100 *slack2[c])/1000)*(Crude_price[c]+1) for c in crudes
 								) -
 								sum(
 									PG98_sale*flow_PG98[k] +
