@@ -1,0 +1,3466 @@
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/28/18 15:02:58 Page 1
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+       
+      Bilinear refinery model based on the example in
+      Yang et al., AIChE J., 2016
+      This model contains uncertain Sulphur and VR yields.
+      Number of binary complicating variables: 
+      Number of continuous complicating variables: 0
+      Number of binary recourse variables: 0
+      Number of continuous recourse variables: *s
+      Number of bilinear terms: *s
+      Number of complicating constraints: 
+      Number of recourse constraints: 
+       
+  15   
+  16  *--------------------------------
+  17  *               SET DEFINITIONS
+  18  *--------------------------------
+  19   
+  20  SETS
+  21          c               "crudes"                                                                / 1*10 /
+  22          w               "components"                                                    / 1*8 /
+  23          Re_in   "reformer input"                                                / 1*2 /
+  24          Re_out  "reformer output"                                               / 1*6 /
+  25          Cr_in   "cracker input"                                                 / 1*2 /
+  26          Cr_out  "cracker output"                                                / 1*6 /
+  27          Cr_CGO  "cracker-CGO output"                                    / 1*3 /
+  28          Cr_mode "cracker modes"                                                 / 1*2 /
+  29          Iso_out "isomerisation output"                                  / 1*4 /
+  30          Des_out "desulphurisation output"                               / 1*4 /
+  31          PG98_in "PG98 input"                                                    / 1*6 /
+  32          Burn    "burn streams"                                                  / 1*3 /
+  33          JPF_in  "JPF input"                                                             / 1*3 /
+  34          JPF_out "JPF output"                                                    / 1*2 /
+  35          AGO_in  "AGO input"                                                             / 1*3 /
+  36          p               "products"                                                              / 1*7 /
+  37          LG_in   "LG input"                                                              / 1*5 /
+  38          LG_out  "LG output"                                                             / 1*4 /
+  39          LG_prop "LG properties"                                                 / 1*3 /
+  40          h               "scenarios"                                                             / 1*5 /
+  41  ;
+  42   
+  43  alias(w,w2);
+  44   
+  45  *-------------------------------------------
+  46  *                       SET SOLUTION OPTIONS
+  47  *-------------------------------------------
+  48   
+  49  OPTION LIMROW = 0;
+  50  OPTION LIMCOL = 0;
+  51  OPTION OPTCA  = 1E-09;
+  52  OPTION OPTCR  = 1E-03;
+  53  OPTION RESLIM = 1E+04;
+  54  OPTION ITERLIM = 1E+09;
+  55   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/28/18 15:02:58 Page 2
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+  56  OPTION LP=CPLEX;
+  57  OPTION NLP=SNOPT;
+  58  OPTION MIP=CPLEX;
+  59  OPTION MINLP=SCIP;
+  60  *OPTION MINLP=antigone;
+  61  *OPTION MINLP=BARON;
+  62   
+  63  *---------------------------------------------
+  64  *               DEFINE PROBLEM-SPECIFIC PARAMETERS
+  65  *---------------------------------------------
+  66   
+  67  SCALARS
+  68          Desulphurisation_capacity  / 125 /,
+  69          CDU_capacity  / 700 /,
+  70          Reformer95_lower  / 5 /,
+  71          Reformer_capacity  / 65 /,
+  72          Cracker_capacity  / 175 /,
+  73          GranularityOfBarrels  / 5000 /,
+  74          LG_sale  / 561.6 /,
+  75          LN_sale  / 1003 /,
+  76          HF_sale  / 637 /,
+  77          ES95_sale  / 1194 /,
+  78          PG98_sale  / 1231 /,
+  79          JET_sale  / 923 /,
+  80          AGO_sale  / 907 /,
+  81          CGO_density  / 0.95 /,
+  82          Mogas_viscosity  / 12.2 /,
+  83          AGO_viscosity  / 11.65 /,
+  84          Mogas_Sulphur  / 2.1 /,
+  85          AGO_Sulphur  / 1.68 /,
+  86          Desulphurisation_CGO_cost,
+  87          Isomerisation_cost  / 6 /,
+  88          Reformer95_cost  / 2.7 /,
+  89          Reformer100_cost  / 3.2 /,
+  90          Cracker_Mogas_cost  / 3.2 /,
+  91          Cracker_AGO_cost  / 3 /,
+  92          Barrel_lower_bound  / 100000 /,
+  93          Barrel_upper_bound  / 1500000 /,
+  94          Sulphur_spec  / 0.0015 /
+  95  ;
+  96   
+  97  Desulphurisation_CGO_cost = ((Mogas_Sulphur*109.0909 + 365.4546)/1000)*(0.85/0.159)/CGO_density;
+  98   
+  99  TABLE Reformer_fraction(Re_in,Re_out)
+ 100                  1     2     3     4     5     6
+ 101          1       0.08  0.09  0.83  0     0.019 2.7
+ 102          2       0.09  0.12  0     0.79  0.026 3.2
+ 103  ;
+ 104   
+ 105  TABLE Cracker_fraction(Cr_in,Cr_out)
+ 106                  1     2     3     4     5     6
+ 107          1       0.015 0.053 0.436 0.446 0.007 3.2
+ 108          2       0.012 0.046 0.381 0.511 0.007 3.0
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/28/18 15:02:58 Page 3
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 109  ;
+ 110   
+ 111  TABLE Desulphurisation_fraction(c,Des_out)
+ 112                  1     2     3     4
+ 113          1       0.98  0.02  0.02  0
+ 114          2       0.98  0.02  0.02  0
+ 115          3       0.98  0.02  0.02  0
+ 116          4       0.98  0.02  0.02  0
+ 117          5       0.98  0.02  0.02  0
+ 118          6       0.97  0.03  0.02  0
+ 119          7       0.97  0.03  0.02  0
+ 120          8       0.96  0.04  0.02  0
+ 121          9       0.98  0.02  0.02  0
+ 122          10      0.96  0.04  0.02  0
+ 123  ;
+ 124   
+ 125  TABLE JPF_fraction(JPF_in,JPF_out)
+ 126                  1     2
+ 127          1       0.05  0.035
+ 128          2       0.10  0.065
+ 129          3       0.85  0.900
+ 130  ;
+ 131   
+ 132  TABLE Crude_yield(c,w)
+ 133                  1      2      3      4      5      6      7      8
+ 134          1       0.0020 0.0091 0.0698 0.1598 0.1003 0.2876 0.2682 0.1032
+ 135          2       0.0020 0.0089 0.0480 0.0959 0.0796 0.2249 0.2735 0.2672
+ 136          3       0.0020 0.0080 0.0610 0.1206 0.0861 0.2414 0.2646 0.2163
+ 137          4       0.0040 0.0200 0.0851 0.1532 0.0947 0.2539 0.2535 0.1356
+ 138          5       0.0020 0.0115 0.0543 0.1026 0.0765 0.2286 0.2695 0.2550
+ 139          6       0.0010 0.0064 0.0246 0.0607 0.0518 0.1900 0.2932 0.3723
+ 140          7       0.0020 0.0155 0.0945 0.1661 0.1160 0.2656 0.2317 0.1086
+ 141          8       0.0029 0.0130 0.0652 0.1196 0.0838 0.2127 0.2408 0.2620
+ 142          9       0.0040 0.0157 0.0749 0.1267 0.0915 0.2353 0.2510 0.2009
+ 143          10      0.0040 0.0107 0.0604 0.1123 0.0784 0.2092 0.2491 0.2759
+ 144  ;
+ 145   
+ 146  TABLE LG_parameters(LG_prop,LG_in)
+ 147                  1     2     3     4     5
+ 148          1       4.30  4.28  4.36  4.21  4.22
+ 149          2       93.0  92.5  93.6  92.7  93.9
+ 150          3       90.0  89.6  90.9  89.0  90.2
+ 151  ;
+ 152   
+ 153  *-------------------------------------------------
+ 154  *               DEFINE PARAMETERS
+ 155  *-------------------------------------------------
+ 156   
+ 157  PARAMETERS
+ 158   
+ 159          Isomerisation_fraction(Iso_out)
+ 160          /       1       0.03
+ 161                  2       0.97
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/28/18 15:02:58 Page 4
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 162                  3       0.04
+ 163                  4       6.0/,
+ 164   
+ 165          Desulphurisation_fraction2(Des_out)
+ 166          /       1       0.96
+ 167                  2       0.04
+ 168                  3       0.02
+ 169                  4       20.0/,
+ 170   
+ 171          Crude_density(c)
+ 172          /       1       0.8441
+ 173                  2       0.8910
+ 174                  3       0.8441
+ 175                  4       0.8369
+ 176                  5       0.8829
+ 177                  6       0.9315
+ 178                  7       0.8252
+ 179                  8       0.8745
+ 180                  9       0.8570
+ 181                  10      0.8817/,
+ 182   
+ 183          BarrelToKT(c),
+ 184   
+ 185          Sulphur_GO_nominal(c)
+ 186          /       1       0.157
+ 187                  2       0.293
+ 188                  3       0.162
+ 189                  4       0.200
+ 190                  5       0.263
+ 191                  6       0.694
+ 192                  7       0.767
+ 193                  8       1.550
+ 194                  9       0.326
+ 195                  10      1.090/,
+ 196   
+ 197          Sulphur_GO_stdev(c),
+ 198   
+ 199          VaccuumResidue_nominal(c),
+ 200   
+ 201          VaccuumResidue_stdev(c),
+ 202   
+ 203          Crude_price(c)
+ 204          /       1       115.0
+ 205                  2       107.5
+ 206                  3       109.7
+ 207                  4       110.7
+ 208                  5       108.4
+ 209                  6       101.6
+ 210                  7       114.3
+ 211                  8       101.3
+ 212                  9       109.4
+ 213                  10      104.09/,
+ 214   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/28/18 15:02:58 Page 5
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 215          Demand_quantity(p)
+ 216          /       1       5
+ 217                  2       0
+ 218                  3       0
+ 219                  4       100
+ 220                  5       100
+ 221                  6       0
+ 222                  7       0/,
+ 223   
+ 224          Density_PG98_input(PG98_in)
+ 225          /       1       0.58
+ 226                  2       0.665
+ 227                  3       0.65
+ 228                  4       0.77
+ 229                  5       0.80
+ 230                  6       0.75/,
+ 231   
+ 232          Density_products(p)
+ 233          /       1       0.79
+ 234                  2       0.76
+ 235                  3       0.75
+ 236                  4       0.87
+ 237                  5       0.98
+ 238                  6       0.54
+ 239                  7       0.65/,
+ 240   
+ 241          Product_VP(p)
+ 242          /       1       0.65
+ 243                  2       0.65
+ 244                  3       0
+ 245                  4       0
+ 246                  5       0
+ 247                  6       0
+ 248                  7       0/,
+ 249   
+ 250          Product_RON(p)
+ 251          /       1       105
+ 252                  2       100
+ 253                  3       0
+ 254                  4       0
+ 255                  5       0
+ 256                  6       0
+ 257                  7       0/,
+ 258   
+ 259          Product_MON(p)
+ 260          /       1       100
+ 261                  2       96
+ 262                  3       0
+ 263                  4       0
+ 264                  5       0
+ 265                  6       0
+ 266                  7       0/,
+ 267   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/28/18 15:02:58 Page 6
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 268          Product_Sulphur(p)
+ 269          /       1       0
+ 270                  2       0
+ 271                  3       0.001
+ 272                  4       0
+ 273                  5       0
+ 274                  6       0
+ 275                  7       0/,
+ 276   
+ 277          Import_upper(p)
+ 278          /       1       0
+ 279                  2       0
+ 280                  3       0
+ 281                  4       0
+ 282                  5       0
+ 283                  6       0
+ 284                  7       0/,
+ 285   
+ 286          RON(PG98_in)
+ 287          /       1       0
+ 288                  2       91
+ 289                  3       71
+ 290                  4       95
+ 291                  5       100
+ 292                  6       93/,
+ 293   
+ 294          MON(PG98_in)
+ 295          /       1       0
+ 296                  2       86
+ 297                  3       68
+ 298                  4       86
+ 299                  5       91
+ 300                  6       82/,
+ 301   
+ 302          VP(PG98_in)
+ 303          /       1       0
+ 304                  2       0.4
+ 305                  3       0.8
+ 306                  4       0.5
+ 307                  5       0.5
+ 308                  6       0.65/,
+ 309   
+ 310          HFO_density(c)
+ 311          /       1       0.9385
+ 312                  2       0.9682
+ 313                  3       0.9423
+ 314                  4       0.9433
+ 315                  5       0.9652
+ 316                  6       0.9727
+ 317                  7       0.9470
+ 318                  8       0.9799
+ 319                  9       0.9562
+ 320                  10      0.9685/,
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/28/18 15:02:58 Page 7
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 321   
+ 322          GO_density(c)
+ 323          /       1       0.8506
+ 324                  2       0.8590
+ 325                  3       0.8413
+ 326                  4       0.8450
+ 327                  5       0.8573
+ 328                  6       0.8688
+ 329                  7       0.8404
+ 330                  8       0.8467
+ 331                  9       0.8477
+ 332                  10      0.8558/,
+ 333   
+ 334          Viscosity_HF1(c)
+ 335          /       1       32.5
+ 336                  2       69.6
+ 337                  3       38.2
+ 338                  4       42.7
+ 339                  5       86.5
+ 340                  6       75.5
+ 341                  7       42.3
+ 342                  8       45.0
+ 343                  9       53.5
+ 344                  10      55.2/,
+ 345   
+ 346          Viscosity_HF3(c)
+ 347          /       1       2.52
+ 348                  2       2.92
+ 349                  3       2.61
+ 350                  4       2.56
+ 351                  5       2.65
+ 352                  6       2.95
+ 353                  7       2.50
+ 354                  8       2.51
+ 355                  9       2.62
+ 356                  10      2.67/,
+ 357   
+ 358          Viscosity_products(p)
+ 359          /       4       31.5/,
+ 360   
+ 361          Sulphur_3(AGO_in)
+ 362          /       1       0.1/,
+ 363   
+ 364          Crude_lower_bound(c),
+ 365   
+ 366          Crude_upper_bound(c),
+ 367   
+ 368          Sulphur_2(c,h),
+ 369   
+ 370          Sulphur_GO_data(c,h),
+ 371   
+ 372          VaccuumResidue_data(c,h),
+ 373   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/28/18 15:02:58 Page 8
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 374          Crude_yield_data(c,w,h),
+ 375   
+ 376          Desulphurisation_cost(c,h),
+ 377   
+ 378          prob(h) "probability of each scenario"
+ 379  ;
+ 380   
+ 381  loop(c,
+ 382          BarrelToKT(c) = (GranularityOfBarrels/6.29)*(Crude_density(c)/1000);
+ 383          Sulphur_GO_stdev(c) = 0.1*Sulphur_GO_nominal(c);
+ 384          VaccuumResidue_nominal(c) = sum(w$(ord(w)=card(w)), Crude_yield(c,w));
+ 385          VaccuumResidue_stdev(c) = 0.1*VaccuumResidue_nominal(c);
+ 386  );
+ 387   
+ 388   
+ 389   
+ 390  *=========== Generate scenarios for the uncertain parameters =============
+ 391   
+INCLUDE    /home/canl1/PlasmoAlgorithms/examples/refinery_model/continous/refinery1_data/5.gms
+ 393   
+ 394  PARAMETER
+ 395          prob(h)
+ 396          /
+ 397                  1       0.200000000000000
+ 398                  2       0.200000000000000
+ 399                  3       0.200000000000000
+ 400                  4       0.200000000000000
+ 401                  5       0.200000000000000
+ 402          /;
+ 403   
+ 404  PARAMETER       Sulphur_GO_data(c,h);
+ 405  PARAMETER       VaccuumResidue_data(c,h);
+ 406   
+ 407  Sulphur_GO_data('1','1') = 0.142088513077039;
+ 408  Sulphur_GO_data('2','1') = 0.310719599235616;
+ 409  Sulphur_GO_data('3','1') = 0.166528078567320;
+ 410  Sulphur_GO_data('4','1') = 0.212905808207417;
+ 411  Sulphur_GO_data('5','1') = 0.266482491043895;
+ 412  Sulphur_GO_data('6','1') = 0.761729783608670;
+ 413  Sulphur_GO_data('7','1') = 0.634362056891616;
+ 414  Sulphur_GO_data('8','1') = 1.576735109424405;
+ 415  Sulphur_GO_data('9','1') = 0.291490315101932;
+ 416  Sulphur_GO_data('10','1') = 1.089348038245218;
+ 417   
+ 418  Sulphur_GO_data('1','2') = 0.141118541282429;
+ 419  Sulphur_GO_data('2','2') = 0.281477552818021;
+ 420  Sulphur_GO_data('3','2') = 0.167414406429630;
+ 421  Sulphur_GO_data('4','2') = 0.184276995676455;
+ 422  Sulphur_GO_data('5','2') = 0.263494796995319;
+ 423  Sulphur_GO_data('6','2') = 0.692304963412679;
+ 424  Sulphur_GO_data('7','2') = 0.773320932383037;
+ 425  Sulphur_GO_data('8','2') = 1.309305562100601;
+ 426  Sulphur_GO_data('9','2') = 0.306919506227801;
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/28/18 15:02:58 Page 9
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 427  Sulphur_GO_data('10','2') = 1.151557551730689;
+ 428   
+ 429  Sulphur_GO_data('1','3') = 0.187121509799093;
+ 430  Sulphur_GO_data('2','3') = 0.306887871469947;
+ 431  Sulphur_GO_data('3','3') = 0.147750555914438;
+ 432  Sulphur_GO_data('4','3') = 0.216077618904068;
+ 433  Sulphur_GO_data('5','3') = 0.253660826161628;
+ 434  Sulphur_GO_data('6','3') = 0.685002013445849;
+ 435  Sulphur_GO_data('7','3') = 0.687156971268290;
+ 436  Sulphur_GO_data('8','3') = 1.538931836234552;
+ 437  Sulphur_GO_data('9','3') = 0.324073104940641;
+ 438  Sulphur_GO_data('10','3') = 1.100321154941514;
+ 439   
+ 440  Sulphur_GO_data('1','4') = 0.138170604978298;
+ 441  Sulphur_GO_data('2','4') = 0.324808881357782;
+ 442  Sulphur_GO_data('3','4') = 0.132956277603478;
+ 443  Sulphur_GO_data('4','4') = 0.194502792675285;
+ 444  Sulphur_GO_data('5','4') = 0.228934729989087;
+ 445  Sulphur_GO_data('6','4') = 0.745981922602771;
+ 446  Sulphur_GO_data('7','4') = 0.930200382982935;
+ 447  Sulphur_GO_data('8','4') = 1.766616103121546;
+ 448  Sulphur_GO_data('9','4') = 0.333366587927294;
+ 449  Sulphur_GO_data('10','4') = 1.155344266991180;
+ 450   
+ 451  Sulphur_GO_data('1','5') = 0.160119037177764;
+ 452  Sulphur_GO_data('2','5') = 0.237070843250389;
+ 453  Sulphur_GO_data('3','5') = 0.179241534916566;
+ 454  Sulphur_GO_data('4','5') = 0.198547381282052;
+ 455  Sulphur_GO_data('5','5') = 0.274516556420276;
+ 456  Sulphur_GO_data('6','5') = 0.631873427540527;
+ 457  Sulphur_GO_data('7','5') = 0.806307527204965;
+ 458  Sulphur_GO_data('8','5') = 1.625188062179657;
+ 459  Sulphur_GO_data('9','5') = 0.369783597954369;
+ 460  Sulphur_GO_data('10','5') = 1.144253677136521;
+ 461   
+ 462   
+ 463  VaccuumResidue_data('1','1') = 0.098476746897009;
+ 464  VaccuumResidue_data('2','1') = 0.254841406932241;
+ 465  VaccuumResidue_data('3','1') = 0.173170328760428;
+ 466  VaccuumResidue_data('4','1') = 0.141239119577067;
+ 467  VaccuumResidue_data('5','1') = 0.255427719783213;
+ 468  VaccuumResidue_data('6','1') = 0.441044400649980;
+ 469  VaccuumResidue_data('7','1') = 0.112523799680884;
+ 470  VaccuumResidue_data('8','1') = 0.276969737693296;
+ 471  VaccuumResidue_data('9','1') = 0.189320400668474;
+ 472  VaccuumResidue_data('10','1') = 0.226116053589760;
+ 473   
+ 474  VaccuumResidue_data('1','2') = 0.117914428890899;
+ 475  VaccuumResidue_data('2','2') = 0.275227182331483;
+ 476  VaccuumResidue_data('3','2') = 0.236554126564275;
+ 477  VaccuumResidue_data('4','2') = 0.124496284282309;
+ 478  VaccuumResidue_data('5','2') = 0.253628478519632;
+ 479  VaccuumResidue_data('6','2') = 0.414977511926427;
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 10
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 480  VaccuumResidue_data('7','2') = 0.096313256035774;
+ 481  VaccuumResidue_data('8','2') = 0.289686439323075;
+ 482  VaccuumResidue_data('9','2') = 0.205015116160727;
+ 483  VaccuumResidue_data('10','2') = 0.264009751721092;
+ 484   
+ 485  VaccuumResidue_data('1','3') = 0.094777581750325;
+ 486  VaccuumResidue_data('2','3') = 0.295376717751326;
+ 487  VaccuumResidue_data('3','3') = 0.177664240429431;
+ 488  VaccuumResidue_data('4','3') = 0.131236523229636;
+ 489  VaccuumResidue_data('5','3') = 0.228221555314528;
+ 490  VaccuumResidue_data('6','3') = 0.349226110581922;
+ 491  VaccuumResidue_data('7','3') = 0.103454097062942;
+ 492  VaccuumResidue_data('8','3') = 0.205819359076627;
+ 493  VaccuumResidue_data('9','3') = 0.177501118103415;
+ 494  VaccuumResidue_data('10','3') = 0.280661872199777;
+ 495   
+ 496  VaccuumResidue_data('1','4') = 0.092419309390921;
+ 497  VaccuumResidue_data('2','4') = 0.272437946676044;
+ 498  VaccuumResidue_data('3','4') = 0.221951668712980;
+ 499  VaccuumResidue_data('4','4') = 0.111483940457563;
+ 500  VaccuumResidue_data('5','4') = 0.242592773579144;
+ 501  VaccuumResidue_data('6','4') = 0.341326361986696;
+ 502  VaccuumResidue_data('7','4') = 0.124169710255900;
+ 503  VaccuumResidue_data('8','4') = 0.287409969852358;
+ 504  VaccuumResidue_data('9','4') = 0.206129072970268;
+ 505  VaccuumResidue_data('10','4') = 0.245554637551950;
+ 506   
+ 507  VaccuumResidue_data('1','5') = 0.118213633855153;
+ 508  VaccuumResidue_data('2','5') = 0.299551972362780;
+ 509  VaccuumResidue_data('3','5') = 0.220937083136309;
+ 510  VaccuumResidue_data('4','5') = 0.144708783532668;
+ 511  VaccuumResidue_data('5','5') = 0.237201293280314;
+ 512  VaccuumResidue_data('6','5') = 0.376551360490621;
+ 513  VaccuumResidue_data('7','5') = 0.104329719484758;
+ 514  VaccuumResidue_data('8','5') = 0.256205294490090;
+ 515  VaccuumResidue_data('9','5') = 0.193152661395673;
+ 516  VaccuumResidue_data('10','5') = 0.273551035003146;
+ 517   
+ 518   
+ 519   
+ 520  *======================================================================
+ 521   
+ 522   
+ 523   
+ 524  loop(h,
+ 525          loop(c,
+ 526                  loop(w$(ord(w) < card(w)),
+ 527                          Crude_yield_data(c,w,h) = sum(w2$(ord(w2)=card(w2)), Crude_yield(c,w)/(1-Crude_yield(c,w2))*(1-VaccuumResidue_data(c,h)));
+ 528                  );
+ 529                  Crude_yield_data(c,w2,h)$(ord(w2)=card(w2)) = VaccuumResidue_data(c,h);
+ 530          );
+ 531  );
+ 532   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 11
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 533  loop(c,
+ 534          loop(h,
+ 535                  Desulphurisation_cost(c,h) = ((Sulphur_GO_data(c,h)*109.0909 + 365.4546)/1000)*(0.85/0.159)/GO_density(c);
+ 536                  Sulphur_2(c,h) = Sulphur_GO_data(c,h)*0.005;
+ 537          );
+ 538  );
+ 539   
+ 540  loop(c,
+ 541          Crude_lower_bound(c) = (Barrel_lower_bound/GranularityOfBarrels)*BarrelToKT(c);
+ 542          Crude_upper_bound(c) = (Barrel_upper_bound/GranularityOfBarrels)*BarrelToKT(c);
+ 543  );
+ 544   
+ 545   
+ 546   
+ 547   
+ 548   
+ 549  *---------------------------------------------------------------
+ 550  *-------------    FULL SPACE PROBLEM DEFINITION   --------------
+ 551  *---------------------------------------------------------------
+ 552   
+ 553  BINARY VARIABLES
+ 554          pickCrude(c)
+ 555  ;
+ 556   
+ 557  POSITIVE VARIABLES
+ 558          crudeQuantity(c)
+ 559          flow_Reformer95(h)
+ 560          flow_Reformer100(h)
+ 561          flow_Cracker_Mogas(h)
+ 562          flow_Cracker_AGO(h)
+ 563          flow_Isomerisation(h)
+ 564          flow_Desulphurisation_CGO(h)
+ 565          flow_LG_producing(h)
+ 566          flow_LN_producing(h)
+ 567          flow_HF_2(h)
+ 568          volume_PG98(h)
+ 569          volume_ES95(h)
+ 570          volume_HF(h)
+ 571   
+ 572          blin_CDU_LG(LG_out,h)
+ 573          blin_Reformer95_LG(LG_out,h)
+ 574          blin_Reformer100_LG(LG_out,h)
+ 575          blin_Mogas_LG(LG_out,h)
+ 576          blin_AGO_LG(LG_out,h)
+ 577          blin_Cracker_Mogas(Cr_CGO,h)
+ 578          blin_Cracker_AGO(Cr_CGO,h)
+ 579   
+ 580          flow_Desulphurisation_1(c,h)
+ 581          flow_AGO_1(c,h)
+ 582          flow_AGO_2(c,h)
+ 583          flow_HF_1(c,h)
+ 584          flow_HF_3(c,h)
+ 585          flow_Burn(Burn,h)
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 12
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 586          flow_PG98(PG98_in,h)
+ 587          flow_ES95(PG98_in,h)
+ 588          flow_AGO_3(AGO_in,h)
+ 589          flow_JPF(JPF_out,h)
+ 590          flow_Import(p,h)
+ 591          fraction_LG(LG_in,h)
+ 592          fraction_CGO(Cr_mode,h)
+ 593  ;
+ 594   
+ 595  VARIABLES
+ 596          objvar
+ 597  ;
+ 598   
+ 599  EQUATIONS
+ 600          Mass_balance1(h)
+ 601          Mass_balance2(h)
+ 602          Mass_balance3(h)
+ 603          Mass_balance4(h)
+ 604          Mass_balance5(h)
+ 605          Mass_balance7(h)
+ 606          GO_balance(c,h)
+ 607          VR_balance(c,h)
+ 608          Desulphurisation_balance(c,h)
+ 609          Demand_constraint1(h)
+ 610          Demand_constraint2(h)
+ 611          Demand_constraint3(h)
+ 612          Demand_constraint4(h)
+ 613          Demand_constraint5(h)
+ 614          Demand_constraint6(h)
+ 615          Demand_constraint7(h)
+ 616   
+ 617          CDU_capacity_bound
+ 618          Crude_bound(c)
+ 619          Crude_selection(c)
+ 620          Desulphurisation_capacity_bound(h)
+ 621          Cracker_capacity_bound(h)
+ 622          Reformer_capacity_bound(h)
+ 623          Reformer95_balance(h)
+ 624          Reformer100_Balance(h)
+ 625          Isomerisation_balance(h)
+ 626          CN_balance(h)
+ 627          CGO_balance(h)
+ 628          Desulphurisation_CGO_balance(h)
+ 629          PG98_volume_def(h)
+ 630          ES95_volume_def(h)
+ 631          Butane95_constraint(h)
+ 632          Butane98_constraint(h)
+ 633          LG_split_balance(h)
+ 634          LG_balance(h)
+ 635          Reformer95_LG_balance(h)
+ 636          Reformer100_LG_balance(h)
+ 637          Cracker_Mogas_LG_balance(h)
+ 638          Cracker_AGO_LG_balance(h)
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 13
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 639          pq_ES95_constraint(h)
+ 640          pq_PG98_constraint(h)
+ 641          pq_demand_constraint(h)
+ 642          pq_burn_constraint(h)
+ 643          VP_ES95_upper(h)
+ 644          VP_ES95_lower(h)
+ 645          VP_PG98_upper(h)
+ 646          VP_PG98_lower(h)
+ 647          RON_PG98(h)
+ 648          RON_ES95(h)
+ 649          Sensitivity_PG98(h)
+ 650          Sensitivity_ES95(h)
+ 651   
+ 652          blincon_CDU_LG1(h)
+ 653          blincon_CDU_LG2(h)
+ 654          blincon_CDU_LG3(h)
+ 655          blincon_CDU_LG4(h)
+ 656   
+ 657          blincon_Reformer95_LG1(h)
+ 658          blincon_Reformer95_LG2(h)
+ 659          blincon_Reformer95_LG3(h)
+ 660          blincon_Reformer95_LG4(h)
+ 661   
+ 662          blincon_Reformer100_LG1(h)
+ 663          blincon_Reformer100_LG2(h)
+ 664          blincon_Reformer100_LG3(h)
+ 665          blincon_Reformer100_LG4(h)
+ 666   
+ 667          blincon_Mogas_LG1(h)
+ 668          blincon_Mogas_LG2(h)
+ 669          blincon_Mogas_LG3(h)
+ 670          blincon_Mogas_LG4(h)
+ 671   
+ 672          blincon_AGO_LG1(h)
+ 673          blincon_AGO_LG2(h)
+ 674          blincon_AGO_LG3(h)
+ 675          blincon_AGO_LG4(h)
+ 676   
+ 677          blincon_Cracker_Mogas1(h)
+ 678          blincon_Cracker_Mogas2(h)
+ 679          blincon_Cracker_Mogas3(h)
+ 680   
+ 681          blincon_Cracker_AGO1(h)
+ 682          blincon_Cracker_AGO2(h)
+ 683          blincon_Cracker_AGO3(h)
+ 684   
+ 685          pq_AGO_constraint(h)
+ 686          pq_HF_constraint(h)
+ 687          pq_Desulphurisation_constraint(h)
+ 688          CGO_split_balance(h)
+ 689          Cracker_Mogas_CGO_balance(h)
+ 690          Cracker_AGO_CGO_balance(h)
+ 691          HF_volume_def(h)
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 14
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 692          AGO_sulphur_balance(h)
+ 693          HF_viscosity_upper(h)
+ 694          HF_viscosity_lower(h)
+ 695          Refinery_Fuel(h)
+ 696   
+ 697          objfn
+ 698  ;
+ 699   
+ 700  *-------------------------------------
+ 701  *               EQUATION DEFINITIONS
+ 702  *-------------------------------------
+ 703   
+ 704          CDU_capacity_bound ..   sum(c, crudeQuantity(c)) =l= CDU_capacity
+ 705  ;
+ 706   
+ 707          Crude_selection(c) .. crudeQuantity(c) =g= pickCrude(c)*Crude_lower_bound(c)
+ 708  ;
+ 709   
+ 710          Crude_bound(c) ..       CrudeQuantity(c) =l= pickCrude(c)*Crude_upper_bound(c)
+ 711  ;
+ 712   
+ 713          Desulphurisation_capacity_bound(h) .. flow_Desulphurisation_CGO(h) + sum(c, flow_Desulphurisation_1(c,h)) =l= Desulphurisation_capacity
+ 714  ;
+ 715   
+ 716          Mass_balance1(h) .. Reformer_fraction('1','1')*flow_Reformer95(h) +
+ 717                                                  Reformer_fraction('2','1')*flow_Reformer100(h) +
+ 718                                                  Cracker_fraction('1','1')*flow_Cracker_Mogas(h) +
+ 719                                                  Cracker_fraction('2','1')*flow_Cracker_AGO(h) +
+ 720                                                  Isomerisation_fraction('1')*flow_Isomerisation(h) +
+ 721                                                  Desulphurisation_fraction2('2')*flow_Desulphurisation_CGO(h) -
+ 722                                                  flow_Burn('1',h) +
+ 723                                                  sum(c,
+ 724                                                          Crude_yield_data(c,'1',h)*crudeQuantity(c) +
+ 725                                                          Desulphurisation_fraction(c,'2')*flow_Desulphurisation_1(c,h)
+ 726                                                  ) =e= 0
+ 727  ;
+ 728   
+ 729          Mass_balance2(h) .. Reformer_fraction('1','2')*flow_Reformer95(h) +
+ 730                                                  Reformer_fraction('2','2')*flow_Reformer100(h) +
+ 731                                                  Cracker_fraction('1','2')*flow_Cracker_Mogas(h) +
+ 732                                                  Cracker_fraction('2','2')*flow_Cracker_AGO(h) -
+ 733                                                  flow_LG_producing(h) - flow_PG98('1',h) -
+ 734                                                  flow_ES95('1',h) - flow_Burn('2',h) +
+ 735                                                  sum(c,
+ 736                                                          Crude_yield_data(c,'2',h)*crudeQuantity(c)
+ 737                                                  ) =e= 0
+ 738  ;
+ 739   
+ 740          Mass_balance3(h) .. -flow_LN_producing(h) - flow_Burn('3',h) -
+ 741                                                  flow_PG98('3',h) - flow_ES95('3',h) -
+ 742                                                  flow_Isomerisation(h) - flow_JPF('1',h)*JPF_fraction('1','1') -
+ 743                                                  flow_JPF('2',h)*JPF_fraction('1','2') +
+ 744                                                  sum(c,
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 15
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 745                                                          Crude_yield_data(c,'3',h)*crudeQuantity(c)
+ 746                                                  ) =e= 0
+ 747  ;
+ 748   
+ 749          Mass_balance4(h) .. -flow_JPF('1',h)*JPF_fraction('2','1') -
+ 750                                                  flow_JPF('2',h)*JPF_fraction('2','2') -
+ 751                                                  flow_Reformer95(h) - flow_Reformer100(h) +
+ 752                                                  sum(c,
+ 753                                                          Crude_yield_data(c,'4',h)*crudeQuantity(c)
+ 754                                                  ) =e= 0
+ 755  ;
+ 756   
+ 757          Mass_balance5(h) .. -flow_JPF('1',h)*JPF_fraction('3','1') -
+ 758                                                  flow_JPF('2',h)*JPF_fraction('3','2') -
+ 759                                                  flow_AGO_3('1',h) +
+ 760                                                  sum(c,
+ 761                                                          Crude_yield_data(c,'5',h)*crudeQuantity(c)
+ 762                                                  ) =e= 0
+ 763  ;
+ 764   
+ 765          Mass_balance7(h) .. -flow_Cracker_Mogas(h) - flow_Cracker_AGO(h) +
+ 766                                                  sum(c,
+ 767                                                          Crude_yield_data(c,'7',h)*crudeQuantity(c)
+ 768                                                  ) =e= 0
+ 769  ;
+ 770   
+ 771          GO_balance(c,h) .. -flow_AGO_1(c,h) - flow_Desulphurisation_1(c,h) - flow_HF_3(c,h) +
+ 772                                                  Crude_yield_data(c,'6',h)*crudeQuantity(c) =e= 0
+ 773  ;
+ 774   
+ 775          VR_balance(c,h) ..      Crude_yield_data(c,'8',h)*crudeQuantity(c) =e= flow_HF_1(c,h)
+ 776  ;
+ 777   
+ 778          Desulphurisation_balance(c,h) .. Desulphurisation_fraction(c,'1')*flow_Desulphurisation_1(c,h) =e= flow_AGO_2(c,h)
+ 779  ;
+ 780   
+ 781          Reformer95_balance(h) ..        flow_Reformer95(h)*Reformer_fraction('1','3') +
+ 782                                                                  flow_Reformer100(h)*Reformer_fraction('2','3') =e=
+ 783                                                                  flow_PG98('4',h) + flow_ES95('4',h)
+ 784  ;
+ 785   
+ 786          Reformer100_balance(h) ..       flow_Reformer95(h)*Reformer_fraction('1','4') +
+ 787                                                                  flow_Reformer100(h)*Reformer_fraction('2','4') =e=
+ 788                                                                  flow_PG98('5',h) + flow_ES95('5',h)
+ 789  ;
+ 790   
+ 791          Isomerisation_balance(h) .. flow_Isomerisation(h)*Isomerisation_fraction('2') =e=
+ 792                                                                  flow_PG98('2',h) + flow_ES95('2',h)
+ 793  ;
+ 794   
+ 795          CN_balance(h) ..        flow_Cracker_Mogas(h)*Cracker_fraction('1','3') +
+ 796                                                  flow_Cracker_AGO(h)*Cracker_fraction('2','3') =e=
+ 797                                                  flow_PG98('6',h) + flow_ES95('6',h)
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 16
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 798  ;
+ 799   
+ 800          CGO_balance(h) ..       flow_Cracker_Mogas(h)*Cracker_fraction('1','4') +
+ 801                                                  flow_Cracker_AGO(h)*Cracker_fraction('2','4') =e=
+ 802                                                  flow_Desulphurisation_CGO(h) + flow_HF_2(h) + flow_AGO_3('2',h)
+ 803  ;
+ 804   
+ 805          Desulphurisation_CGO_balance(h) .. Desulphurisation_fraction2('1')*flow_Desulphurisation_CGO(h) =e= flow_AGO_3('3',h)
+ 806  ;
+ 807   
+ 808          Demand_constraint1(h) .. flow_Import('1',h) + sum(PG98_in, flow_PG98(PG98_in,h)) =g= Demand_quantity('1')
+ 809  ;
+ 810   
+ 811          Demand_constraint2(h) .. flow_Import('2',h) + sum(PG98_in, flow_ES95(PG98_in,h)) =g= Demand_quantity('2')
+ 812  ;
+ 813   
+ 814          Demand_constraint3(h) .. flow_Import('3',h) + sum(JPF_out, flow_JPF(JPF_out,h)) =g= Demand_quantity('3')
+ 815  ;
+ 816   
+ 817          Demand_constraint4(h) .. flow_Import('4',h) + sum(AGO_in, flow_AGO_3(AGO_in,h)) +
+ 818                                                                  sum(c, flow_AGO_1(c,h) + flow_AGO_2(c,h)) =g= Demand_quantity('4')
+ 819  ;
+ 820   
+ 821          Demand_constraint5(h) .. flow_Import('5',h) + flow_HF_2(h) +
+ 822                                                                  sum(c, flow_HF_1(c,h) + flow_HF_3(c,h)) =g= Demand_quantity('5')
+ 823  ;
+ 824   
+ 825          Demand_constraint6(h) .. flow_Import('6',h) + flow_LG_producing(h) =g= Demand_quantity('6')
+ 826  ;
+ 827   
+ 828          Demand_constraint7(h) .. flow_Import('7',h) + flow_LN_producing(h) =g= Demand_quantity('7')
+ 829  ;
+ 830   
+ 831          PG98_volume_def(h) ..   flow_Import('1',h)/Density_products('1') +
+ 832                                                          sum(PG98_in, flow_PG98(PG98_in,h)/Density_PG98_input(PG98_in)) =e= volume_PG98(h)
+ 833  ;
+ 834   
+ 835          ES95_volume_def(h) ..   flow_Import('2',h)/Density_products('2') +
+ 836                                                          sum(PG98_in, flow_ES95(PG98_in,h)/Density_PG98_input(PG98_in)) =e= volume_ES95(h)
+ 837  ;
+ 838   
+ 839          Butane95_constraint(h) ..       flow_ES95('1',h)/Density_PG98_input('1') +
+ 840                                                                  0.03*flow_Import('2',h)/Density_products('2') =l= 0.05*volume_ES95(h)
+ 841  ;
+ 842   
+ 843          Butane98_constraint(h) ..       flow_PG98('1',h)/Density_PG98_input('1') +
+ 844                                                                  0.03*flow_Import('1',h)/Density_products('2') =l= 0.05*volume_PG98(h)
+ 845  ;
+ 846   
+ 847          blincon_CDU_LG1(h) .. blin_CDU_LG('1',h) =e= fraction_LG('1',h)*flow_ES95('1',h)
+ 848  ;
+ 849   
+ 850          blincon_CDU_LG2(h) .. blin_CDU_LG('2',h) =e= fraction_LG('1',h)*flow_PG98('1',h)
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 17
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 851  ;
+ 852   
+ 853          blincon_CDU_LG3(h) .. blin_CDU_LG('3',h) =e= fraction_LG('1',h)*flow_Burn('2',h)
+ 854  ;
+ 855   
+ 856          blincon_CDU_LG4(h) .. blin_CDU_LG('4',h) =e= fraction_LG('1',h)*flow_LG_producing(h)
+ 857  ;
+ 858   
+ 859          blincon_Reformer95_LG1(h) .. blin_Reformer95_LG('1',h) =e= fraction_LG('2',h)*flow_ES95('1',h)
+ 860  ;
+ 861   
+ 862          blincon_Reformer95_LG2(h) .. blin_Reformer95_LG('2',h) =e= fraction_LG('2',h)*flow_PG98('1',h)
+ 863  ;
+ 864   
+ 865          blincon_Reformer95_LG3(h) .. blin_Reformer95_LG('3',h) =e= fraction_LG('2',h)*flow_Burn('2',h)
+ 866  ;
+ 867   
+ 868          blincon_Reformer95_LG4(h) .. blin_Reformer95_LG('4',h) =e= fraction_LG('2',h)*flow_LG_producing(h)
+ 869  ;
+ 870   
+ 871          blincon_Reformer100_LG1(h) .. blin_Reformer100_LG('1',h) =e= fraction_LG('3',h)*flow_ES95('1',h)
+ 872  ;
+ 873   
+ 874          blincon_Reformer100_LG2(h) .. blin_Reformer100_LG('2',h) =e= fraction_LG('3',h)*flow_PG98('1',h)
+ 875  ;
+ 876   
+ 877          blincon_Reformer100_LG3(h) .. blin_Reformer100_LG('3',h) =e= fraction_LG('3',h)*flow_Burn('2',h)
+ 878  ;
+ 879   
+ 880          blincon_Reformer100_LG4(h) .. blin_Reformer100_LG('4',h) =e= fraction_LG('3',h)*flow_LG_producing(h)
+ 881  ;
+ 882   
+ 883          blincon_Mogas_LG1(h) .. blin_Mogas_LG('1',h) =e= fraction_LG('4',h)*flow_ES95('1',h)
+ 884  ;
+ 885   
+ 886          blincon_Mogas_LG2(h) .. blin_Mogas_LG('2',h) =e= fraction_LG('4',h)*flow_PG98('1',h)
+ 887  ;
+ 888   
+ 889          blincon_Mogas_LG3(h) .. blin_Mogas_LG('3',h) =e= fraction_LG('4',h)*flow_Burn('2',h)
+ 890  ;
+ 891   
+ 892          blincon_Mogas_LG4(h) .. blin_Mogas_LG('4',h) =e= fraction_LG('4',h)*flow_LG_producing(h)
+ 893  ;
+ 894   
+ 895          blincon_AGO_LG1(h) .. blin_AGO_LG('1',h) =e= fraction_LG('5',h)*flow_ES95('1',h)
+ 896  ;
+ 897   
+ 898          blincon_AGO_LG2(h) .. blin_AGO_LG('2',h) =e= fraction_LG('5',h)*flow_PG98('1',h)
+ 899  ;
+ 900   
+ 901          blincon_AGO_LG3(h) .. blin_AGO_LG('3',h) =e= fraction_LG('5',h)*flow_Burn('2',h)
+ 902  ;
+ 903   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 18
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 904          blincon_AGO_LG4(h) .. blin_AGO_LG('4',h) =e= fraction_LG('5',h)*flow_LG_producing(h)
+ 905  ;
+ 906   
+ 907          LG_balance(h) ..        sum(LG_out, blin_CDU_LG(LG_out,h)) =e=
+ 908                                                  sum(c,
+ 909                                                          Crude_yield_data(c,'2',h)*crudeQuantity(c)
+ 910                                                  )
+ 911  ;
+ 912   
+ 913          Reformer95_LG_balance(h) .. flow_Reformer95(h)*Reformer_fraction('1','2') =e=
+ 914                                                                  sum(LG_out, blin_Reformer95_LG(LG_out,h))
+ 915  ;
+ 916   
+ 917          Reformer100_LG_balance(h) ..    flow_Reformer100(h)*Reformer_fraction('2','2') =e=
+ 918                                                                          sum(LG_out, blin_Reformer100_LG(LG_out,h))
+ 919  ;
+ 920   
+ 921          Cracker_Mogas_LG_balance(h) ..  flow_Cracker_Mogas(h)*Cracker_fraction('1','2') =e=
+ 922                                                                          sum(LG_out, blin_Mogas_LG(LG_out,h))
+ 923  ;
+ 924   
+ 925          Cracker_AGO_LG_balance(h) ..    flow_Cracker_AGO(h)*Cracker_fraction('2','2') =e=
+ 926                                                                          sum(LG_out, blin_AGO_LG(LG_out,h))
+ 927  ;
+ 928   
+ 929          pq_ES95_constraint(h) ..        blin_CDU_LG('1',h) + blin_Reformer95_LG('1',h) +
+ 930                                                                  blin_Reformer100_LG('1',h) + blin_Mogas_LG('1',h) +
+ 931                                                                  blin_AGO_LG('1',h) =e= flow_ES95('1',h)
+ 932  ;
+ 933   
+ 934          pq_PG98_constraint(h) ..        blin_CDU_LG('2',h) + blin_Reformer95_LG('2',h) +
+ 935                                                                  blin_Reformer100_LG('2',h) + blin_Mogas_LG('2',h) +
+ 936                                                                  blin_AGO_LG('2',h) =e= flow_PG98('1',h)
+ 937  ;
+ 938   
+ 939          pq_burn_constraint(h) ..        blin_CDU_LG('3',h) + blin_Reformer95_LG('3',h) +
+ 940                                                                  blin_Reformer100_LG('3',h) + blin_Mogas_LG('3',h) +
+ 941                                                                  blin_AGO_LG('3',h) =e= flow_Burn('2',h)
+ 942  ;
+ 943   
+ 944          pq_demand_constraint(h) ..      blin_CDU_LG('4',h) + blin_Reformer95_LG('4',h) +
+ 945                                                                  blin_Reformer100_LG('4',h) + blin_Mogas_LG('4',h) +
+ 946                                                                  blin_AGO_LG('4',h) =e= flow_LG_producing(h)
+ 947  ;
+ 948   
+ 949          LG_split_balance(h) .. sum(LG_in, fraction_LG(LG_in,h)) =e= 1
+ 950  ;
+ 951   
+ 952          VP_ES95_lower(h) .. -0.45*volume_ES95(h) + flow_Import('2',h)*Product_VP('2')/Density_products('2') +
+ 953                                                  sum(PG98_in, VP(PG98_in)*flow_ES95(PG98_in,h)/Density_PG98_input(PG98_in)) +
+ 954                                                  LG_parameters('1','1')*blin_CDU_LG('1',h)/Density_PG98_input('1') +
+ 955                                                  LG_parameters('1','2')*blin_Reformer95_LG('1',h)/Density_PG98_input('1') +
+ 956                                                  LG_parameters('1','3')*blin_Reformer100_LG('1',h)/Density_PG98_input('1') +
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 19
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 957                                                  LG_parameters('1','4')*blin_Mogas_LG('1',h)/Density_PG98_input('1') +
+ 958                                                  LG_parameters('1','5')*blin_AGO_LG('1',h)/Density_PG98_input('1') =g= 0
+ 959  ;
+ 960   
+ 961          VP_ES95_upper(h) .. -0.80*volume_ES95(h) + flow_Import('2',h)*Product_VP('2')/Density_products('2') +
+ 962                                                  sum(PG98_in, VP(PG98_in)*flow_ES95(PG98_in,h)/Density_PG98_input(PG98_in)) +
+ 963                                                  LG_parameters('1','1')*blin_CDU_LG('1',h)/Density_PG98_input('1') +
+ 964                                                  LG_parameters('1','2')*blin_Reformer95_LG('1',h)/Density_PG98_input('1') +
+ 965                                                  LG_parameters('1','3')*blin_Reformer100_LG('1',h)/Density_PG98_input('1') +
+ 966                                                  LG_parameters('1','4')*blin_Mogas_LG('1',h)/Density_PG98_input('1') +
+ 967                                                  LG_parameters('1','5')*blin_AGO_LG('1',h)/Density_PG98_input('1') =l= 0
+ 968  ;
+ 969   
+ 970          VP_PG98_lower(h) .. -0.50*volume_PG98(h) + flow_Import('1',h)*Product_VP('1')/Density_products('1') +
+ 971                                                  sum(PG98_in, VP(PG98_in)*flow_PG98(PG98_in,h)/Density_PG98_input(PG98_in)) +
+ 972                                                  LG_parameters('1','1')*blin_CDU_LG('2',h)/Density_PG98_input('1') +
+ 973                                                  LG_parameters('1','2')*blin_Reformer95_LG('2',h)/Density_PG98_input('1') +
+ 974                                                  LG_parameters('1','3')*blin_Reformer100_LG('2',h)/Density_PG98_input('1') +
+ 975                                                  LG_parameters('1','4')*blin_Mogas_LG('2',h)/Density_PG98_input('1') +
+ 976                                                  LG_parameters('1','5')*blin_AGO_LG('2',h)/Density_PG98_input('1') =g= 0
+ 977  ;
+ 978   
+ 979          VP_PG98_upper(h) .. -0.86*volume_PG98(h) + flow_Import('1',h)*Product_VP('1')/Density_products('1') +
+ 980                                                  sum(PG98_in, VP(PG98_in)*flow_PG98(PG98_in,h)/Density_PG98_input(PG98_in)) +
+ 981                                                  LG_parameters('1','1')*blin_CDU_LG('2',h)/Density_PG98_input('1') +
+ 982                                                  LG_parameters('1','2')*blin_Reformer95_LG('2',h)/Density_PG98_input('1') +
+ 983                                                  LG_parameters('1','3')*blin_Reformer100_LG('2',h)/Density_PG98_input('1') +
+ 984                                                  LG_parameters('1','4')*blin_Mogas_LG('2',h)/Density_PG98_input('1') +
+ 985                                                  LG_parameters('1','5')*blin_AGO_LG('2',h)/Density_PG98_input('1') =l= 0
+ 986  ;
+ 987   
+ 988          RON_PG98(h) ..  -98*volume_PG98(h) + flow_Import('1',h)*Product_RON('1')/Density_products('1') +
+ 989                                          sum(PG98_in, RON(PG98_in)*flow_PG98(PG98_in,h)/Density_PG98_input(PG98_in)) +
+ 990                                          LG_parameters('2','1')*blin_CDU_LG('2',h)/Density_PG98_input('1') +
+ 991                                          LG_parameters('2','2')*blin_Reformer95_LG('2',h)/Density_PG98_input('1') +
+ 992                                          LG_parameters('2','3')*blin_Reformer100_LG('2',h)/Density_PG98_input('1') +
+ 993                                          LG_parameters('2','4')*blin_Mogas_LG('2',h)/Density_PG98_input('1') +
+ 994                                          LG_parameters('2','5')*blin_AGO_LG('2',h)/Density_PG98_input('1') =g= 0
+ 995  ;
+ 996   
+ 997          RON_ES95(h) ..  -95*volume_ES95(h) + flow_Import('2',h)*Product_RON('2')/Density_products('2') +
+ 998                                          sum(PG98_in, RON(PG98_in)*flow_ES95(PG98_in,h)/Density_PG98_input(PG98_in)) +
+ 999                                          LG_parameters('2','1')*blin_CDU_LG('1',h)/Density_PG98_input('1') +
+1000                                          LG_parameters('2','2')*blin_Reformer95_LG('1',h)/Density_PG98_input('1') +
+1001                                          LG_parameters('2','3')*blin_Reformer100_LG('1',h)/Density_PG98_input('1') +
+1002                                          LG_parameters('2','4')*blin_Mogas_LG('1',h)/Density_PG98_input('1') +
+1003                                          LG_parameters('2','5')*blin_AGO_LG('1',h)/Density_PG98_input('1') =g= 0
+1004  ;
+1005   
+1006          Sensitivity_PG98(h) ..  -10*volume_PG98(h) + flow_Import('1',h)*(Product_RON('1') - Product_MON('1'))/Density_products('1') +
+1007                                                          sum(PG98_in, (RON(PG98_in) - MON(PG98_in))*flow_PG98(PG98_in,h)/Density_PG98_input(PG98_in)) +
+1008                                                          (LG_parameters('2','1') - LG_parameters('3','1'))*blin_CDU_LG('2',h)/Density_PG98_input('1') +
+1009                                                          (LG_parameters('2','2') - LG_parameters('3','2'))*blin_Reformer95_LG('2',h)/Density_PG98_input('1') +
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 20
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+1010                                                          (LG_parameters('2','3') - LG_parameters('3','3'))*blin_Reformer100_LG('2',h)/Density_PG98_input('1') +
+1011                                                          (LG_parameters('2','4') - LG_parameters('3','4'))*blin_Mogas_LG('2',h)/Density_PG98_input('1') +
+1012                                                          (LG_parameters('2','5') - LG_parameters('3','5'))*blin_AGO_LG('2',h)/Density_PG98_input('1') =l= 0
+1013  ;
+1014   
+1015          Sensitivity_ES95(h) ..  -10*volume_ES95(h) + flow_Import('2',h)*(Product_RON('2') - Product_MON('2'))/Density_products('2') +
+1016                                                          sum(PG98_in, (RON(PG98_in) - MON(PG98_in))*flow_ES95(PG98_in,h)/Density_PG98_input(PG98_in)) +
+1017                                                          (LG_parameters('2','1') - LG_parameters('3','1'))*blin_CDU_LG('1',h)/Density_PG98_input('1') +
+1018                                                          (LG_parameters('2','2') - LG_parameters('3','2'))*blin_Reformer95_LG('1',h)/Density_PG98_input('1') +
+1019                                                          (LG_parameters('2','3') - LG_parameters('3','3'))*blin_Reformer100_LG('1',h)/Density_PG98_input('1') +
+1020                                                          (LG_parameters('2','4') - LG_parameters('3','4'))*blin_Mogas_LG('1',h)/Density_PG98_input('1') +
+1021                                                          (LG_parameters('2','5') - LG_parameters('3','5'))*blin_AGO_LG('1',h)/Density_PG98_input('1') =l= 0
+1022  ;
+1023   
+1024          blincon_Cracker_Mogas1(h) .. blin_Cracker_Mogas('1',h) =e= fraction_CGO('1',h)*flow_AGO_3('2',h)
+1025  ;
+1026   
+1027          blincon_Cracker_Mogas2(h) .. blin_Cracker_Mogas('2',h) =e= fraction_CGO('1',h)*flow_HF_2(h)
+1028  ;
+1029   
+1030          blincon_Cracker_Mogas3(h) .. blin_Cracker_Mogas('3',h) =e= fraction_CGO('1',h)*flow_Desulphurisation_CGO(h)
+1031  ;
+1032   
+1033          blincon_Cracker_AGO1(h) .. blin_Cracker_AGO('1',h) =e= fraction_CGO('2',h)*flow_AGO_3('2',h)
+1034  ;
+1035   
+1036          blincon_Cracker_AGO2(h) .. blin_Cracker_AGO('2',h) =e= fraction_CGO('2',h)*flow_HF_2(h)
+1037  ;
+1038   
+1039          blincon_Cracker_AGO3(h) .. blin_Cracker_AGO('3',h) =e= fraction_CGO('2',h)*flow_Desulphurisation_CGO(h)
+1040  ;
+1041   
+1042          Cracker_Mogas_CGO_balance(h) .. blin_Cracker_Mogas('1',h) + blin_Cracker_Mogas('2',h) +
+1043                                                                          blin_Cracker_Mogas('3',h) =e= flow_Cracker_Mogas(h)*Cracker_fraction('1','4')
+1044  ;
+1045   
+1046          Cracker_AGO_CGO_balance(h) ..   blin_Cracker_AGO('1',h) + blin_Cracker_AGO('2',h) +
+1047                                                                          blin_Cracker_AGO('3',h) =e= flow_Cracker_AGO(h)*Cracker_fraction('2','4')
+1048  ;
+1049   
+1050          CGO_split_balance(h) .. sum(Cr_mode, fraction_CGO(Cr_mode,h)) =e= 1
+1051  ;
+1052   
+1053          pq_AGO_constraint(h) .. blin_Cracker_Mogas('1',h) + blin_Cracker_AGO('1',h) =e= flow_AGO_3('2',h)
+1054  ;
+1055   
+1056          pq_HF_constraint(h) .. blin_Cracker_Mogas('2',h) + blin_Cracker_AGO('2',h) =e= flow_HF_2(h)
+1057  ;
+1058   
+1059          pq_Desulphurisation_constraint(h) .. blin_Cracker_Mogas('3',h) + blin_Cracker_AGO('3',h) =e= flow_Desulphurisation_CGO(h)
+1060  ;
+1061   
+1062          HF_volume_def(h) .. -volume_HF(h) + flow_Import('5',h)/Density_products('5') +
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 21
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+1063                                                  flow_HF_2(h)/CGO_density +
+1064                                                  sum(c, flow_HF_1(c,h)/HFO_density(c) + flow_HF_3(c,h)/GO_density(c)) =e= 0
+1065  ;
+1066   
+1067          HF_viscosity_lower(h) ..        flow_Import('5',h)*Viscosity_products('5')/Density_products('5') +
+1068                                                                  sum(c,
+1069                                                                          flow_HF_1(c,h)*Viscosity_HF1(c)/HFO_density(c) +
+1070                                                                          flow_HF_3(c,h)*Viscosity_HF3(c)/GO_density(c)
+1071                                                                  ) +
+1072                                                                  (blin_Cracker_Mogas('2',h)*Mogas_viscosity + blin_Cracker_AGO('2',h)*AGO_viscosity)/CGO_density -
+1073                                                                  30*volume_HF(h) =g= 0
+1074  ;
+1075   
+1076          HF_viscosity_upper(h) ..        flow_Import('5',h)*Viscosity_products('5')/Density_products('5') +
+1077                                                                  sum(c,
+1078                                                                          flow_HF_1(c,h)*Viscosity_HF1(c)/HFO_density(c) +
+1079                                                                          flow_HF_3(c,h)*Viscosity_HF3(c)/GO_density(c)
+1080                                                                  ) +
+1081                                                                  (blin_Cracker_Mogas('2',h)*Mogas_viscosity + blin_Cracker_AGO('2',h)*AGO_viscosity)/CGO_density -
+1082                                                                  33*volume_HF(h) =l= 0
+1083  ;
+1084   
+1085          AGO_sulphur_balance(h) ..       flow_Import('4',h)*Product_sulphur('4') - Sulphur_spec*flow_Import('4',h) +
+1086                                                                  sum(c,
+1087                                                                          (Sulphur_GO_data(c,h) - Sulphur_spec)*flow_AGO_1(c,h) +
+1088                                                                          (Sulphur_2(c,h) - Sulphur_spec)*flow_AGO_2(c,h)
+1089                                                                  ) +
+1090                                                                  flow_AGO_3('1',h)*(Sulphur_3('1') - Sulphur_spec) +
+1091                                                                  blin_Cracker_AGO('1',h)*(AGO_sulphur - Sulphur_spec) +
+1092                                                                  blin_Cracker_Mogas('1',h)*(Mogas_sulphur - Sulphur_spec) +
+1093                                                                  blin_Cracker_AGO('3',h)*AGO_sulphur*0.005 +
+1094                                                                  blin_Cracker_Mogas('3',h)*Mogas_sulphur*0.005 -
+1095                                                                  Sulphur_spec*flow_AGO_3('3',h) =l= 0
+1096  ;
+1097   
+1098          Refinery_Fuel(h) .. 1.3*flow_Burn('1',h) + 1.2*flow_Burn('2',h) + 1.1*flow_Burn('3',h) -
+1099                                                  flow_Reformer95(h)*Reformer_fraction('1','5') -
+1100                                                  flow_Reformer100(h)*Reformer_fraction('2','5') -
+1101                                                  flow_Cracker_Mogas(h)*Cracker_fraction('1','5') -
+1102                                                  flow_Cracker_AGO(h)*Cracker_fraction('2','5') -
+1103                                                  flow_Isomerisation(h)*Isomerisation_fraction('3') -
+1104                                                  flow_Desulphurisation_CGO(h)*Desulphurisation_fraction2('3') - 15.2 -
+1105                                                  sum(c,
+1106                                                          0.018*crudeQuantity(c) +
+1107                                                          flow_Desulphurisation_1(c,h)*Desulphurisation_fraction(c,'3')
+1108                                                  ) =g= 0
+1109  ;
+1110   
+1111          Cracker_capacity_bound(h) .. flow_Cracker_Mogas(h) + flow_Cracker_AGO(h) =l= Cracker_capacity
+1112  ;
+1113   
+1114          Reformer_capacity_bound(h) .. flow_Reformer95(h) + flow_Reformer100(h) =l= Reformer_capacity
+1115  ;
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 22
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+1116   
+1117   
+1118      objfn .. objvar =e= sum(h,prob(h)*(
+1119                                                                  Cracker_Mogas_cost*flow_Cracker_Mogas(h) +
+1120                                                                  Cracker_AGO_cost*flow_Cracker_AGO(h) +
+1121                                                                  Reformer95_cost*flow_Reformer95(h) +
+1122                                                                  Reformer100_cost*flow_Reformer100(h) +
+1123                                                                  Isomerisation_cost*flow_Isomerisation(h) +
+1124                                                                  Desulphurisation_CGO_cost*flow_Desulphurisation_CGO(h) -
+1125                                                                  LG_sale*flow_LG_producing(h) -
+1126                                                                  LN_sale*flow_LN_producing(h) -
+1127                                                                  HF_sale*flow_HF_2(h) +
+1128                                                                  sum(c,
+1129                                                                          Desulphurisation_cost(c,h)*flow_Desulphurisation_1(c,h) -
+1130                                                                          AGO_sale*flow_AGO_1(c,h) -
+1131                                                                          AGO_sale*flow_AGO_2(c,h) -
+1132                                                                          HF_sale*flow_HF_1(c,h) -
+1133                                                                          HF_sale*flow_HF_3(c,h) +
+1134                                                                          (crudeQuantity(c)/1000/BarrelToKT(c)*GranularityOfBarrels)*(Crude_price(c)+1)
+1135                                                                  ) -
+1136                                                                  sum(PG98_in,
+1137                                                                          PG98_sale*flow_PG98(PG98_in,h) +
+1138                                                                          ES95_sale*flow_ES95(PG98_in,h)
+1139                                                                  ) -
+1140                                                                  sum(JPF_out,
+1141                                                                          JET_sale*flow_JPF(JPF_out,h)
+1142                                                                  ) -
+1143                                                                  sum(AGO_in,
+1144                                                                          AGO_sale*flow_AGO_3(AGO_in,h)
+1145                                                                  )
+1146                                                          ) );
+1147   
+1148   
+1149  MODEL refinery1 /all/;
+1150   
+1151   
+1152  *---------------------------------------------
+1153  *                       SET VARIABLE BOUNDS
+1154  *---------------------------------------------
+1155   
+1156  flow_Desulphurisation_1.up(c,h) = Desulphurisation_capacity;
+1157  flow_AGO_1.up(c,h) = Crude_upper_bound(c);
+1158  flow_AGO_2.up(c,h) = Desulphurisation_capacity;
+1159  flow_HF_1.up(c,h) = Crude_upper_bound(c);
+1160  flow_HF_3.up(c,h) = Crude_upper_bound(c);
+1161  flow_PG98.up(PG98_in,h) = CDU_capacity;
+1162  flow_ES95.up(PG98_in,h) = CDU_capacity;
+1163  flow_Burn.up(Burn,h) = CDU_capacity;
+1164  flow_AGO_3.up(AGO_in,h) = Cracker_capacity;
+1165  flow_AGO_3.up('1',h) = CDU_capacity;
+1166  flow_JPF.up(JPF_out,h) = CDU_capacity;
+1167  flow_Import.up(p,h) = Import_upper(p);
+1168  fraction_LG.up(LG_in,h) = 1;
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 23
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+1169  flow_Reformer95.lo(h) = Reformer95_lower;
+1170  flow_Reformer95.up(h) = Reformer_capacity;
+1171  flow_Reformer100.up(h) = Reformer_capacity - Reformer95_lower;
+1172  flow_Cracker_Mogas.up(h) = Cracker_capacity;
+1173  flow_Cracker_AGO.up(h) = Cracker_capacity;
+1174  flow_Isomerisation.up(h) = CDU_capacity;
+1175  flow_Desulphurisation_CGO.up(h) = Cracker_capacity;
+1176  flow_LG_producing.up(h) = CDU_capacity;
+1177  flow_LN_producing.up(h) = CDU_capacity;
+1178  flow_HF_2.up(h) = Cracker_capacity;
+1179  volume_PG98.up(h) = CDU_capacity/Density_PG98_input('1');
+1180  volume_ES95.up(h) = CDU_capacity/Density_PG98_input('1');
+1181  fraction_CGO.up(Cr_mode,h) = 1;
+1182  volume_HF.up(h) = CDU_capacity/GO_density('7');
+1183  blin_CDU_LG.up(LG_out,h) = CDU_capacity;
+1184  blin_Reformer95_LG.up(LG_out,h) = CDU_capacity;
+1185  blin_Reformer100_LG.up(LG_out,h) = CDU_capacity;
+1186  blin_Mogas_LG.up(LG_out,h) = CDU_capacity;
+1187  blin_AGO_LG.up(LG_out,h) = CDU_capacity;
+1188  blin_Cracker_Mogas.up(Cr_CGO,h) = Cracker_capacity;
+1189  blin_Cracker_AGO.up(Cr_CGO,h) = Cracker_Capacity;
+1190   
+1191   
+1192   
+1193  *------------------------------------------
+1194  *                       SOLVE THE PROBLEM
+1195  *------------------------------------------
+1196   
+1197  solve refinery1 minimizing objvar using MINLP;
+1198   
+1199   
+1200  *---------------------------------------------------
+1201  *                       PRINT FINAL SOLUTION STATISTICS
+1202  *---------------------------------------------------
+1203   
+1204  SCALARS solver_time, wall_time;
+1205   
+1206  solver_time = refinery1.resusd;
+1207  wall_time = refinery1.etsolve;
+1208   
+1209  display solver_time, wall_time;
+1210   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 24
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Include File Summary
+
+
+   SEQ   GLOBAL TYPE      PARENT   LOCAL  FILENAME
+
+     1        1 INPUT          0       0  /home/canl1/PlasmoAlgorithms/examples/refinery_model/continous/scaled_refinery_continous.gms
+     2      392 INCLUDE        1     392  ./home/canl1/PlasmoAlgorithms/examples/refinery_model/continous/refinery1_data/5.gms
+
+
+COMPILATION TIME     =        0.009 SECONDS      3 MB  25.1.1 r66732 LEX-LEG
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 25
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Model Statistics    SOLVE refinery1 Using MINLP From line 1197
+
+
+MODEL STATISTICS
+
+BLOCKS OF EQUATIONS          88     SINGLE EQUATIONS          577
+BLOCKS OF VARIABLES          35     SINGLE VARIABLES          631  5 projected
+NON ZERO ELEMENTS         3,871     NON LINEAR N-Z            260
+DERIVATIVE POOL              20     CONSTANT POOL              16
+CODE LENGTH                 650     DISCRETE VARIABLES         10
+
+
+GENERATION TIME      =        0.008 SECONDS      4 MB  25.1.1 r66732 LEX-LEG
+
+
+EXECUTION TIME       =        0.010 SECONDS      4 MB  25.1.1 r66732 LEX-LEG
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 26
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+               S O L V E      S U M M A R Y
+
+     MODEL   refinery1           OBJECTIVE  objvar
+     TYPE    MINLP               DIRECTION  MINIMIZE
+     SOLVER  SCIP                FROM LINE  1197
+
+**** SOLVER STATUS     1 Normal Completion         
+**** MODEL STATUS      8 Integer Solution          
+**** OBJECTIVE VALUE           -18349.4343
+
+ RESOURCE USAGE, LIMIT          4.326     10000.000
+ ITERATION COUNT, LIMIT     38579    1000000000
+ EVALUATION ERRORS              0             0
+
+SCIP             25.1.1 r66732 Released May 19, 2018 LEG x86 64bit/Linux      
+
+---- EQU Mass_balance1  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Mass_balance2  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Mass_balance3  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Mass_balance4  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 27
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     EQU Mass_balance4  
+
+         LOWER          LEVEL          UPPER
+
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Mass_balance5  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Mass_balance7  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU GO_balance  
+
+            LOWER          LEVEL          UPPER
+
+1 .1          .              .              .          
+1 .2          .              .              .          
+1 .3          .              .              .          
+1 .4          .              .              .          
+1 .5          .              .              .          
+2 .1          .              .              .          
+2 .2          .              .              .          
+2 .3          .              .              .          
+2 .4          .              .              .          
+2 .5          .              .              .          
+3 .1          .              .              .          
+3 .2          .              .              .          
+3 .3          .              .              .          
+3 .4          .              .              .          
+3 .5          .              .              .          
+4 .1          .              .              .          
+4 .2          .              .              .          
+4 .3          .              .              .          
+4 .4          .              .              .          
+4 .5          .              .              .          
+5 .1          .              .              .          
+5 .2          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 28
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     EQU GO_balance  
+
+            LOWER          LEVEL          UPPER
+
+5 .3          .              .              .          
+5 .4          .              .              .          
+5 .5          .              .              .          
+6 .1          .              .              .          
+6 .2          .              .              .          
+6 .3          .              .              .          
+6 .4          .              .              .          
+6 .5          .              .              .          
+7 .1          .              .              .          
+7 .2          .              .              .          
+7 .3          .              .              .          
+7 .4          .              .              .          
+7 .5          .              .              .          
+8 .1          .              .              .          
+8 .2          .              .              .          
+8 .3          .              .              .          
+8 .4          .              .              .          
+8 .5          .              .              .          
+9 .1          .              .              .          
+9 .2          .              .              .          
+9 .3          .              .              .          
+9 .4          .              .              .          
+9 .5          .              .              .          
+10.1          .              .              .          
+10.2          .              .              .          
+10.3          .              .              .          
+10.4          .              .              .          
+10.5          .              .              .          
+
+---- EQU VR_balance  
+
+            LOWER          LEVEL          UPPER
+
+1 .1          .              .              .          
+1 .2          .              .              .          
+1 .3          .              .              .          
+1 .4          .              .              .          
+1 .5          .              .              .          
+2 .1          .              .              .          
+2 .2          .              .              .          
+2 .3          .              .              .          
+2 .4          .              .              .          
+2 .5          .              .              .          
+3 .1          .              .              .          
+3 .2          .              .              .          
+3 .3          .              .              .          
+3 .4          .              .              .          
+3 .5          .              .              .          
+4 .1          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 29
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     EQU VR_balance  
+
+            LOWER          LEVEL          UPPER
+
+4 .2          .              .              .          
+4 .3          .              .              .          
+4 .4          .              .              .          
+4 .5          .              .              .          
+5 .1          .              .              .          
+5 .2          .              .              .          
+5 .3          .              .              .          
+5 .4          .              .              .          
+5 .5          .              .              .          
+6 .1          .              .              .          
+6 .2          .              .              .          
+6 .3          .              .              .          
+6 .4          .              .              .          
+6 .5          .              .              .          
+7 .1          .              .              .          
+7 .2          .              .              .          
+7 .3          .              .              .          
+7 .4          .              .              .          
+7 .5          .              .              .          
+8 .1          .              .              .          
+8 .2          .              .              .          
+8 .3          .              .              .          
+8 .4          .              .              .          
+8 .5          .              .              .          
+9 .1          .              .              .          
+9 .2          .              .              .          
+9 .3          .              .              .          
+9 .4          .              .              .          
+9 .5          .              .              .          
+10.1          .              .              .          
+10.2          .              .              .          
+10.3          .              .              .          
+10.4          .              .              .          
+10.5          .              .              .          
+
+---- EQU Desulphurisation_balance  
+
+            LOWER          LEVEL          UPPER
+
+1 .1          .              .              .          
+1 .2          .              .              .          
+1 .3          .              .              .          
+1 .4          .              .              .          
+1 .5          .              .              .          
+2 .1          .              .              .          
+2 .2          .              .              .          
+2 .3          .              .              .          
+2 .4          .              .              .          
+2 .5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 30
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     EQU Desulphurisation_balance  
+
+            LOWER          LEVEL          UPPER
+
+3 .1          .              .              .          
+3 .2          .              .              .          
+3 .3          .              .              .          
+3 .4          .              .              .          
+3 .5          .              .              .          
+4 .1          .              .              .          
+4 .2          .              .              .          
+4 .3          .              .              .          
+4 .4          .              .              .          
+4 .5          .              .              .          
+5 .1          .              .              .          
+5 .2          .              .              .          
+5 .3          .              .              .          
+5 .4          .              .              .          
+5 .5          .              .              .          
+6 .1          .              .              .          
+6 .2          .              .              .          
+6 .3          .              .              .          
+6 .4          .              .              .          
+6 .5          .              .              .          
+7 .1          .              .              .          
+7 .2          .              .              .          
+7 .3          .              .              .          
+7 .4          .              .              .          
+7 .5          .              .              .          
+8 .1          .              .              .          
+8 .2          .              .              .          
+8 .3          .              .              .          
+8 .4          .              .              .          
+8 .5          .              .              .          
+9 .1          .              .              .          
+9 .2          .              .              .          
+9 .3          .              .              .          
+9 .4          .              .              .          
+9 .5          .              .              .          
+10.1          .              .              .          
+10.2          .              .              .          
+10.3          .              .              .          
+10.4          .              .              .          
+10.5          .              .              .          
+
+---- EQU Demand_constraint1  
+
+         LOWER          LEVEL          UPPER
+
+1         5.0000         5.0000        +INF         
+2         5.0000         5.0000        +INF         
+3         5.0000         5.0000        +INF         
+4         5.0000         5.0000        +INF         
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 31
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     EQU Demand_constraint1  
+
+         LOWER          LEVEL          UPPER
+
+5         5.0000         5.0000        +INF         
+
+---- EQU Demand_constraint2  
+
+         LOWER          LEVEL          UPPER
+
+1          .           132.6691        +INF         
+2          .           129.2163        +INF         
+3          .           133.0461        +INF         
+4          .           130.6770        +INF         
+5          .           130.2694        +INF         
+
+---- EQU Demand_constraint3  
+
+         LOWER          LEVEL          UPPER
+
+1          .            58.0156        +INF         
+2          .            54.1216        +INF         
+3          .            60.3491        +INF         
+4          .            54.6707        +INF         
+5          .            54.6485        +INF         
+
+---- EQU Demand_constraint4  
+
+         LOWER          LEVEL          UPPER
+
+1       100.0000       105.0229        +INF         
+2       100.0000       100.0000        +INF         
+3       100.0000       103.9868        +INF         
+4       100.0000       101.6216        +INF         
+5       100.0000       100.0000        +INF         
+
+---- EQU Demand_constraint5  
+
+         LOWER          LEVEL          UPPER
+
+1       100.0000       231.0822        +INF         
+2       100.0000       245.5552        +INF         
+3       100.0000       228.5932        +INF         
+4       100.0000       241.4328        +INF         
+5       100.0000       244.1411        +INF         
+
+---- EQU Demand_constraint6  
+
+         LOWER          LEVEL          UPPER
+
+1          .             4.2554        +INF         
+2          .             3.4980        +INF         
+3          .             4.5377        +INF         
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 32
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     EQU Demand_constraint6  
+
+         LOWER          LEVEL          UPPER
+
+4          .             3.7568        +INF         
+5          .             3.6085        +INF         
+
+---- EQU Demand_constraint7  
+
+         LOWER          LEVEL          UPPER
+
+1          .            20.4814        +INF         
+2          .            19.5433        +INF         
+3          .            20.9593        +INF         
+4          .            19.6541        +INF         
+5          .            19.1652        +INF         
+
+                           LOWER          LEVEL          UPPER
+
+---- EQU CDU_capac~        -INF          589.2969       700.0000      
+
+---- EQU Crude_bound  
+
+          LOWER          LEVEL          UPPER
+
+1         -INF             .              .          
+2         -INF          -54.6638          .          
+3         -INF             .              .          
+4         -INF         -144.8333          .          
+5         -INF             .              .          
+6         -INF             .              .          
+7         -INF             .              .          
+8         -INF          -33.1059          .          
+9         -INF             .              .          
+10        -INF             .              .          
+
+---- EQU Crude_selection  
+
+          LOWER          LEVEL          UPPER
+
+1           .              .            +INF         
+2           .           143.6510        +INF         
+3           .           187.8760        +INF         
+4           .            41.4401        +INF         
+5           .              .            +INF         
+6           .              .            +INF         
+7           .              .            +INF         
+8           .           161.5364        +INF         
+9           .              .            +INF         
+10          .              .            +INF         
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 33
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU Desulphurisation_capacity_bound  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF          107.2911       125.0000      
+2        -INF          102.1558       125.0000      
+3        -INF          106.2553       125.0000      
+4        -INF          103.8190       125.0000      
+5        -INF          102.1670       125.0000      
+
+---- EQU Cracker_capacity_bound  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF          155.2611       175.0000      
+2        -INF          149.2934       175.0000      
+3        -INF          156.8016       175.0000      
+4        -INF          150.7894       175.0000      
+5        -INF          150.5141       175.0000      
+
+---- EQU Reformer_capacity_bound  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF           65.0000        65.0000      
+2        -INF           63.7899        65.0000      
+3        -INF           65.0000        65.0000      
+4        -INF           64.4551        65.0000      
+5        -INF           64.4928        65.0000      
+
+---- EQU Reformer95_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Reformer100_Balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 34
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU Isomerisation_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU CN_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU CGO_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Desulphurisation_CGO_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU PG98_volume_def  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 35
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU ES95_volume_def  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Butane95_constraint  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF             .              .          
+2        -INF             .              .          
+3        -INF             .              .          
+4        -INF             .              .          
+5        -INF             .              .          
+
+---- EQU Butane98_constraint  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF             .              .          
+2        -INF             .              .          
+3        -INF             .              .          
+4        -INF             .              .          
+5        -INF             .              .          
+
+---- EQU LG_split_balance  
+
+         LOWER          LEVEL          UPPER
+
+1         1.0000         1.0000         1.0000      
+2         1.0000         1.0000         1.0000      
+3         1.0000         1.0000         1.0000      
+4         1.0000         1.0000         1.0000      
+5         1.0000         1.0000         1.0000      
+
+---- EQU LG_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 36
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU Reformer95_LG_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Reformer100_LG_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Cracker_Mogas_LG_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Cracker_AGO_LG_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU pq_ES95_constraint  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 37
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU pq_PG98_constraint  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU pq_demand_constraint  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU pq_burn_constraint  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU VP_ES95_upper  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF           -8.0665          .          
+2        -INF           -8.1161          .          
+3        -INF           -7.9379          .          
+4        -INF           -8.2369          .          
+5        -INF           -8.4439          .          
+
+---- EQU VP_ES95_lower  
+
+         LOWER          LEVEL          UPPER
+
+1          .            54.0102        +INF         
+2          .            52.3732        +INF         
+3          .            54.2982        +INF         
+4          .            52.9401        +INF         
+5          .            52.5708        +INF         
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 38
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU VP_PG98_upper  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF           -1.0956          .          
+2        -INF           -1.0954          .          
+3        -INF           -1.0957          .          
+4        -INF           -1.0954          .          
+5        -INF           -1.0952          .          
+
+---- EQU VP_PG98_lower  
+
+         LOWER          LEVEL          UPPER
+
+1          .             1.2148        +INF         
+2          .             1.2150        +INF         
+3          .             1.2148        +INF         
+4          .             1.2150        +INF         
+5          .             1.2153        +INF         
+
+---- EQU RON_PG98  
+
+         LOWER          LEVEL          UPPER
+
+1          .       -2.314863E-8        +INF         
+2          .       -2.323205E-8        +INF         
+3          .       -2.314834E-8        +INF         
+4          .       -2.315800E-8        +INF         
+5          .       -2.305808E-8        +INF         
+
+---- EQU RON_ES95  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .            +INF         
+2          .              .            +INF         
+3          .              .            +INF         
+4          .              .            +INF         
+5          .              .            +INF         
+
+---- EQU Sensitivity_PG98  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF           -8.2921          .          
+2        -INF           -8.2932          .          
+3        -INF           -8.2918          .          
+4        -INF           -8.2932          .          
+5        -INF           -8.2944          .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 39
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU Sensitivity_ES95  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF         -127.4125          .          
+2        -INF         -129.9441          .          
+3        -INF         -124.3498          .          
+4        -INF         -132.1039          .          
+5        -INF         -137.1244          .          
+
+---- EQU blincon_CDU_LG1  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_CDU_LG2  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_CDU_LG3  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_CDU_LG4  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 40
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU blincon_Reformer95_LG1  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Reformer95_LG2  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Reformer95_LG3  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Reformer95_LG4  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Reformer100_LG1  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 41
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU blincon_Reformer100_LG2  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Reformer100_LG3  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Reformer100_LG4  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Mogas_LG1  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Mogas_LG2  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 42
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU blincon_Mogas_LG3  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Mogas_LG4  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_AGO_LG1  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_AGO_LG2  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_AGO_LG3  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 43
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU blincon_AGO_LG4  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Cracker_Mogas1  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Cracker_Mogas2  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Cracker_Mogas3  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Cracker_AGO1  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 44
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU blincon_Cracker_AGO2  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU blincon_Cracker_AGO3  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU pq_AGO_constraint  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU pq_HF_constraint  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU pq_Desulphurisation_constraint  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 45
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU CGO_split_balance  
+
+         LOWER          LEVEL          UPPER
+
+1         1.0000         1.0000         1.0000      
+2         1.0000         1.0000         1.0000      
+3         1.0000         1.0000         1.0000      
+4         1.0000         1.0000         1.0000      
+5         1.0000         1.0000         1.0000      
+
+---- EQU Cracker_Mogas_CGO_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU Cracker_AGO_CGO_balance  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU HF_volume_def  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+4          .              .              .          
+5          .              .              .          
+
+---- EQU AGO_sulphur_balance  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF             .              .          
+2        -INF             .              .          
+3        -INF             .              .          
+4        -INF             .              .          
+5        -INF             .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 46
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- EQU HF_viscosity_upper  
+
+         LOWER          LEVEL          UPPER
+
+1        -INF         -224.8674          .          
+2        -INF      -1.094740E-8          .          
+3        -INF         -243.5010          .          
+4        -INF             .              .          
+5        -INF             .              .          
+
+---- EQU HF_viscosity_lower  
+
+         LOWER          LEVEL          UPPER
+
+1          .           510.5953        +INF         
+2          .           782.3454        +INF         
+3          .           485.9192        +INF         
+4          .           767.8492        +INF         
+5          .           778.2923        +INF         
+
+---- EQU Refinery_Fuel  
+
+         LOWER          LEVEL          UPPER
+
+1        15.2000        15.2000        +INF         
+2        15.2000        15.2000        +INF         
+3        15.2000        15.2000        +INF         
+4        15.2000        15.2000        +INF         
+5        15.2000        15.2000        +INF         
+
+                           LOWER          LEVEL          UPPER
+
+---- EQU objfn               .              .              .          
+
+---- VAR pickCrude  
+
+          LOWER          LEVEL          UPPER
+
+1           .              .             1.0000      
+2           .             1.0000         1.0000      
+3           .             1.0000         1.0000      
+4           .             1.0000         1.0000      
+5           .              .             1.0000      
+6           .              .             1.0000      
+7           .              .             1.0000      
+8           .             1.0000         1.0000      
+9           .              .             1.0000      
+10          .              .             1.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 47
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- VAR crudeQuantity  
+
+          LOWER          LEVEL          UPPER
+
+1           .              .            +INF         
+2           .           157.8164        +INF         
+3           .           201.2957        +INF         
+4           .            54.7454        +INF         
+5           .              .            +INF         
+6           .              .            +INF         
+7           .              .            +INF         
+8           .           175.4394        +INF         
+9           .              .            +INF         
+10          .              .            +INF         
+
+---- VAR flow_Reformer95  
+
+         LOWER          LEVEL          UPPER
+
+1         5.0000         5.0000        65.0000      
+2         5.0000         5.0000        65.0000      
+3         5.0000         5.0000        65.0000      
+4         5.0000         5.0000        65.0000      
+5         5.0000         5.0000        65.0000      
+
+---- VAR flow_Reformer100  
+
+         LOWER          LEVEL          UPPER
+
+1          .            60.0000        60.0000      
+2          .            58.7899        60.0000      
+3          .            60.0000        60.0000      
+4          .            59.4551        60.0000      
+5          .            59.4928        60.0000      
+
+---- VAR flow_Cracker_Mogas  
+
+         LOWER          LEVEL          UPPER
+
+1          .           155.2611       175.0000      
+2          .           149.2934       175.0000      
+3          .           156.8016       175.0000      
+4          .           150.7894       175.0000      
+5          .           135.6423       175.0000      
+
+---- VAR flow_Cracker_AGO  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .           175.0000      
+2          .              .           175.0000      
+3          .              .           175.0000      
+4          .              .           175.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 48
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_Cracker_AGO  
+
+         LOWER          LEVEL          UPPER
+
+5          .            14.8719       175.0000      
+
+---- VAR flow_Isomerisation  
+
+         LOWER          LEVEL          UPPER
+
+1          .            13.5007       700.0000      
+2          .            13.7446       700.0000      
+3          .            13.1833       700.0000      
+4          .            13.9776       700.0000      
+5          .            14.5075       700.0000      
+
+---- VAR flow_Desulphurisation_CGO  
+
+         LOWER          LEVEL          UPPER
+
+1          .              .           175.0000      
+2          .             3.4673       175.0000      
+3          .              .           175.0000      
+4          .              .           175.0000      
+5          .             2.6597       175.0000      
+
+---- VAR flow_LG_producing  
+
+         LOWER          LEVEL          UPPER
+
+1          .             4.2554       700.0000      
+2          .             3.4980       700.0000      
+3          .             4.5377       700.0000      
+4          .             3.7568       700.0000      
+5          .             3.6085       700.0000      
+
+---- VAR flow_LN_producing  
+
+         LOWER          LEVEL          UPPER
+
+1          .            20.4814       700.0000      
+2          .            19.5433       700.0000      
+3          .            20.9593       700.0000      
+4          .            19.6541       700.0000      
+5          .            19.1652       700.0000      
+
+---- VAR flow_HF_2  
+
+         LOWER          LEVEL          UPPER
+
+1          .            69.2464       175.0000      
+2          .            63.1175       175.0000      
+3          .            69.9335       175.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 49
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_HF_2  
+
+         LOWER          LEVEL          UPPER
+
+4          .            67.2521       175.0000      
+5          .            65.4362       175.0000      
+
+---- VAR volume_PG98  
+
+         LOWER          LEVEL          UPPER
+
+1          .             6.4178      1206.8966      
+2          .             6.4178      1206.8966      
+3          .             6.4178      1206.8966      
+4          .             6.4178      1206.8966      
+5          .             6.4179      1206.8966      
+
+---- VAR volume_ES95  
+
+         LOWER          LEVEL          UPPER
+
+1          .           177.3619      1206.8966      
+2          .           172.8267      1206.8966      
+3          .           177.8173      1206.8966      
+4          .           174.7914      1206.8966      
+5          .           174.3276      1206.8966      
+
+---- VAR volume_HF  
+
+         LOWER          LEVEL          UPPER
+
+1          .           245.1542       832.9367      
+2          .           260.7818       832.9367      
+3          .           243.1401       832.9367      
+4          .           255.9497       832.9367      
+5          .           259.4308       832.9367      
+
+---- VAR blin_CDU_LG  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             1.4857       700.0000      
+1.2          .             1.4477       700.0000      
+1.3          .             1.5078       700.0000      
+1.4          .             1.4632       700.0000      
+1.5          .             1.4677       700.0000      
+2.1          .             0.0538       700.0000      
+2.2          .             0.0538       700.0000      
+2.3          .             0.0544       700.0000      
+2.4          .             0.0537       700.0000      
+2.5          .             0.0540       700.0000      
+3.1          .             3.6808       700.0000      
+3.2          .             3.7502       700.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 50
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR blin_CDU_LG  
+
+           LOWER          LEVEL          UPPER
+
+3.3          .             3.7061       700.0000      
+3.4          .             3.7195       700.0000      
+3.5          .             3.7560       700.0000      
+4.1          .             1.2292       700.0000      
+4.2          .             1.0104       700.0000      
+4.3          .             1.3268       700.0000      
+4.4          .             1.0844       700.0000      
+4.5          .             1.0476       700.0000      
+
+---- VAR blin_Reformer95_LG  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             0.1037       700.0000      
+1.2          .             0.1040       700.0000      
+1.3          .             0.1029       700.0000      
+1.4          .             0.1042       700.0000      
+1.5          .             0.1044       700.0000      
+2.1          .             0.0038       700.0000      
+2.2          .             0.0039       700.0000      
+2.3          .             0.0037       700.0000      
+2.4          .             0.0038       700.0000      
+2.5          .             0.0038       700.0000      
+3.1          .             0.2568       700.0000      
+3.2          .             0.2695       700.0000      
+3.3          .             0.2529       700.0000      
+3.4          .             0.2648       700.0000      
+3.5          .             0.2672       700.0000      
+4.1          .             0.0858       700.0000      
+4.2          .             0.0726       700.0000      
+4.3          .             0.0905       700.0000      
+4.4          .             0.0772       700.0000      
+4.5          .             0.0745       700.0000      
+
+---- VAR blin_Reformer100_LG  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             1.6586       700.0000      
+1.2          .             1.6310       700.0000      
+1.3          .             1.6461       700.0000      
+1.4          .             1.6516       700.0000      
+1.5          .             1.6565       700.0000      
+2.1          .             0.0600       700.0000      
+2.2          .             0.0606       700.0000      
+2.3          .             0.0594       700.0000      
+2.4          .             0.0606       700.0000      
+2.5          .             0.0610       700.0000      
+3.1          .             4.1092       700.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 51
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR blin_Reformer100_LG  
+
+           LOWER          LEVEL          UPPER
+
+3.2          .             4.2250       700.0000      
+3.3          .             4.0460       700.0000      
+3.4          .             4.1984       700.0000      
+3.5          .             4.2392       700.0000      
+4.1          .             1.3722       700.0000      
+4.2          .             1.1383       700.0000      
+4.3          .             1.4485       700.0000      
+4.4          .             1.2240       700.0000      
+4.5          .             1.1824       700.0000      
+
+---- VAR blin_Mogas_LG  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             1.8956       700.0000      
+1.2          .             1.8293       700.0000      
+1.3          .             1.9000       700.0000      
+1.4          .             1.8500       700.0000      
+1.5          .             1.6681       700.0000      
+2.1          .             0.0686       700.0000      
+2.2          .             0.0679       700.0000      
+2.3          .             0.0686       700.0000      
+2.4          .             0.0679       700.0000      
+2.5          .             0.0614       700.0000      
+3.1          .             4.6964       700.0000      
+3.2          .             4.7387       700.0000      
+3.3          .             4.6700       700.0000      
+3.4          .             4.7028       700.0000      
+3.5          .             4.2689       700.0000      
+4.1          .             1.5683       700.0000      
+4.2          .             1.2767       700.0000      
+4.3          .             1.6719       700.0000      
+4.4          .             1.3711       700.0000      
+4.5          .             1.1907       700.0000      
+
+---- VAR blin_AGO_LG  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .              .           700.0000      
+1.2          .              .           700.0000      
+1.3          .              .           700.0000      
+1.4          .              .           700.0000      
+1.5          .             0.1587       700.0000      
+2.1          .              .           700.0000      
+2.2          .              .           700.0000      
+2.3          .              .           700.0000      
+2.4          .              .           700.0000      
+2.5          .             0.0058       700.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 52
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR blin_AGO_LG  
+
+           LOWER          LEVEL          UPPER
+
+3.1          .              .           700.0000      
+3.2          .              .           700.0000      
+3.3          .              .           700.0000      
+3.4          .              .           700.0000      
+3.5          .             0.4062       700.0000      
+4.1          .              .           700.0000      
+4.2          .              .           700.0000      
+4.3          .              .           700.0000      
+4.4          .              .           700.0000      
+4.5          .             0.1133       700.0000      
+
+---- VAR blin_Cracker_Mogas  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .              .           175.0000      
+1.2          .              .           175.0000      
+1.3          .              .           175.0000      
+1.4          .              .           175.0000      
+1.5          .              .           175.0000      
+2.1          .            69.2464       175.0000      
+2.2          .            63.1175       175.0000      
+2.3          .            69.9335       175.0000      
+2.4          .            67.2521       175.0000      
+2.5          .            58.1335       175.0000      
+3.1          .              .           175.0000      
+3.2          .             3.4673       175.0000      
+3.3          .              .           175.0000      
+3.4          .              .           175.0000      
+3.5          .             2.3629       175.0000      
+
+---- VAR blin_Cracker_AGO  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .              .           175.0000      
+1.2          .              .           175.0000      
+1.3          .              .           175.0000      
+1.4          .              .           175.0000      
+1.5          .              .           175.0000      
+2.1          .              .           175.0000      
+2.2          .              .           175.0000      
+2.3          .              .           175.0000      
+2.4          .              .           175.0000      
+2.5          .             7.3027       175.0000      
+3.1          .              .           175.0000      
+3.2          .              .           175.0000      
+3.3          .              .           175.0000      
+3.4          .              .           175.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 53
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR blin_Cracker_AGO  
+
+           LOWER          LEVEL          UPPER
+
+3.5          .             0.2968       175.0000      
+
+---- VAR flow_Desulphurisation_1  
+
+            LOWER          LEVEL          UPPER
+
+1 .1          .              .           125.0000      
+1 .2          .              .           125.0000      
+1 .3          .              .           125.0000      
+1 .4          .              .           125.0000      
+1 .5          .              .           125.0000      
+2 .1          .            36.0915       125.0000      
+2 .2          .            35.1041       125.0000      
+2 .3          .            34.1282       125.0000      
+2 .4          .            35.2392       125.0000      
+2 .5          .            33.9259       125.0000      
+3 .1          .            51.2670       125.0000      
+3 .2          .            47.3369       125.0000      
+3 .3          .            50.9884       125.0000      
+3 .4          .            48.2424       125.0000      
+3 .5          .            48.3053       125.0000      
+4 .1          .            13.8092       125.0000      
+4 .2          .            14.0784       125.0000      
+4 .3          .            13.9700       125.0000      
+4 .4          .            14.2876       125.0000      
+4 .5          .            13.7534       125.0000      
+5 .1          .              .           125.0000      
+5 .2          .              .           125.0000      
+5 .3          .              .           125.0000      
+5 .4          .              .           125.0000      
+5 .5          .              .           125.0000      
+6 .1          .              .           125.0000      
+6 .2          .              .           125.0000      
+6 .3          .              .           125.0000      
+6 .4          .              .           125.0000      
+6 .5          .              .           125.0000      
+7 .1          .              .           125.0000      
+7 .2          .              .           125.0000      
+7 .3          .              .           125.0000      
+7 .4          .              .           125.0000      
+7 .5          .              .           125.0000      
+8 .1          .             6.1235       125.0000      
+8 .2          .             2.1691       125.0000      
+8 .3          .             7.1687       125.0000      
+8 .4          .             6.0498       125.0000      
+8 .5          .             3.5227       125.0000      
+9 .1          .              .           125.0000      
+9 .2          .              .           125.0000      
+9 .3          .              .           125.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 54
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_Desulphurisation_1  
+
+            LOWER          LEVEL          UPPER
+
+9 .4          .              .           125.0000      
+9 .5          .              .           125.0000      
+10.1          .              .           125.0000      
+10.2          .              .           125.0000      
+10.3          .              .           125.0000      
+10.4          .              .           125.0000      
+10.5          .              .           125.0000      
+
+---- VAR flow_AGO_1  
+
+            LOWER          LEVEL          UPPER
+
+1 .1          .              .           201.2957      
+1 .2          .              .           201.2957      
+1 .3          .              .           201.2957      
+1 .4          .              .           201.2957      
+1 .5          .              .           201.2957      
+2 .1          .              .           212.4801      
+2 .2          .              .           212.4801      
+2 .3          .              .           212.4801      
+2 .4          .              .           212.4801      
+2 .5          .              .           212.4801      
+3 .1          .              .           201.2957      
+3 .2          .              .           201.2957      
+3 .3          .              .           201.2957      
+3 .4          .              .           201.2957      
+3 .5          .              .           201.2957      
+4 .1          .              .           199.5787      
+4 .2          .              .           199.5787      
+4 .3          .              .           199.5787      
+4 .4          .              .           199.5787      
+4 .5          .              .           199.5787      
+5 .1          .              .           210.5485      
+5 .2          .              .           210.5485      
+5 .3          .              .           210.5485      
+5 .4          .              .           210.5485      
+5 .5          .              .           210.5485      
+6 .1          .              .           222.1383      
+6 .2          .              .           222.1383      
+6 .3          .              .           222.1383      
+6 .4          .              .           222.1383      
+6 .5          .              .           222.1383      
+7 .1          .              .           196.7886      
+7 .2          .              .           196.7886      
+7 .3          .              .           196.7886      
+7 .4          .              .           196.7886      
+7 .5          .              .           196.7886      
+8 .1          .              .           208.5453      
+8 .2          .              .           208.5453      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 55
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_AGO_1  
+
+            LOWER          LEVEL          UPPER
+
+8 .3          .              .           208.5453      
+8 .4          .              .           208.5453      
+8 .5          .              .           208.5453      
+9 .1          .              .           204.3720      
+9 .2          .              .           204.3720      
+9 .3          .              .           204.3720      
+9 .4          .              .           204.3720      
+9 .5          .              .           204.3720      
+10.1          .              .           210.2623      
+10.2          .              .           210.2623      
+10.3          .              .           210.2623      
+10.4          .              .           210.2623      
+10.5          .              .           210.2623      
+
+---- VAR flow_AGO_2  
+
+            LOWER          LEVEL          UPPER
+
+1 .1          .              .           125.0000      
+1 .2          .              .           125.0000      
+1 .3          .              .           125.0000      
+1 .4          .              .           125.0000      
+1 .5          .              .           125.0000      
+2 .1          .            35.3697       125.0000      
+2 .2          .            34.4020       125.0000      
+2 .3          .            33.4456       125.0000      
+2 .4          .            34.5344       125.0000      
+2 .5          .            33.2474       125.0000      
+3 .1          .            50.2417       125.0000      
+3 .2          .            46.3902       125.0000      
+3 .3          .            49.9686       125.0000      
+3 .4          .            47.2775       125.0000      
+3 .5          .            47.3392       125.0000      
+4 .1          .            13.5330       125.0000      
+4 .2          .            13.7968       125.0000      
+4 .3          .            13.6906       125.0000      
+4 .4          .            14.0019       125.0000      
+4 .5          .            13.4783       125.0000      
+5 .1          .              .           125.0000      
+5 .2          .              .           125.0000      
+5 .3          .              .           125.0000      
+5 .4          .              .           125.0000      
+5 .5          .              .           125.0000      
+6 .1          .              .           125.0000      
+6 .2          .              .           125.0000      
+6 .3          .              .           125.0000      
+6 .4          .              .           125.0000      
+6 .5          .              .           125.0000      
+7 .1          .              .           125.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 56
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_AGO_2  
+
+            LOWER          LEVEL          UPPER
+
+7 .2          .              .           125.0000      
+7 .3          .              .           125.0000      
+7 .4          .              .           125.0000      
+7 .5          .              .           125.0000      
+8 .1          .             5.8785       125.0000      
+8 .2          .             2.0823       125.0000      
+8 .3          .             6.8820       125.0000      
+8 .4          .             5.8078       125.0000      
+8 .5          .             3.3818       125.0000      
+9 .1          .              .           125.0000      
+9 .2          .              .           125.0000      
+9 .3          .              .           125.0000      
+9 .4          .              .           125.0000      
+9 .5          .              .           125.0000      
+10.1          .              .           125.0000      
+10.2          .              .           125.0000      
+10.3          .              .           125.0000      
+10.4          .              .           125.0000      
+10.5          .              .           125.0000      
+
+---- VAR flow_HF_1  
+
+            LOWER          LEVEL          UPPER
+
+1 .1          .              .           201.2957      
+1 .2          .              .           201.2957      
+1 .3          .              .           201.2957      
+1 .4          .              .           201.2957      
+1 .5          .              .           201.2957      
+2 .1          .            40.2181       212.4801      
+2 .2          .            43.4354       212.4801      
+2 .3          .            46.6153       212.4801      
+2 .4          .            42.9952       212.4801      
+2 .5          .            47.2742       212.4801      
+3 .1          .            34.8584       201.2957      
+3 .2          .            47.6173       201.2957      
+3 .3          .            35.7630       201.2957      
+3 .4          .            44.6779       201.2957      
+3 .5          .            44.4737       201.2957      
+4 .1          .             7.7322       199.5787      
+4 .2          .             6.8156       199.5787      
+4 .3          .             7.1846       199.5787      
+4 .4          .             6.1032       199.5787      
+4 .5          .             7.9221       199.5787      
+5 .1          .              .           210.5485      
+5 .2          .              .           210.5485      
+5 .3          .              .           210.5485      
+5 .4          .              .           210.5485      
+5 .5          .              .           210.5485      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 57
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_HF_1  
+
+            LOWER          LEVEL          UPPER
+
+6 .1          .              .           222.1383      
+6 .2          .              .           222.1383      
+6 .3          .              .           222.1383      
+6 .4          .              .           222.1383      
+6 .5          .              .           222.1383      
+7 .1          .              .           196.7886      
+7 .2          .              .           196.7886      
+7 .3          .              .           196.7886      
+7 .4          .              .           196.7886      
+7 .5          .              .           196.7886      
+8 .1          .            48.5914       208.5453      
+8 .2          .            50.8224       208.5453      
+8 .3          .            36.1088       208.5453      
+8 .4          .            50.4230       208.5453      
+8 .5          .            44.9485       208.5453      
+9 .1          .              .           204.3720      
+9 .2          .              .           204.3720      
+9 .3          .              .           204.3720      
+9 .4          .              .           204.3720      
+9 .5          .              .           204.3720      
+10.1          .              .           210.2623      
+10.2          .              .           210.2623      
+10.3          .              .           210.2623      
+10.4          .              .           210.2623      
+10.5          .              .           210.2623      
+
+---- VAR flow_HF_3  
+
+            LOWER          LEVEL          UPPER
+
+1 .1          .              .           201.2957      
+1 .2          .              .           201.2957      
+1 .3          .              .           201.2957      
+1 .4          .              .           201.2957      
+1 .5          .              .           201.2957      
+2 .1          .              .           212.4801      
+2 .2          .              .           212.4801      
+2 .3          .              .           212.4801      
+2 .4          .              .           212.4801      
+2 .5          .              .           212.4801      
+3 .1          .              .           201.2957      
+3 .2          .              .           201.2957      
+3 .3          .              .           201.2957      
+3 .4          .              .           201.2957      
+3 .5          .              .           201.2957      
+4 .1          .              .           199.5787      
+4 .2          .              .           199.5787      
+4 .3          .              .           199.5787      
+4 .4          .              .           199.5787      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 58
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_HF_3  
+
+            LOWER          LEVEL          UPPER
+
+4 .5          .              .           199.5787      
+5 .1          .              .           210.5485      
+5 .2          .              .           210.5485      
+5 .3          .              .           210.5485      
+5 .4          .              .           210.5485      
+5 .5          .              .           210.5485      
+6 .1          .              .           222.1383      
+6 .2          .              .           222.1383      
+6 .3          .              .           222.1383      
+6 .4          .              .           222.1383      
+6 .5          .              .           222.1383      
+7 .1          .              .           196.7886      
+7 .2          .              .           196.7886      
+7 .3          .              .           196.7886      
+7 .4          .              .           196.7886      
+7 .5          .              .           196.7886      
+8 .1          .            30.4356       208.5453      
+8 .2          .            33.7470       208.5453      
+8 .3          .            32.9880       208.5453      
+8 .4          .            29.9814       208.5453      
+8 .5          .            34.0863       208.5453      
+9 .1          .              .           204.3720      
+9 .2          .              .           204.3720      
+9 .3          .              .           204.3720      
+9 .4          .              .           204.3720      
+9 .5          .              .           204.3720      
+10.1          .              .           210.2623      
+10.2          .              .           210.2623      
+10.3          .              .           210.2623      
+10.4          .              .           210.2623      
+10.5          .              .           210.2623      
+
+---- VAR flow_Burn  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .            12.2639       700.0000      
+1.2          .            11.9145       700.0000      
+1.3          .            12.3095       700.0000      
+1.4          .            12.0589       700.0000      
+1.5          .            12.0010       700.0000      
+2.1          .            12.7432       700.0000      
+2.2          .            12.9833       700.0000      
+2.3          .            12.6750       700.0000      
+2.4          .            12.8855       700.0000      
+2.5          .            12.9376       700.0000      
+3.1          .              .           700.0000      
+3.2          .              .           700.0000      
+3.3          .              .           700.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 59
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_Burn  
+
+           LOWER          LEVEL          UPPER
+
+3.4          .              .           700.0000      
+3.5          .              .           700.0000      
+
+---- VAR flow_PG98  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             0.1861       700.0000      
+1.2          .             0.1861       700.0000      
+1.3          .             0.1861       700.0000      
+1.4          .             0.1861       700.0000      
+1.5          .             0.1861       700.0000      
+2.1          .              .           700.0000      
+2.2          .              .           700.0000      
+2.3          .              .           700.0000      
+2.4          .              .           700.0000      
+2.5          .              .           700.0000      
+3.1          .              .           700.0000      
+3.2          .              .           700.0000      
+3.3          .              .           700.0000      
+3.4          .              .           700.0000      
+3.5          .              .           700.0000      
+4.1          .             1.6344       700.0000      
+4.2          .             1.6345       700.0000      
+4.3          .             1.6343       700.0000      
+4.4          .             1.6345       700.0000      
+4.5          .             1.6365       700.0000      
+5.1          .             3.1795       700.0000      
+5.2          .             3.1794       700.0000      
+5.3          .             3.1796       700.0000      
+5.4          .             3.1794       700.0000      
+5.5          .             3.1774       700.0000      
+6.1          .              .           700.0000      
+6.2          .              .           700.0000      
+6.3          .              .           700.0000      
+6.4          .              .           700.0000      
+6.5          .              .           700.0000      
+
+---- VAR flow_ES95  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             5.1435       700.0000      
+1.2          .             5.0120       700.0000      
+1.3          .             5.1567       700.0000      
+1.4          .             5.0690       700.0000      
+1.5          .             5.0555       700.0000      
+2.1          .            13.0957       700.0000      
+2.2          .            13.3323       700.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 60
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_ES95  
+
+           LOWER          LEVEL          UPPER
+
+2.3          .            12.7878       700.0000      
+2.4          .            13.5583       700.0000      
+2.5          .            14.0722       700.0000      
+3.1          .              .           700.0000      
+3.2          .              .           700.0000      
+3.3          .              .           700.0000      
+3.4          .              .           700.0000      
+3.5          .              .           700.0000      
+4.1          .             2.5156       700.0000      
+4.2          .             2.5155       700.0000      
+4.3          .             2.5157       700.0000      
+4.4          .             2.5155       700.0000      
+4.5          .             2.5135       700.0000      
+5.1          .            44.2205       700.0000      
+5.2          .            43.2646       700.0000      
+5.3          .            44.2204       700.0000      
+5.4          .            43.7902       700.0000      
+5.5          .            43.8220       700.0000      
+6.1          .            67.6938       700.0000      
+6.2          .            65.0919       700.0000      
+6.3          .            68.3655       700.0000      
+6.4          .            65.7442       700.0000      
+6.5          .            64.8062       700.0000      
+
+---- VAR flow_AGO_3  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .              .           700.0000      
+1.2          .              .           700.0000      
+1.3          .              .           700.0000      
+1.4          .              .           700.0000      
+1.5          .              .           700.0000      
+2.1          .              .           175.0000      
+2.2          .              .           175.0000      
+2.3          .              .           175.0000      
+2.4          .              .           175.0000      
+2.5          .              .           175.0000      
+3.1          .              .           175.0000      
+3.2          .             3.3286       175.0000      
+3.3          .              .           175.0000      
+3.4          .              .           175.0000      
+3.5          .             2.5533       175.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 61
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+---- VAR flow_JPF  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .            32.0087       700.0000      
+1.2          .              .           700.0000      
+1.3          .            60.3491       700.0000      
+1.4          .              .           700.0000      
+1.5          .              .           700.0000      
+2.1          .            26.0069       700.0000      
+2.2          .            54.1216       700.0000      
+2.3          .              .           700.0000      
+2.4          .            54.6707       700.0000      
+2.5          .            54.6485       700.0000      
+
+---- VAR flow_Import  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .              .              .          
+1.2          .              .              .          
+1.3          .              .              .          
+1.4          .              .              .          
+1.5          .              .              .          
+2.1          .              .              .          
+2.2          .              .              .          
+2.3          .              .              .          
+2.4          .              .              .          
+2.5          .              .              .          
+3.1          .              .              .          
+3.2          .              .              .          
+3.3          .              .              .          
+3.4          .              .              .          
+3.5          .              .              .          
+4.1          .              .              .          
+4.2          .              .              .          
+4.3          .              .              .          
+4.4          .              .              .          
+4.5          .              .              .          
+5.1          .              .              .          
+5.2          .              .              .          
+5.3          .              .              .          
+5.4          .              .              .          
+5.5          .              .              .          
+6.1          .              .              .          
+6.2          .              .              .          
+6.3          .              .              .          
+6.4          .              .              .          
+6.5          .              .              .          
+7.1          .              .              .          
+7.2          .              .              .          
+7.3          .              .              .          
+7.4          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 62
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+     VAR flow_Import  
+
+           LOWER          LEVEL          UPPER
+
+7.5          .              .              .          
+
+---- VAR fraction_LG  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             0.2888         1.0000      
+1.2          .             0.2888         1.0000      
+1.3          .             0.2924         1.0000      
+1.4          .             0.2887         1.0000      
+1.5          .             0.2903         1.0000      
+2.1          .             0.0202         1.0000      
+2.2          .             0.0208         1.0000      
+2.3          .             0.0200         1.0000      
+2.4          .             0.0206         1.0000      
+2.5          .             0.0207         1.0000      
+3.1          .             0.3225         1.0000      
+3.2          .             0.3254         1.0000      
+3.3          .             0.3192         1.0000      
+3.4          .             0.3258         1.0000      
+3.5          .             0.3277         1.0000      
+4.1          .             0.3685         1.0000      
+4.2          .             0.3650         1.0000      
+4.3          .             0.3684         1.0000      
+4.4          .             0.3650         1.0000      
+4.5          .             0.3300         1.0000      
+5.1          .              .             1.0000      
+5.2          .              .             1.0000      
+5.3          .              .             1.0000      
+5.4          .              .             1.0000      
+5.5          .             0.0314         1.0000      
+
+---- VAR fraction_CGO  
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             1.0000         1.0000      
+1.2          .             1.0000         1.0000      
+1.3          .             1.0000         1.0000      
+1.4          .             1.0000         1.0000      
+1.5          .             0.8884         1.0000      
+2.1          .              .             1.0000      
+2.2          .              .             1.0000      
+2.3          .              .             1.0000      
+2.4          .              .             1.0000      
+2.5          .             0.1116         1.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 63
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE refinery1 Using MINLP From line 1197
+
+
+                           LOWER          LEVEL          UPPER
+
+---- VAR objvar            -INF       -18349.4343        +INF         
+
+
+**** REPORT SUMMARY :        0     NONOPT
+                             0 INFEASIBLE
+                             0  UNBOUNDED
+                             0     ERRORS
+                           284  PROJECTED
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/28/18 15:02:58 Page 64
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+E x e c u t i o n
+
+
+----   1209 PARAMETER solver_time          =        4.326  
+            PARAMETER wall_time            =        5.723  
+
+
+EXECUTION TIME       =        0.008 SECONDS      3 MB  25.1.1 r66732 LEX-LEG
+
+
+USER: Eval License Carnegie Mellon University        G180112/0001AS-GEN
+      Dept. of Chemical Engineering                              DC9476
+      License for teaching and research at degree granting institutions
+
+
+**** FILE SUMMARY
+
+Input      /home/canl1/PlasmoAlgorithms/examples/refinery_model/continous/scaled_refinery_continous.gms
+Output     /home/canl1/PlasmoAlgorithms/examples/refinery_model/continous/scaled_refinery_continous.lst

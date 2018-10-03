@@ -100,11 +100,11 @@ function setCGLP(node::ModelNode, graph::ModelGraph)
     vars = Variable.(sp, 1:n)            # Get a vector of all the variables
 
     # This dictionary contains the binary variables and their position (columsn of A)
-    node.attributes[:map_binary] = Dict()
+    setattribute(node, :map_binary, Dict())
     for i = 1:n
         varCategory = getcategory(vars[i])
-        if  varCategory == :Bin && (!(i in node.attributes[:linking_vars_indices]))
-            node.attributes[:map_binary][vars[i]] = i
+        if  varCategory == :Bin && (!(i in getattribute(node, :linking_vars_indices) ))
+            getattribute(node, :map_binary)[vars[i]] = i
         elseif varCategory == :Int
             println("==================================================")
             println("WARNING: The subproblems present Integer Variables")
@@ -113,7 +113,7 @@ function setCGLP(node::ModelNode, graph::ModelGraph)
             println("==================================================")
         end
     end
-    map_binary = node.attributes[:map_binary]
+    map_binary = getattribute(node, :map_binary)
 
     # binary Info
     num_binary = length(map_binary)
@@ -143,7 +143,7 @@ function setCGLP(node::ModelNode, graph::ModelGraph)
     end
 
     #create CGLPs
-    node.attributes[:CGLPs] =  Dict()
+    setattribute(node, :CGLPs, Dict()) 
     for var in keys(map_binary)
         CGLP = Model()
         CGLP.solver = graph.solver
@@ -166,7 +166,7 @@ function setCGLP(node::ModelNode, graph::ModelGraph)
         @constraint(CGLP, convexDual4, -β + sum(v[ii]*b_lp[ii] for ii in 1:m_lp) + v0 == 0)
         # normalization constraint
         @constraint(CGLP, normalization, sum(u[ii] + v[ii] for ii in 1:m_lp) + u0 + v0 == 1)
-        node.attributes[:CGLPs][map_binary[var]] = CGLP
+        getattribute(node, :CGLPs)[map_binary[var]] = CGLP
     end
 
 end
@@ -176,16 +176,16 @@ function solveliftandprojectrelaxation(node::ModelNode, graph::ModelGraph)
     model = getmodel(node)
     status = solve(model, relaxation=true)
     #only start adding lift and project cuts when the LP relaxation has stalled
-    if graph.attributes[:roots][1].attributes[:LP_stalled]
+    if getattribute(getattribute(graph, :roots)[1], :LP_stalled)
         #get the values of variables
-        n = node.attributes[:n]
+        n = getattribute(node, :n)
         vars = Variable.(model, 1:n)
         x_bar = getvalue(vars)
         num_frac = 0
-        for index in values(node.attributes[:map_binary])
+        for index in values(getattribute(node, :map_binary))
             if abs(x_bar[index]%1)>1e-2 && abs(x_bar[index]%1) < 1-1e-2
                 num_frac += 1
-                CGLP = node.attributes[:CGLPs][index]
+                CGLP = getattribute(node, :CGLPs)[index]
                 α = getindex(CGLP, :α)
                 β = getindex(CGLP, :β)
                 @objective(CGLP, Min, sum(α[ii]*x_bar[ii] for ii in 1:n)  - β)
@@ -224,14 +224,14 @@ function solveliftandprojectrelaxation(node::ModelNode, graph::ModelGraph)
     end
     if status != :Optimal
         println("xin values")
-        xinvals = node.attributes[:xin]
+        xinvals = getattribute(node, :xin)
         println(xinvals)
         println("bounds")
         println(model.colUpper[1:5])
         println(model.colLower[1:5])
         error("subproblem not solved to optimality")
     end
-    dualconstraints = node.attributes[:linkconstraints]
+    dualconstraints = getattribute(node, :linkconstraints)
     λnode = getdual(dualconstraints)
     nodebound = getobjectivevalue(model)
 
