@@ -31,12 +31,14 @@ function bab_solve(rootnode::BABnode;
 	lag_initialmultipliers=:zero, # :relaxation for LP relaxation
 	lag_δ = 0.5, # Factor to shrink step when subgradient stuck
 	lag_maxnoimprove = 1,
-	lag_cpbound=1e6)
+	lag_cpbound=1e6,
+	user_LB=-Inf,
+	user_UB=+Inf)
 	starttime = time()
 	node_list = []
 	active_nodes_indices = []
 	fathomed_nodes_indices = []
-	solution=crosssolve(rootnode.bgraph, rootnode.lgraph, heuristic=heuristic, max_iterations_lag=max_iterations_lag, max_iterations_benders=max_iterations_benders, benders_cuts=benders_cuts, ϵ=ϵ, rel_gap= rel_gap, benders_UBupdatefrequency=benders_UBupdatefrequency,benders_timelimit=benders_timelimit, benders_verbose=benders_verbose, benders_LB=benders_LB, is_nonconvex=is_nonconvex, lag_α=lag_α, lagrangeheuristic=lagrangeheuristic, lag_initialmultipliers=lag_initialmultipliers, lag_δ=lag_δ, lag_maxnoimprove=lag_maxnoimprove, lag_cpbound=lag_cpbound)
+	solution=crosssolve(rootnode.bgraph, rootnode.lgraph, heuristic=heuristic, max_iterations_lag=max_iterations_lag, max_iterations_benders=max_iterations_benders, benders_cuts=benders_cuts, ϵ=ϵ, rel_gap= rel_gap, benders_UBupdatefrequency=benders_UBupdatefrequency,benders_timelimit=benders_timelimit, benders_verbose=benders_verbose, benders_LB=benders_LB, is_nonconvex=is_nonconvex, lag_α=lag_α, lagrangeheuristic=lagrangeheuristic, lag_initialmultipliers=lag_initialmultipliers, lag_δ=lag_δ, lag_maxnoimprove=lag_maxnoimprove, lag_cpbound=lag_cpbound, user_LB=user_LB, user_UB=user_UB)
 	rootnode.LBq = solution[:LB]
 	rootnode.UBq = solution[:UB]
 	rootnode.best_feasible_x = deepcopy(solution[:best_feasible_x])
@@ -98,7 +100,7 @@ function bab_solve(rootnode::BABnode;
 		if num_iter %3 == 0
 			lchild, rchild = largest_rel_diameter(node_to_branch, lchild, rchild, xlb_root, xub_root)
 		else
-			lchild, rchild = largest_distance(node_to_branch, lchild, rchild, xlb_root, xub_root, node_to_branch.best_avg_x)
+			lchild, rchild = largest_distance(node_to_branch, lchild, rchild, xlb_root, xub_root, node_to_branch.best_feasible_x)
 		end
 
 		#set fathom type of node selected 

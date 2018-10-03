@@ -1,6 +1,6 @@
 function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,1], Desulphurisation_cost=Desulphurisation_cost[:,1], Sulphur_2=[:,1], Sulphur_GO_data= Sulphur_GO_data[:,1])
 	
-	m = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0, CPX_PARAM_EPRHS=1e-5))
+	m = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0))
 	@variable(m, pickCrude[c in crudes], Bin)
 
 	@variable(m, 0<=crudeQuantity[c in crudes]<=Crude_upper_bound[c])

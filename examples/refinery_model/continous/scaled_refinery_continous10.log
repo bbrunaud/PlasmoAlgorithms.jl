@@ -1,0 +1,144 @@
+--- Job scaled_refinery_continous10.gms Start 09/28/18 15:03:12 25.1.1 r66732 LEX-LEG x86 64bit/Linux
+GAMS 25.1.1   Copyright (C) 1987-2018 GAMS Development. All rights reserved
+Licensee: Eval License Carnegie Mellon University        G180112/0001AS-GEN
+          Dept. of Chemical Engineering                              DC9476
+          License for teaching and research at degree granting institutions
+          License Admin: Ignacio E. Grossmann                              
+--- Starting compilation
+--- scaled_refinery_continous10.gms(392) 3 Mb
+--- . refinery1_data/10.gms(240) 3 Mb
+--- scaled_refinery_continous10.gms(1085) 3 Mb
+--- Starting execution: elapsed 0:00:00.011
+--- scaled_refinery_continous10.gms(1304) 4 Mb
+--- Generating MINLP model refinery1
+--- scaled_refinery_continous10.gms(1312) 7 Mb
+---   1,132 rows  1,241 columns  7,681 non-zeroes
+---   1,300 nl-code  520 nl-non-zeroes
+---   10 discrete-columns
+--- scaled_refinery_continous10.gms(1312) 5 Mb
+--- Executing SCIP: elapsed 0:00:00.026
+
+SCIP             25.1.1 r66732 Released May 19, 2018 LEG x86 64bit/Linux      
+SCIP version 5.0 (09c736f)
+Copyright (C) 2002-2018 Konrad-Zuse-Zentrum fuer Informationstechnik Berlin (ZIB)
+
+External codes: 
+  CPLEX 12.8.0.0       Linear Programming Solver developed by IBM (www.cplex.com)
+  CppAD 20160000.1     Algorithmic Differentiation of C++ algorithms developed by B. Bell (www.coin-or.org/CppAD)
+  GMP 4.3.1            GNU Multiple Precision Arithmetic Library developed by T. Granlund (gmplib.org)
+  bliss 0.73p          Computing Graph Automorphism Groups by T. Junttila and P. Kaski (http://www.tcs.hut.fi/Software/bliss/)
+  Ipopt 3.12           Interior Point Optimizer developed by A. Waechter et.al. (www.coin-or.org/Ipopt)
+  HSL MA27 and MC19    Harwell Subroutine Libraries (www.hsl.rl.ac.uk) from commercially supported Ipopt
+non-default parameter settings:
+limits/time = 10000
+limits/gap = 0.001
+limits/absgap = 1e-09
+lp/threads = 1
+misc/printreason = FALSE
+timing/clocktype = 2
+display/nfrac/active = 2
+display/nexternbranchcands/active = 2
+
+original problem has 1240 variables (10 bin, 0 int, 1230 cont) and 1131 constraints
+
+all 1 solutions given by solution candidate storage are infeasible
+
+presolving:
+(round 1, fast)       290 del vars, 260 del conss, 0 add conss, 759 chg bounds, 0 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 2, fast)       310 del vars, 270 del conss, 0 add conss, 1294 chg bounds, 0 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 3, fast)       310 del vars, 270 del conss, 0 add conss, 1506 chg bounds, 10 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 4, fast)       310 del vars, 270 del conss, 0 add conss, 1689 chg bounds, 10 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 5, fast)       310 del vars, 270 del conss, 0 add conss, 1712 chg bounds, 10 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 6, fast)       310 del vars, 270 del conss, 0 add conss, 1722 chg bounds, 10 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 7, exhaustive) 310 del vars, 270 del conss, 0 add conss, 1722 chg bounds, 10 chg sides, 0 chg coeffs, 10 upgd conss, 0 impls, 0 clqs
+(round 8, exhaustive) 310 del vars, 270 del conss, 0 add conss, 1722 chg bounds, 10 chg sides, 0 chg coeffs, 20 upgd conss, 10 impls, 0 clqs
+   (0.1s) probing cycle finished: starting next cycle
+   (0.1s) symmetry computation skipped: there exist constraints that cannot be handled by symmetry methods
+presolving (9 rounds: 9 fast, 3 medium, 3 exhaustive):
+ 310 deleted vars, 270 deleted constraints, 0 added constraints, 1722 tightened bounds, 0 added holes, 10 changed sides, 0 changed coefficients
+ 1986 implications, 0 cliques
+presolved problem has 930 variables (10 bin, 0 int, 0 impl, 920 cont) and 861 constraints
+     20 constraints of type <varbound>
+    581 constraints of type <linear>
+    260 constraints of type <quadratic>
+Presolving Time: 0.06
+
+ time | node  | left  |LP iter|LP it/n| mem |mdpt |frac |extbr|vars |cons |rows |cuts |confs|strbr|  dualbound   | primalbound  |  gap   
+  0.3s|     1 |     0 |  2571 |     - |  11M|   0 |   4 |   0 | 930 | 862 |1361 |   0 |   0 |   0 |-1.961254e+04 |      --      |    Inf 
+
+******************************************************************************
+This program contains Ipopt, a library for large-scale nonlinear optimization.
+ Ipopt is released as open source code under the Eclipse Public License (EPL).
+         For more information visit http://projects.coin-or.org/Ipopt
+******************************************************************************
+
+F 1.2s|     1 |     0 |  2787 |     - |  11M|   0 |   4 |   0 | 930 | 862 |1361 |   0 |   0 |   0 |-1.961254e+04 |-1.902806e+04 |   3.07%
+  1.2s|     1 |     0 |  2789 |     - |  12M|   0 |   3 |   0 | 930 | 862 |1363 |   2 |   0 |   0 |-1.961254e+04 |-1.902806e+04 |   3.07%
+  1.2s|     1 |     0 |  2790 |     - |  12M|   0 |   3 |   0 | 930 | 862 |1364 |   3 |   0 |   0 |-1.961254e+04 |-1.902806e+04 |   3.07%
+  1.3s|     1 |     0 |  2791 |     - |  12M|   0 |   3 |   0 | 930 | 862 |1365 |   4 |   0 |   0 |-1.961254e+04 |-1.902806e+04 |   3.07%
+  1.3s|     1 |     0 |  2792 |     - |  13M|   0 |   3 |   0 | 930 | 862 |1366 |   5 |   0 |   0 |-1.961254e+04 |-1.902806e+04 |   3.07%
+  3.8s|     1 |     0 | 20197 |     - |  15M|   0 |   3 |   0 | 930 | 862 |1366 |   5 |   0 |   0 |-1.960207e+04 |-1.902806e+04 |   3.02%
+  3.8s|     1 |     0 | 20328 |     - |  15M|   0 |   3 |   0 | 930 | 862 |1460 |  99 |   0 |   0 |-1.956212e+04 |-1.902806e+04 |   2.81%
+  3.8s|     1 |     0 | 20405 |     - |  15M|   0 |   3 |   0 | 930 | 862 |1534 | 173 |   0 |   0 |-1.949754e+04 |-1.902806e+04 |   2.47%
+  3.8s|     1 |     0 | 20434 |     - |  15M|   0 |   2 |   0 | 930 | 862 |1559 | 198 |   0 |   0 |-1.949333e+04 |-1.902806e+04 |   2.45%
+  3.8s|     1 |     0 | 20442 |     - |  15M|   0 |   1 |   0 | 930 | 862 |1567 | 206 |   0 |   0 |-1.949324e+04 |-1.902806e+04 |   2.44%
+L 6.8s|     1 |     0 | 45904 |     - |  15M|   0 |   1 |   0 | 930 | 862 |1567 | 206 |   0 |   0 |-1.949324e+04 |-1.937034e+04 |   0.63%
+  8.1s|     1 |     0 | 45904 |     - |  15M|   0 |   1 |   0 | 930 | 862 |1567 | 206 |   0 |   0 |-1.949324e+04 |-1.937034e+04 |   0.63%
+  8.1s|     1 |     0 | 45953 |     - |  15M|   0 |   1 |   0 | 930 | 862 |1622 | 261 |   0 |   0 |-1.947928e+04 |-1.937034e+04 |   0.56%
+  8.1s|     1 |     2 | 45953 |     - |  15M|   0 |   1 |   0 | 930 | 862 |1622 | 261 |   0 |   0 |-1.947928e+04 |-1.937034e+04 |   0.56%
+ time | node  | left  |LP iter|LP it/n| mem |mdpt |frac |extbr|vars |cons |rows |cuts |confs|strbr|  dualbound   | primalbound  |  gap   
+z 8.6s|     3 |     2 | 46093 |22289.5 |  17M|   1 |   1 |   0 | 930 | 862 | 797 | 398 |   0 |   0 |-1.947515e+04 |-1.942701e+04 |   0.25%
+ 10.4s|   100 |    69 | 47099 | 460.5 |  19M|  11 |   0 | 360 | 930 | 821 | 898 |1164 |   0 |   0 |-1.946383e+04 |-1.942701e+04 |   0.19%
+ 11.8s|   200 |   117 | 47922 | 233.2 |  19M|  17 |   0 | 354 | 930 | 821 | 919 |1686 |   0 |   0 |-1.946208e+04 |-1.942701e+04 |   0.18%
+C16.9s|   203 |   118 | 47946 | 229.9 |  19M|  17 |   0 | 348 | 930 | 821 | 917 |1704 |   0 |   0 |-1.946208e+04 |-1.942701e+04 |   0.18%
+ 18.0s|   300 |   171 | 49074 | 159.1 |  19M|  17 |   0 | 338 | 930 | 821 | 914 |2387 |   0 |   0 |-1.946115e+04 |-1.942701e+04 |   0.18%
+ 21.3s|   400 |   235 | 49772 | 120.9 |  20M|  21 |   0 | 332 | 930 | 821 | 929 |2882 |   0 |   0 |-1.946010e+04 |-1.942701e+04 |   0.17%
+ 22.1s|   500 |   313 | 50478 |  98.1 |  20M|  24 |   - |   0 | 930 | 821 | 925 |3485 |   0 |   0 |-1.945503e+04 |-1.942701e+04 |   0.14%
+ 23.2s|   600 |   389 | 51256 |  83.0 |  21M|  24 |   0 | 360 | 930 | 821 | 904 |4169 |   0 |   0 |-1.945381e+04 |-1.942701e+04 |   0.14%
+ 24.3s|   700 |   475 | 52112 |  72.4 |  21M|  24 |   0 | 364 | 930 | 821 | 925 |4962 |   0 |   0 |-1.945381e+04 |-1.942701e+04 |   0.14%
+ 25.5s|   800 |   567 | 52981 |  64.4 |  22M|  25 |   0 | 336 | 930 | 821 | 915 |5782 |   0 |   0 |-1.945381e+04 |-1.942701e+04 |   0.14%
+ 26.6s|   900 |   655 | 53718 |  58.1 |  22M|  25 |   0 | 342 | 930 | 821 | 922 |6505 |   0 |   0 |-1.945381e+04 |-1.942701e+04 |   0.14%
+ 27.7s|  1000 |   749 | 54462 |  53.0 |  23M|  26 |   0 | 334 | 930 | 821 | 938 |7224 |   0 |   0 |-1.945309e+04 |-1.942701e+04 |   0.13%
+ 28.9s|  1100 |   843 | 55379 |  49.0 |  23M|  26 |   0 | 344 | 930 | 821 | 946 |7974 |   0 |   0 |-1.945280e+04 |-1.942701e+04 |   0.13%
+ 29.9s|  1200 |   935 | 56135 |  45.6 |  25M|  26 |   0 | 356 | 930 | 821 | 944 |8590 |   0 |   0 |-1.945240e+04 |-1.942701e+04 |   0.13%
+ 31.2s|  1300 |  1027 | 56923 |  42.7 |  25M|  27 |   0 | 332 | 930 | 821 | 940 |9295 |   0 |   0 |-1.945204e+04 |-1.942701e+04 |   0.13%
+ time | node  | left  |LP iter|LP it/n| mem |mdpt |frac |extbr|vars |cons |rows |cuts |confs|strbr|  dualbound   | primalbound  |  gap   
+ 34.8s|  1400 |  1117 | 57661 |  40.1 |  25M|  27 |   0 | 338 | 930 | 821 | 928 |9924 |   0 |   0 |-1.945149e+04 |-1.942701e+04 |   0.13%
+ 35.9s|  1500 |  1211 | 58441 |  38.0 |  25M|  27 |   0 | 344 | 930 | 821 | 930 |  10k|   0 |   0 |-1.944991e+04 |-1.942701e+04 |   0.12%
+ 36.9s|  1600 |  1307 | 59142 |  36.0 |  26M|  27 |   0 | 356 | 930 | 821 | 936 |  11k|   0 |   0 |-1.944920e+04 |-1.942701e+04 |   0.11%
+ 40.6s|  1700 |  1387 | 59835 |  34.3 |  26M|  28 |   0 | 314 | 930 | 821 | 964 |  11k|   0 |   0 |-1.944905e+04 |-1.942701e+04 |   0.11%
+ 41.7s|  1800 |  1483 | 60598 |  32.8 |  26M|  28 |   0 | 338 | 930 | 821 | 933 |  12k|   0 |   0 |-1.944839e+04 |-1.942701e+04 |   0.11%
+ 43.0s|  1900 |  1575 | 61428 |  31.6 |  26M|  28 |   0 | 314 | 930 | 821 | 950 |  13k|   0 |   0 |-1.944839e+04 |-1.942701e+04 |   0.11%
+ 44.2s|  2000 |  1661 | 62182 |  30.3 |  28M|  28 |   0 | 340 | 930 | 821 | 924 |  14k|   0 |   0 |-1.944794e+04 |-1.942701e+04 |   0.11%
+ 45.2s|  2100 |  1753 | 62803 |  29.2 |  28M|  28 |   0 | 330 | 930 | 821 | 953 |  14k|   0 |   0 |-1.944768e+04 |-1.942701e+04 |   0.11%
+ 46.5s|  2200 |  1843 | 63572 |  28.2 |  28M|  28 |   0 | 340 | 930 | 821 | 953 |  15k|   0 |   0 |-1.944767e+04 |-1.942701e+04 |   0.11%
+ 49.2s|  2300 |  1937 | 64337 |  27.3 |  28M|  28 |   0 | 328 | 930 | 821 | 930 |  16k|   0 |   0 |-1.944760e+04 |-1.942701e+04 |   0.11%
+ 50.4s|  2400 |  2029 | 65049 |  26.5 |  28M|  28 |   0 | 326 | 930 | 821 | 959 |  16k|   0 |   0 |-1.944741e+04 |-1.942701e+04 |   0.10%
+ 51.4s|  2500 |  2109 | 65704 |  25.7 |  28M|  28 |   0 | 328 | 930 | 821 | 942 |  17k|   0 |   0 |-1.944732e+04 |-1.942701e+04 |   0.10%
+ 52.6s|  2600 |  2199 | 66445 |  25.0 |  29M|  28 |   - |   0 | 930 | 821 | 943 |  18k|   0 |   0 |-1.944731e+04 |-1.942701e+04 |   0.10%
+ 53.7s|  2700 |  2293 | 67175 |  24.3 |  32M|  28 |   0 | 332 | 930 | 821 | 922 |  18k|   0 |   0 |-1.944720e+04 |-1.942701e+04 |   0.10%
+ 54.8s|  2800 |  2383 | 67950 |  23.7 |  33M|  28 |   0 | 338 | 930 | 821 | 935 |  19k|   0 |   0 |-1.944717e+04 |-1.942701e+04 |   0.10%
+ time | node  | left  |LP iter|LP it/n| mem |mdpt |frac |extbr|vars |cons |rows |cuts |confs|strbr|  dualbound   | primalbound  |  gap   
+ 56.1s|  2900 |  2467 | 68612 |  23.1 |  33M|  28 |   0 | 318 | 930 | 821 | 944 |  20k|   0 |   0 |-1.944716e+04 |-1.942701e+04 |   0.10%
+ 57.3s|  3000 |  2559 | 69367 |  22.6 |  33M|  28 |   0 | 332 | 930 | 821 | 922 |  20k|   0 |   0 |-1.944709e+04 |-1.942701e+04 |   0.10%
+ 58.4s|  3100 |  2653 | 70059 |  22.1 |  33M|  28 |   0 | 310 | 930 | 821 | 961 |  21k|   0 |   0 |-1.944698e+04 |-1.942701e+04 |   0.10%
+ 59.4s|  3200 |  2739 | 70677 |  21.6 |  33M|  28 |   - |   0 | 930 | 821 | 915 |  21k|   0 |   0 |-1.944677e+04 |-1.942701e+04 |   0.10%
+ 60.6s|  3300 |  2827 | 71457 |  21.2 |  33M|  28 |   0 | 306 | 930 | 821 | 957 |  22k|   0 |   0 |-1.944656e+04 |-1.942701e+04 |   0.10%
+
+SCIP Status        : solving was interrupted [gap limit reached]
+Solving Time (sec) : 60.84
+Solving Nodes      : 3321
+Primal Bound       : -1.94270099049520e+04 (4 solutions)
+Dual Bound         : -1.94463204020061e+04
+Gap                : 0.10 %
+
+
+--- Restarting execution
+--- scaled_refinery_continous10.gms(1312) 2 Mb
+--- Reading solution for model refinery1
+***
+*** Solver did not provide marginals for model refinery1
+***
+--- scaled_refinery_continous10.gms(1324) 3 Mb
+*** Status: Normal completion
+--- Job scaled_refinery_continous10.gms Stop 09/28/18 15:04:13 elapsed 0:01:01.029

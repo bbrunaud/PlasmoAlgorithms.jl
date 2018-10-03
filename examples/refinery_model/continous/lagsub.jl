@@ -52,7 +52,7 @@ function generate_lagsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:
 	@constraint(m, CDU_capacity_bound, 	sum(crudeQuantity[c] for c in crudes) <= CDU_capacity)
 
 
-	@constraint(m, Crude_selection[c in crudes], crudeQuantity[c] >= pickCrude[c]*Crude_lower_bound[c])
+	@constraint(m, Crude_selection[c in crudes], crudeQuantity[c] >= pickCrude[c]*floor(Crude_lower_bound[c]*1000)/1000)
 
 
 	@constraint(m, Crude_bound[c in crudes], 	crudeQuantity[c] <= pickCrude[c]*Crude_upper_bound[c])
@@ -476,7 +476,7 @@ function generate_lagsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:
 									AGO_sale*flow_AGO_2[c] -
 									HF_sale*flow_HF_1[c] -
 									HF_sale*flow_HF_3[c] +
-									((crudeQuantity[c]+100*slack1[c] + 100 *slack2[c])/1000)/BarrelToKT[c]*GranularityOfBarrels*(Crude_price[c]+1) for c in crudes
+									((crudeQuantity[c]+10*slack1[c] + 10 *slack2[c])/1000)/BarrelToKT[c]*GranularityOfBarrels*(Crude_price[c]+1) for c in crudes
 								) -
 								sum(
 									PG98_sale*flow_PG98[k] +

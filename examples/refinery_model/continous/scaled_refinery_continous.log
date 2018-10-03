@@ -1,0 +1,135 @@
+--- Job scaled_refinery_continous.gms Start 09/28/18 15:02:58 25.1.1 r66732 LEX-LEG x86 64bit/Linux
+GAMS 25.1.1   Copyright (C) 1987-2018 GAMS Development. All rights reserved
+Licensee: Eval License Carnegie Mellon University        G180112/0001AS-GEN
+          Dept. of Chemical Engineering                              DC9476
+          License for teaching and research at degree granting institutions
+          License Admin: Ignacio E. Grossmann                              
+--- Starting compilation
+--- scaled_refinery_continous.gms(392) 3 Mb
+--- . refinery1_data/5.gms(125) 3 Mb
+--- scaled_refinery_continous.gms(1085) 3 Mb
+--- Starting execution: elapsed 0:00:00.010
+--- scaled_refinery_continous.gms(1189) 4 Mb
+--- Generating MINLP model refinery1
+--- scaled_refinery_continous.gms(1197) 6 Mb
+---   577 rows  631 columns  3,871 non-zeroes
+---   650 nl-code  260 nl-non-zeroes
+---   10 discrete-columns
+--- scaled_refinery_continous.gms(1197) 4 Mb
+--- Executing SCIP: elapsed 0:00:00.020
+
+SCIP             25.1.1 r66732 Released May 19, 2018 LEG x86 64bit/Linux      
+SCIP version 5.0 (09c736f)
+Copyright (C) 2002-2018 Konrad-Zuse-Zentrum fuer Informationstechnik Berlin (ZIB)
+
+External codes: 
+  CPLEX 12.8.0.0       Linear Programming Solver developed by IBM (www.cplex.com)
+  CppAD 20160000.1     Algorithmic Differentiation of C++ algorithms developed by B. Bell (www.coin-or.org/CppAD)
+  GMP 4.3.1            GNU Multiple Precision Arithmetic Library developed by T. Granlund (gmplib.org)
+  bliss 0.73p          Computing Graph Automorphism Groups by T. Junttila and P. Kaski (http://www.tcs.hut.fi/Software/bliss/)
+  Ipopt 3.12           Interior Point Optimizer developed by A. Waechter et.al. (www.coin-or.org/Ipopt)
+  HSL MA27 and MC19    Harwell Subroutine Libraries (www.hsl.rl.ac.uk) from commercially supported Ipopt
+non-default parameter settings:
+limits/time = 10000
+limits/gap = 0.001
+limits/absgap = 1e-09
+lp/threads = 1
+misc/printreason = FALSE
+timing/clocktype = 2
+display/nfrac/active = 2
+display/nexternbranchcands/active = 2
+
+original problem has 630 variables (10 bin, 0 int, 620 cont) and 576 constraints
+
+all 1 solutions given by solution candidate storage are infeasible
+
+presolving:
+(round 1, fast)       145 del vars, 130 del conss, 0 add conss, 407 chg bounds, 0 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 2, fast)       155 del vars, 135 del conss, 0 add conss, 676 chg bounds, 0 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 3, fast)       155 del vars, 135 del conss, 0 add conss, 780 chg bounds, 5 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 4, fast)       155 del vars, 135 del conss, 0 add conss, 872 chg bounds, 5 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 5, fast)       155 del vars, 135 del conss, 0 add conss, 884 chg bounds, 5 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 6, fast)       155 del vars, 135 del conss, 0 add conss, 889 chg bounds, 5 chg sides, 0 chg coeffs, 0 upgd conss, 0 impls, 0 clqs
+(round 7, exhaustive) 155 del vars, 135 del conss, 0 add conss, 889 chg bounds, 5 chg sides, 0 chg coeffs, 10 upgd conss, 0 impls, 0 clqs
+(round 8, exhaustive) 155 del vars, 135 del conss, 0 add conss, 889 chg bounds, 5 chg sides, 0 chg coeffs, 20 upgd conss, 10 impls, 0 clqs
+   (0.0s) probing cycle finished: starting next cycle
+   (0.0s) symmetry computation skipped: there exist constraints that cannot be handled by symmetry methods
+presolving (9 rounds: 9 fast, 3 medium, 3 exhaustive):
+ 155 deleted vars, 135 deleted constraints, 0 added constraints, 889 tightened bounds, 0 added holes, 5 changed sides, 0 changed coefficients
+ 1003 implications, 0 cliques
+presolved problem has 475 variables (10 bin, 0 int, 0 impl, 465 cont) and 441 constraints
+     20 constraints of type <varbound>
+    291 constraints of type <linear>
+    130 constraints of type <quadratic>
+Presolving Time: 0.03
+
+ time | node  | left  |LP iter|LP it/n| mem |mdpt |frac |extbr|vars |cons |rows |cuts |confs|strbr|  dualbound   | primalbound  |  gap   
+  0.1s|     1 |     0 |  1210 |     - |5962k|   0 |   4 |   0 | 475 | 442 | 691 |   0 |   0 |   0 |-1.869759e+04 |      --      |    Inf 
+
+******************************************************************************
+This program contains Ipopt, a library for large-scale nonlinear optimization.
+ Ipopt is released as open source code under the Eclipse Public License (EPL).
+         For more information visit http://projects.coin-or.org/Ipopt
+******************************************************************************
+
+F 0.7s|     1 |     0 |  1272 |     - |6104k|   0 |   4 |   0 | 475 | 442 | 691 |   0 |   0 |   0 |-1.869759e+04 |-1.820282e+04 |   2.72%
+  0.7s|     1 |     0 |  1273 |     - |6210k|   0 |   4 |   0 | 475 | 442 | 692 |   1 |   0 |   0 |-1.869759e+04 |-1.820282e+04 |   2.72%
+  0.8s|     1 |     0 |  1274 |     - |6283k|   0 |   4 |   0 | 475 | 442 | 693 |   2 |   0 |   0 |-1.869759e+04 |-1.820282e+04 |   2.72%
+  0.8s|     1 |     0 |  1276 |     - |6362k|   0 |   4 |   0 | 475 | 442 | 694 |   3 |   0 |   0 |-1.869759e+04 |-1.820282e+04 |   2.72%
+  0.8s|     1 |     0 |  1279 |     - |6435k|   0 |   4 |   0 | 475 | 442 | 695 |   4 |   0 |   0 |-1.869759e+04 |-1.820282e+04 |   2.72%
+  0.9s|     1 |     0 |  1280 |     - |6510k|   0 |   4 |   0 | 475 | 442 | 696 |   5 |   0 |   0 |-1.869759e+04 |-1.820282e+04 |   2.72%
+  1.4s|     1 |     0 |  8394 |     - |7185k|   0 |   4 |   0 | 475 | 442 | 696 |   5 |   0 |   0 |-1.868831e+04 |-1.820282e+04 |   2.67%
+  1.5s|     1 |     0 |  8471 |     - |7432k|   0 |   4 |   0 | 475 | 442 | 754 |  63 |   0 |   0 |-1.861111e+04 |-1.820282e+04 |   2.24%
+  1.5s|     1 |     0 |  8504 |     - |7518k|   0 |   4 |   0 | 475 | 442 | 780 |  89 |   0 |   0 |-1.841905e+04 |-1.820282e+04 |   1.19%
+  1.5s|     1 |     0 |  8526 |     - |7633k|   0 |   3 |   0 | 475 | 442 | 800 | 109 |   0 |   0 |-1.840058e+04 |-1.820282e+04 |   1.09%
+  1.5s|     1 |     0 |  8531 |     - |7727k|   0 |   4 |   0 | 475 | 442 | 806 | 115 |   0 |   0 |-1.840048e+04 |-1.820282e+04 |   1.09%
+  1.5s|     1 |     0 |  8536 |     - |7822k|   0 |   4 |   0 | 475 | 442 | 454 | 120 |   0 |   0 |-1.840045e+04 |-1.820282e+04 |   1.09%
+  1.5s|     1 |     0 |  8537 |     - |7872k|   0 |   4 |   0 | 475 | 442 | 455 | 121 |   0 |   0 |-1.840045e+04 |-1.820282e+04 |   1.09%
+G 2.9s|     1 |     0 | 20672 |     - |7956k|   0 |   4 |   0 | 475 | 442 | 455 | 121 |   0 |   0 |-1.840045e+04 |-1.834943e+04 |   0.28%
+ time | node  | left  |LP iter|LP it/n| mem |mdpt |frac |extbr|vars |cons |rows |cuts |confs|strbr|  dualbound   | primalbound  |  gap   
+  2.9s|     1 |     0 | 20672 |     - |7956k|   0 |   4 |   0 | 475 | 440 | 455 | 121 |   0 |   0 |-1.840045e+04 |-1.834943e+04 |   0.28%
+  2.9s|     1 |     0 | 20701 |     - |7956k|   0 |   4 |   0 | 475 | 440 | 485 | 151 |   0 |   0 |-1.839315e+04 |-1.834943e+04 |   0.24%
+  3.0s|     1 |     0 | 20702 |     - |7984k|   0 |   - |   0 | 475 | 440 | 485 | 151 |   1 |   2 |-1.839238e+04 |-1.834943e+04 |   0.23%
+(run 1, node 1) restarting after 2 global fixings of integer variables
+
+(restart) converted 10 cuts from the global cut pool into linear constraints
+
+presolving:
+(round 1, fast)       2 del vars, 3 del conss, 0 add conss, 72 chg bounds, 0 chg sides, 4 chg coeffs, 0 upgd conss, 1003 impls, 0 clqs
+(round 2, fast)       2 del vars, 3 del conss, 0 add conss, 122 chg bounds, 0 chg sides, 6 chg coeffs, 0 upgd conss, 1003 impls, 0 clqs
+presolving (3 rounds: 3 fast, 1 medium, 1 exhaustive):
+ 2 deleted vars, 3 deleted constraints, 0 added constraints, 122 tightened bounds, 0 added holes, 0 changed sides, 6 changed coefficients
+ 1003 implications, 0 cliques
+presolved problem has 473 variables (8 bin, 0 int, 0 impl, 465 cont) and 447 constraints
+     16 constraints of type <varbound>
+    301 constraints of type <linear>
+    130 constraints of type <quadratic>
+Presolving Time: 0.04
+transformed 1/2 original solutions to the transformed problem space
+
+ time | node  | left  |LP iter|LP it/n| mem |mdpt |frac |extbr|vars |cons |rows |cuts |confs|strbr|  dualbound   | primalbound  |  gap   
+  3.0s|     1 |     0 | 21447 |     - |8075k|   0 |   0 |   0 | 473 | 447 | 816 |   0 |   1 |   2 |-1.838947e+04 |-1.834943e+04 |   0.22%
+  3.1s|     1 |     0 | 21458 |     - |8075k|   0 |   1 |   0 | 473 | 447 | 826 |  10 |   1 |   2 |-1.838818e+04 |-1.834943e+04 |   0.21%
+  3.1s|     1 |     0 | 21461 |     - |8195k|   0 |   0 |   0 | 473 | 447 | 829 |  13 |   1 |   2 |-1.838810e+04 |-1.834943e+04 |   0.21%
+  3.1s|     1 |     0 | 21462 |     - |8195k|   0 |   0 |   0 | 473 | 447 | 830 |  14 |   1 |   2 |-1.838809e+04 |-1.834943e+04 |   0.21%
+  4.3s|     1 |     0 | 38512 |     - |8250k|   0 |   0 |   0 | 473 | 444 | 830 |  14 |   1 |   2 |-1.838542e+04 |-1.834943e+04 |   0.20%
+  4.3s|     1 |     0 | 38557 |     - |8282k|   0 |   1 |   0 | 473 | 444 | 866 |  50 |   1 |   2 |-1.837248e+04 |-1.834943e+04 |   0.13%
+  4.3s|     1 |     0 | 38579 |     - |8384k|   0 |   1 |   0 | 473 | 444 | 890 |  74 |   1 |   2 |-1.836064e+04 |-1.834943e+04 |   0.06%
+
+SCIP Status        : solving was interrupted [gap limit reached]
+Solving Time (sec) : 4.33
+Solving Nodes      : 1 (total of 2 nodes in 2 runs)
+Primal Bound       : -1.83494343422732e+04 (2 solutions)
+Dual Bound         : -1.83606350589858e+04
+Gap                : 0.06 %
+
+
+--- Restarting execution
+--- scaled_refinery_continous.gms(1197) 2 Mb
+--- Reading solution for model refinery1
+***
+*** Solver did not provide marginals for model refinery1
+***
+--- scaled_refinery_continous.gms(1209) 3 Mb
+*** Status: Normal completion
+--- Job scaled_refinery_continous.gms Stop 09/28/18 15:03:03 elapsed 0:00:05.735

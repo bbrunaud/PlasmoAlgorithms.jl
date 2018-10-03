@@ -13,10 +13,10 @@ function lagrangesolve(graph;
   initialmultipliers=:zero, # :relaxation for LP relaxation
   δ = 0.5, # Factor to shrink step when subgradient stuck
   maxnoimprove = 3,
-  cpbound=1e6) # Amount of iterations that no improvement is allowed before shrinking step
+  cpbound=1e6, user_LB=-Inf, user_UB=+Inf) # Amount of iterations that no improvement is allowed before shrinking step
 
   ### INITIALIZATION ###
-  lgprepare(graph,δ,maxnoimprove,cpbound)
+  lgprepare(graph,δ,maxnoimprove,cpbound,user_LB, user_UB)
   n = graph.attributes[:normalized]
 
   if initialmultipliers == :relaxation
@@ -141,7 +141,7 @@ end
   lgprepare(graph::PlasmoGraph)
   Prepares the graph to apply lagrange decomposition algorithm
 """
-function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
+function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing, user_LB=-Inf, user_UB=+Inf)
   if haskey(graph.attributes,:preprocessed)
     return true
   end
@@ -166,8 +166,10 @@ function lgprepare(graph::PlasmoGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   graph.attributes[:steptaken] = false
   graph.attributes[:LB_record] = []
   graph.attributes[:UB_record] =[]
-  graph.attributes[:LB] = -Inf 
-  graph.attributes[:UB] = +Inf 
+  graph.attributes[:LB] = -Inf
+  graph.attributes[:UB] = +Inf
+  graph.attributes[:user_UB] = user_UB
+  graph.attributes[:user_LB] = user_LB
   #store the orignal upper lower bound of the variables
   graph.attributes[:orig_ub] = Dict()
   graph.attributes[:orig_lb] = Dict()
@@ -349,7 +351,10 @@ function subgradient(graph,λ,res,lagrangeheuristic)
   if bound < graph.attributes[:UB]
     graph.attributes[:UB] = bound
   end
-  step = α*abs(graph.attributes[:UB]-graph.attributes[:LB])/(norm(res)^2) 
+  UB = min(graph.attributes[:UB], graph.attributes[:user_UB])
+  LB = max(graph.attributes[:LB], graph.attributes[:user_LB])
+
+  step = α*abs(UB-LB)/(norm(res)^2) 
   λ += step*res
   # println("res=======")
   # println(res)
@@ -615,16 +620,45 @@ function nearest_scenario(graph::PlasmoGraph)
   for node in values(getnodes(graph))
     m = getmodel(node)
     for var in keys(m.ext[:varmap])
-      var_name = var.m.colNames[var.col]
-      setupperbound(var, nearest_x[var_name])
-      setlowerbound(var, nearest_x[var_name])
+      var_name = getname(var)
+      category = getcategory(var)
+
+      #avoid numerical issue of violating bounds 
+      ub = getupperbound(var)
+      lb = getlowerbound(var)
+      if nearest_x[var_name] >= ub && category == :Cont 
+        setupperbound(var, ub)
+        setlowerbound(var, ub)        
+      elseif nearest_x[var_name] <= lb && category == :Cont 
+        setupperbound(var, lb)
+        setlowerbound(var, lb)
+      elseif category == :Bin && abs(nearest_x[var_name]) < 1e-3 
+        setupperbound(var, 0)
+        setlowerbound(var, 0)   
+      elseif category == :Bin && abs(nearest_x[var_name]) > 0.5 
+        setupperbound(var, 1)
+        setlowerbound(var, 1)              
+      else 
+        setupperbound(var, nearest_x[var_name])
+        setlowerbound(var, nearest_x[var_name])
+      end 
+
+
     end 
     status = solve(m)
     if status == :Infeasible
+      println(m)
       println(nearest_x)
+      println(m.colUpper)
+      println(m.colNames)
+      println(m.colLower)
+      Zk = +Inf
       error("upper bound subproblem is infeasible")
     end 
-    Zk += getobjectivevalue(m)
+
+    if status != :Infeasible
+      Zk += getobjectivevalue(m)
+    end
     #restore bounds after solve 
     for var in keys(m.ext[:varmap])
       var_name = var.m.colNames[var.col]
@@ -634,6 +668,108 @@ function nearest_scenario(graph::PlasmoGraph)
   end
   if Zk < graph.attributes[:UB]
     graph.attributes[:best_feasible_x]  = nearest_x
+  end 
+  graph.attributes[:best_avg_x] = deepcopy(avg_x)
+  return Zk
+
+end
+
+function random_scenario(graph::PlasmoGraph)
+  avg_x = Dict()
+  x_all_scenarios = []
+  for i in 1:graph.attributes[:numnodes]
+    push!(x_all_scenarios, Dict())
+  end 
+  #save the current upper and lower bound
+  orig_ub = Dict()
+  orig_lb = Dict()
+
+  #initialize avg_x
+  m = getmodel(getnodes(graph)[1])
+  for var in keys(m.ext[:varmap])
+    var_name = m.colNames[var.col]
+    avg_x[var_name] = 0.0
+  end
+  
+  #calculate the average of x over all scenarios
+  j=1
+  for node in values(getnodes(graph))
+    m  = getmodel(node)
+    # println(keys(m.ext[:varmap]))
+    # println(keys(m.ext[:varmap]))
+    for var in keys(m.ext[:varmap])
+      var_name = m.colNames[var.col]
+      avg_x[var_name] += node.attributes[:prob] * getvalue(var)
+      x_all_scenarios[j][var_name] = getvalue(var)
+      if j == 1
+        orig_ub[var_name] = getupperbound(var)
+        orig_lb[var_name] = getlowerbound(var)
+      end      
+    end
+    j += 1
+  end
+  #find the nearest scenario 
+  random_x = Dict()
+  j = randperm(graph.attributes[:numnodes])[1]
+  for var_name in keys(avg_x)
+    random_x[var_name] = x_all_scenarios[j][var_name]
+  end
+
+
+
+  #fix x to random_x and re-solve all subproblems
+  Zk = 0 
+  for node in values(getnodes(graph))
+    m = getmodel(node)
+    for var in keys(m.ext[:varmap])
+      var_name = getname(var)
+      category = getcategory(var)
+
+      #avoid numerical issue of violating bounds 
+      ub = getupperbound(var)
+      lb = getlowerbound(var)
+      if random_x[var_name] >= ub && category == :Cont 
+        setupperbound(var, ub)
+        setlowerbound(var, ub)        
+      elseif random_x[var_name] <= lb && category == :Cont 
+        setupperbound(var, lb)
+        setlowerbound(var, lb)
+      elseif category == :Bin && abs(random_x[var_name]) < 1e-3 
+        setupperbound(var, 0)
+        setlowerbound(var, 0)   
+      elseif category == :Bin && abs(random_x[var_name]) > 0.5 
+        setupperbound(var, 1)
+        setlowerbound(var, 1)              
+      else 
+        setupperbound(var, random_x[var_name])
+        setlowerbound(var, random_x[var_name])
+      end 
+
+
+    end 
+    status = solve(m)
+    if status == :Infeasible
+      # println(m)
+      println(random_x)
+      println(m.colUpper)
+      println(m.colNames)
+      println(m.colLower)
+      Zk = +Inf
+      # error("upper bound subproblem is infeasible")
+    end 
+
+    if status != :Infeasible
+      Zk += getobjectivevalue(m)
+    end
+    #restore bounds after solve 
+    for var in keys(m.ext[:varmap])
+      var_name = var.m.colNames[var.col]
+      setupperbound(var, orig_ub[var_name])
+      setlowerbound(var, orig_lb[var_name])
+    end
+  end
+  if Zk < graph.attributes[:UB]
+    graph.attributes[:best_feasible_x]  = random_x
   end 
   graph.attributes[:best_avg_x] = deepcopy(avg_x)
   return Zk

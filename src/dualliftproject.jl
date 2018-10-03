@@ -27,25 +27,25 @@ function getmatrixform(node::PlasmoNode)
         end
 
         if largest_abs > 1e4 
-            println("initial A[i]")
-            println(A[i,:])
+            # println("initial A[i]")
+            # println(A[i,:])
             A[i, :] = A[i, :] * (1e4/largest_abs) 
             b[i] = b[i] * (1e4/largest_abs) 
             LHS[i] = LHS[i] * (1e4/largest_abs) 
             RHS[i] = RHS[i] * (1e4/largest_abs) 
-            println("rescale A[i]")
-            println(A[i,:])
+            # println("rescale A[i]")
+            # println(A[i,:])
         end
 
         if smallest_abs < 1e-4 
-            println("initial A[i]")
-            println(A[i,:])            
+            # println("initial A[i]")
+            # println(A[i,:])            
             A[i, :] = A[i, :] * (1e-4 / smallest_abs) 
             b[i] = b[i] * (1e-4 / smallest_abs) 
             LHS[i] = LHS[i] * (1e-4 / smallest_abs) 
             RHS[i] = RHS[i] * (1e-4 / smallest_abs) 
-            println("rescale A[i]")
-            println(A[i,:])            
+            # println("rescale A[i]")
+            # println(A[i,:])            
         end
     end
     # Re-arrenge Matrix in the canonical form Ax>=b
@@ -197,6 +197,13 @@ function solveliftandprojectrelaxation(node::PlasmoNode, graph::PlasmoGraph)
                     α_cut = getvalue(α)
                     β_cut = getvalue(β)
                     add_cut = true
+                    #getdual 
+                    λ = getdual(getindex(CGLP, :convexDual3))
+                    μ = getdual(getindex(CGLP, :convexDual4))
+                    if abs(λ) < 1e-2 || abs(μ) < 1e-2 
+                        add_cut = false
+                    end
+                    
                     for coeff in α_cut
                         if abs(coeff) < 1e-6 && abs(coeff) >0
                             add_cut = false
@@ -229,7 +236,8 @@ function solveliftandprojectrelaxation(node::PlasmoNode, graph::PlasmoGraph)
         println("bounds")
         println(model.colUpper[1:5])
         println(model.colLower[1:5])
-        error("subproblem not solved to optimality")
+        # error("subproblem not solved to optimality")
+        graph.attributes[:stalled] = true
     end
     dualconstraints = node.attributes[:linkconstraints]
     λnode = getdual(dualconstraints)

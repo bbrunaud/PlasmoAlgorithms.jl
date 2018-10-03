@@ -1,0 +1,10 @@
+--- Job scaled_refinery_continous400.gms Start 09/20/18 23:52:45 25.1.1 r66732 LEX-LEG x86 64bit/Linux
+GAMS 25.1.1   Copyright (C) 1987-2018 GAMS Development. All rights reserved
+Licensee: Eval License Carnegie Mellon University        G180112/0001AS-GEN
+          Dept. of Chemical Engineering                              DC9476
+          License for teaching and research at degree granting institutions
+          License Admin: Ignacio E. Grossmann                              
+--- Starting compilation
+--- scaled_refinery_continous400.gms(1084) 3 Mb 4 Errors
+*** Status: Compilation error(s)
+--- Job scaled_refinery_continous400.gms Stop 09/20/18 23:52:45 elapsed 0:00:00.015

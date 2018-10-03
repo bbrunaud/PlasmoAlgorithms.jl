@@ -15,12 +15,14 @@ function crosssolve(bgraph::Plasmo.PlasmoGraph, lgraph::Plasmo.PlasmoGraph;
 	lag_initialmultipliers=:zero, # :relaxation for LP relaxation
 	lag_δ = 0.5, # Factor to shrink step when subgradient stuck
 	lag_maxnoimprove = 1,
-	lag_cpbound=1e6)# Amount of iterations that no improvement is allowed before shrinking step
+	lag_cpbound=1e6,
+	user_LB=-Inf,
+	user_UB=+Inf)# Amount of iterations that no improvement is allowed before shrinking step
 	results = Dict()
 	results[:benders_time] = 0
 	results[:lagrangean_time] = 0
 	if heuristic == :lagfirst
-		solution = lagrangesolve(lgraph, max_iterations=max_iterations_lag, ϵ=ϵ, rel_gap=rel_gap, initialmultipliers=lag_initialmultipliers, lagrangeheuristic=lagrangeheuristic,  maxnoimprove = lag_maxnoimprove, δ = lag_δ, α = lag_α, cpbound = lag_cpbound )
+		solution = lagrangesolve(lgraph, max_iterations=max_iterations_lag, ϵ=ϵ, rel_gap=rel_gap, initialmultipliers=lag_initialmultipliers, lagrangeheuristic=lagrangeheuristic,  maxnoimprove = lag_maxnoimprove, δ = lag_δ, α = lag_α, cpbound = lag_cpbound, user_LB=user_LB,user_UB=user_UB )
 		println(solution.termination)
 		results[:lagrangean_time] += solution.clocktime[end]
 		if !lgraph.attributes[:is_infeasible]
@@ -63,7 +65,7 @@ function crosssolve(bgraph::Plasmo.PlasmoGraph, lgraph::Plasmo.PlasmoGraph;
 	end
 
 	if heuristic == :lagonly
-		solution = lagrangesolve(lgraph, max_iterations=max_iterations_lag, ϵ=ϵ, rel_gap=rel_gap, initialmultipliers=lag_initialmultipliers, lagrangeheuristic=lagrangeheuristic,  maxnoimprove = lag_maxnoimprove, δ = lag_δ, α = lag_α, cpbound = lag_cpbound )
+		solution = lagrangesolve(lgraph, max_iterations=max_iterations_lag, ϵ=ϵ, rel_gap=rel_gap, initialmultipliers=lag_initialmultipliers, lagrangeheuristic=lagrangeheuristic,  maxnoimprove = lag_maxnoimprove, δ = lag_δ, α = lag_α, cpbound = lag_cpbound , user_LB=user_LB,user_UB=user_UB )
 		results[:lagrangean_time] += solution.clocktime[end]
 		if !lgraph.attributes[:is_infeasible]
 			if !haskey(bgraph.attributes,:preprocessed)

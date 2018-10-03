@@ -3,7 +3,7 @@ function generate_ubsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,
 	m = Model(solver=BaronSolver(maxtime=1e4, epsr= 1e-4, prlevel=0, CplexLibName = "/opt/ibm/ILOG/CPLEX_Studio127/cplex/bin/x86-64_linux/libcplex1270.so"))
 	@variable(m, pickCrude[c in crudes], Bin)
 
-	@variable(m, 0<=crudeQuantity[c in crudes]<=Crude_upper_bound[c])
+	@variable(m, 0<=crudeQuantity[c in crudes]<=floor(Crude_upper_bound[c]*1000)/1000)
 	@variable(m, slack1[c in crudes]>=0)
 	@variable(m, slack2[c in crudes]>=0)
 	@variable(m, Reformer95_lower<=flow_Reformer95<=Reformer_capacity)
@@ -49,13 +49,6 @@ function generate_ubsub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,
 
 
 
-	@constraint(m, CDU_capacity_bound, 	sum(crudeQuantity[c] for c in crudes) <= CDU_capacity)
-
-
-	@constraint(m, Crude_selection[c in crudes], crudeQuantity[c] >= pickCrude[c]*Crude_lower_bound[c])
-
-
-	@constraint(m, Crude_bound[c in crudes], 	crudeQuantity[c] <= pickCrude[c]*Crude_upper_bound[c])
 
 
 	@constraint(m, Desulphurisation_capacity_bound, flow_Desulphurisation_CGO + sum(flow_Desulphurisation_1[c] for c in crudes) <= Desulphurisation_capacity)

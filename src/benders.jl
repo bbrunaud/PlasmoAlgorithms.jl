@@ -183,31 +183,40 @@ end
 
 
 function solvenodemodel(node::PlasmoNode,graph::PlasmoGraph)
+  status = :Optimal
   if graph.attributes[:is_nonconvex] && in_degree(graph, node) != 0
     model = node.attributes[:ubsub]
     # println(model)
     status = solve(model)
-
-    node.attributes[:preobjval] = getvalue(node.attributes[:preobj])
   else 
     model = getmodel(node)
     status = solve(model)
-    if status != :Optimal && in_degree(graph, node) == 0
-      graph.attributes[:is_infeasible] = true
-      graph.attributes[:LB] = +Inf
-    end
-    if status != :Optimal && in_degree(graph, node) !=0
-      println(node.attributes[:xin])
-      # error("upper bound subproblem not solved to optimality")
-    end
-    if in_degree(graph,node) == 0 # Root node
-      graph.attributes[:LB] = getobjectivevalue(model)
-    end
-    if graph.attributes[:LB] > graph.attributes[:global_UB]
-      graph.attributes[:fathomed_by_bound] = true
-    end
-    node.attributes[:preobjval] = getvalue(node.attributes[:preobj])
+  end 
+  node.attributes[:preobjval] = getvalue(node.attributes[:preobj])
+  if status != :Optimal
+    println(model.colLower)
+    println(model.colNames)
+    println(model.colUpper)
+    println(model.colVal)
+  end 
+
+  if status != :Optimal && in_degree(graph, node) == 0
+    graph.attributes[:is_infeasible] = true
+    graph.attributes[:LB] = +Inf
   end
+  if status != :Optimal && in_degree(graph, node) !=0
+    println(node.attributes[:xin])
+    node.attributes[:preobjval] = +Inf
+    # error("upper bound subproblem not solved to optimality")
+  end
+  if in_degree(graph,node) == 0 # Root node
+    graph.attributes[:LB] = getobjectivevalue(model)
+  end
+  if graph.attributes[:LB] > graph.attributes[:global_UB]
+    graph.attributes[:fathomed_by_bound] = true
+  end
+  
+  
 
 end
 
@@ -238,11 +247,19 @@ function putx(node::PlasmoNode,graph::PlasmoGraph)
       var = childvars[getnodeindex(graph,child)][i]
       ub = getupperbound(var)
       lb = getlowerbound(var)
+      category = getcategory(var)
       if xnode[i] > ub 
         xnode[i] = ub 
       end
       if xnode[i] < lb 
         xnode[i] = lb 
+      end
+      if category == :Bin 
+        if xnode[i] < 1e-4
+          xnode[i] = 0
+        else 
+          xnode[i] = 1
+        end 
       end
     end
     child.attributes[:xin] = xnode

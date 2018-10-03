@@ -37,7 +37,7 @@ SETS
 	LG_in	"LG input"								/ 1*5 /
 	LG_out	"LG output"								/ 1*4 /
 	LG_prop	"LG properties"							/ 1*3 /
-	h		"scenarios"								/ 1*5 /
+	h		"scenarios"								/ 1*500 /
 ;
 
 alias(w,w2);
@@ -56,9 +56,8 @@ OPTION ITERLIM = 1E+09;
 OPTION LP=CPLEX;
 OPTION NLP=SNOPT;
 OPTION MIP=CPLEX;
-OPTION MINLP=SCIP;
 *OPTION MINLP=antigone;
-*OPTION MINLP=BARON;
+OPTION MINLP=BARON;
 
 *---------------------------------------------
 *		DEFINE PROBLEM-SPECIFIC PARAMETERS
@@ -389,7 +388,7 @@ loop(c,
 
 *=========== Generate scenarios for the uncertain parameters =============
 
-$INCLUDE refinery1_data/5.gms
+$INCLUDE refinery1_data/500.gms
 
 
 *======================================================================

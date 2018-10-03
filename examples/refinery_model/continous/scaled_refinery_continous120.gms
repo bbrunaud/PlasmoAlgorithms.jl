@@ -37,7 +37,7 @@ SETS
 	LG_in	"LG input"								/ 1*5 /
 	LG_out	"LG output"								/ 1*4 /
 	LG_prop	"LG properties"							/ 1*3 /
-	h		"scenarios"								/ 1*5 /
+	h		"scenarios"								/ 1*120 /
 ;
 
 alias(w,w2);
@@ -389,7 +389,7 @@ loop(c,
 
 *=========== Generate scenarios for the uncertain parameters =============
 
-$INCLUDE refinery1_data/5.gms
+$INCLUDE refinery1_data/120.gms
 
 
 *======================================================================
