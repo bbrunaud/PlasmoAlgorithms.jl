@@ -64,20 +64,53 @@ function crossprepare(c::CrossGraph)
     PlasmoAlgorithms.lgprepare(c.lg, 0.5, 3, 1e6)
  end
 
-function crosssolve(g::ModelGraph; max_iterations=10, subgradientiterations=5)
+function crosssolve(g::ModelGraph; max_iterations=10, subgradientiterations=5, ϵ=0.005, timelimit=200, bdcuts=[:LP])
     c = CrossGraph(g,deepcopy(g))
-    crosssolve(c, max_iterations=max_iterations, subgradientiterations=subgradientiterations)
+    crosssolve(c, max_iterations=max_iterations, subgradientiterations=subgradientiterations, ϵ=ϵ, timelimit=timelimit, bdcuts=bdcuts)
 end
 
-function crosssolve(c::CrossGraph; max_iterations=10, subgradientiterations=5)
+function crosssolve(c::CrossGraph; max_iterations=10, subgradientiterations=5, ϵ=0.005, timelimit=200, bdcuts=[:LP])
+    s = Solution(method=:cross)
+    starttime = time()
     crossprepare(c)
+    n = getattribute(c.bd, :normalized)
+
     for i in 1:max_iterations
-        bs = bendersolve(c.bd, max_iterations=1)
+        tic()
+        bs = bendersolve(c.bd, max_iterations=1, cuts=bdcuts, verbose=false)
         benders_to_lagrange(c)
         updatemethod =  i <= subgradientiterations ? :subgradient : :cuttingplanes
-        ls = lagrangesolve(c.lg,max_iterations=1, update_method=updatemethod, lagrangeheuristic=x->bs.objval)
+        ls = lagrangesolve(c.lg,max_iterations=1, update_method=updatemethod, lagrangeheuristic=x->bs.objval, verbose=false)
         lagrange_to_benders(c, termination=ls.termination)
+
+        UB = bs.objval
+        LB = ls.bestbound
+
+        tstamp = time() - starttime
+
+        itertime = toc()
+
+        if n == 1
+            saveiteration(s,tstamp,[UB,LB,itertime,tstamp],n)
+        else
+            saveiteration(s,tstamp,[n*LB,n*UB,itertime,tstamp],n)
+        end
+        printiterationsummary(s,singleline=false)
+
+        # Check Optimality
+        if abs(UB-LB)/(1e-10 + abs(UB)) < ϵ
+            s.termination = "Optimal"
+            return s
+        end
+
+        # Check time limit
+        if tstamp > timelimit
+          s.termination = "Time Limit"
+          return s
+        end
     end
+    s.termination = "Max Iterations"
+    return s
 end
 
 function benders_to_lagrange(c::CrossGraph)

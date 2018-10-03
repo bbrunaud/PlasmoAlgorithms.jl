@@ -1,7 +1,7 @@
 """
 bendersolve
 """
-function bendersolve(graph::ModelGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=1e-5,UBupdatefrequency=1,timelimit=3600,verbose=false)
+function bendersolve(graph::ModelGraph; max_iterations::Int64=10, cuts::Array{Symbol,1}=[:LP], ϵ=0.005,UBupdatefrequency=1,timelimit=3600,verbose=true)
   starttime = time()
   s = Solution(method=:benders)
   updatebound = true
@@ -35,9 +35,9 @@ function bendersolve(graph::ModelGraph; max_iterations::Int64=10, cuts::Array{Sy
     else
       saveiteration(s,tstamp,[n*LB,n*UB,itertime,tstamp],n)
     end
-    printiterationsummary(s,singleline=false)
+    verbose && printiterationsummary(s,singleline=false)
 
-    if abs(UB-LB) < ϵ
+    if abs(UB-LB)/(1e-10 + abs(UB)) < ϵ
       s.termination = "Optimal"
       return s
     end
@@ -88,6 +88,11 @@ function solveprimalnode(node::ModelNode, graph::ModelGraph, cuts::Array{Symbol,
   if :LP in cuts
     solvelprelaxation(node)
   end
+
+  if :Lift in cuts && in_degree(graph, node) != 0
+    solveliftandprojectrelaxation(node, graph)
+  end
+
   if updatebound
     solvenodemodel(node,graph)
   end
@@ -199,7 +204,7 @@ function generatecuts(node::ModelNode,graph::ModelGraph)
   setattribute(node,:prevcuts, thisitercuts)
   nodesamecuts = collect(values(samecuts))
   setattribute(node, :stalled, reduce(*,nodesamecuts))
-  getattribute(node, :stalled) && warn("Node $(node.label) stalled")
+  getattribute(node, :stalled) && warn("Node stalled")
   if in(node,getattribute(graph, :roots) ) && getattribute(node, :stalled)
     setattribute(graph, :stalled,  true)
  end
