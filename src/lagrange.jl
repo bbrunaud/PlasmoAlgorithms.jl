@@ -12,8 +12,7 @@ function lagrangesolve(graph;
   initialmultipliers=:zero, # :relaxation for LP relaxation
   δ = 0.5, # Factor to shrink step when subgradient stuck
   maxnoimprove = 3,
-  cpbound=1e6,
-  verbose=true) # Amount of iterations that no improvement is allowed before shrinking step
+  cpbound=1e6) # Amount of iterations that no improvement is allowed before shrinking step
 
   ### INITIALIZATION ###
   lgprepare(graph,δ,maxnoimprove,cpbound)
@@ -69,7 +68,7 @@ function lagrangesolve(graph;
     itertime = time() - iterstart
     tstamp = time() - starttime
     saveiteration(s,tstamp,[n*iterval,n*Zk,itertime,tstamp],n)
-    verbose && printiterationsummary(s,singleline=false)
+    printiterationsummary(s,singleline=false)
 
     # Check convergence
     if norm(res) < ϵ

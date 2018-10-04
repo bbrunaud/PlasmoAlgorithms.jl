@@ -146,7 +146,7 @@ function setCGLP(node::ModelNode, graph::ModelGraph)
     setattribute(node, :CGLPs, Dict()) 
     for var in keys(map_binary)
         CGLP = Model()
-        CGLP.solver = graph.solver
+        CGLP.solver = getsolver(graph)
         @variables CGLP begin
             α[1:n]
             β

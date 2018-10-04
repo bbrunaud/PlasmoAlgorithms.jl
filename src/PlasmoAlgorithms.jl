@@ -12,7 +12,6 @@ export Solution, lagrangesolve, bendersolve
 include("types.jl")
 include("lagrange.jl")
 include("benders.jl")
-include("dualliftproject.jl")
 include("cross.jl")
 include("solution.jl")
 include("utils.jl")

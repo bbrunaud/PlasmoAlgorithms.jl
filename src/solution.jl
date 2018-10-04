@@ -38,7 +38,7 @@ function saveiteration(s::Solution,tstamp::Float64,arr::Array{Float64,1},n=1)
         s.objval = maximum(s.iterval)
     end
     s.numiterations += 1
-    s.gap = abs(s.objval - s.bestbound)/abs(1e-10 + s.objval)
+    s.gap = abs(s.objval - s.bestbound)/s.objval
     s.solvetime = tstamp
 end
 
