@@ -10,6 +10,7 @@ function bendersolve(graph::ModelGraph; max_iterations::Int64=10, cuts::Array{Sy
 
   verbose && info("Preparing graph")
   bdprepare(graph, cuts)
+  
   n = getattribute(graph, :normalized)
 
   verbose && info("Solve relaxation and set LB")
@@ -90,9 +91,9 @@ function solveprimalnode(node::ModelNode, graph::ModelGraph, cuts::Array{Symbol,
   if :LP in cuts
     solvelprelaxation(node)
   end
-  if :LIFT in cuts && in_degree(graph, node) != 0 
+  if :LIFT in cuts && in_degree(graph, node) != 0
     solveliftandprojectrelaxation(node, graph)
-  end  
+  end
   if updatebound
     solvenodemodel(node,graph)
   end
@@ -149,20 +150,20 @@ function putx(node::ModelNode,graph::ModelGraph)
     #   ub = getupperbound(var)
     #   lb = getlowerbound(var)
     #   category = getcategory(var)
-    #   if xnode[i] > ub 
-    #     xnode[i] = ub 
+    #   if xnode[i] > ub
+    #     xnode[i] = ub
     #   end
-    #   if xnode[i] < lb 
-    #     xnode[i] = lb 
+    #   if xnode[i] < lb
+    #     xnode[i] = lb
     #   end
-    #   if category == :Bin 
+    #   if category == :Bin
     #     if xnode[i] < 1e-4
     #       xnode[i] = 0
-    #     else 
+    #     else
     #       xnode[i] = 1
-    #     end 
+    #     end
     #   end
-    # end    
+    # end
     setattribute(child,:xin, xnode)
   end
 end
@@ -224,12 +225,12 @@ function generatecuts(node::ModelNode,graph::ModelGraph)
   setattribute(node,:prevcuts, thisitercuts)
   nodesamecuts = collect(values(samecuts))
   cuts = getattribute(graph, :cuts)
-  if :LP in cuts 
-    setattribute(node,:stalled, reduce(*,nodesamecuts))    
+  if :LP in cuts
+    setattribute(node,:stalled, reduce(*,nodesamecuts))
     #bound does not improve for 5 iterations is also considered as stalled
     if length(getattribute(graph, :solution).iterbound) > 6 && abs(getattribute(graph, :LB) - getattribute(graph, :solution).iterbound[end-5]) < 1e-3 && abs(getattribute(graph, :solution).iterval[end] - getattribute(graph, :solution).iterval[end-5]) < 1e-3
       setattribute(node, :stalled, true)
-    end 
+    end
     getattribute(node, :stalled) && warn("Node stalled")
   end
 #only stalled when LP has already stalled
@@ -237,25 +238,25 @@ function generatecuts(node::ModelNode,graph::ModelGraph)
     setattribute(node, :stalled, reduce(*,nodesamecuts))
     if length(getattribute(graph, :solution).iterbound) > 6 && abs(getattribute(graph, :LB) - getattribute(graph, :solution).iterbound[end-5]) < 1e-3 && abs(getattribute(graph, :solution).iterval[end] - getattribute(graph, :solution).iterval[end-5]) < 1e-3 && getattribute(node, :LP_stalled_iterations) > 2
       setattribute(node, :stalled, true)
-    end    
+    end
     setattribute(node, :LP_stalled_iterations, getattribute(node, :LP_stalled_iterations) + 1 )
     getattribute(node, :stalled) && warn("Node  stalled")
-  end 
+  end
   if (:GMI in cuts || :LIFT in cuts) && (!getattribute(node, :LP_stalled))
     setattribute(node, :LP_stalled, reduce(*,nodesamecuts))
     if length(getattribute(graph, :solution).iterbound) > 6 && abs(getattribute(graph, :LB) - getattribute(graph, :solution).iterbound[end-5]) < 1e-3 && abs(getattribute(graph, :solution).iterval[end] - getattribute(graph, :solution).iterval[end-5]) < 1e-3
       setattribute(node, :LP_stalled, true)
-    end      
+    end
     println("LP_stalled status")
     println(getattribute(node, :LP_stalled))
     if getattribute(node, :LP_stalled)
       setattribute(node, :LP_stalled_iterations, 1)
-    end 
-  end 
+    end
+  end
   if in(node,getattribute(graph, :roots)) && getattribute(node, :stalled)
     setattribute(graph, :stalled, true)
-  end    
-  
+  end
+
 
 end
 
@@ -344,19 +345,20 @@ function bdprepare(graph::ModelGraph, cuts::Array{Symbol,1}=[:LP])
     end
 
 #add code for :LIFT========
-    
-    if :GMI in cuts || :LIFT in cuts 
-    #create upper bound for variables if GMI or LIFT is in cuts   
+
+    #if :GMI in cuts || :LIFT in cuts
+    #create upper bound for variables if GMI or LIFT is in cuts
       for col in 1:length(model.colUpper)
-        if model.colUpper[col] > 1e10 
+        if model.colUpper[col] > 1e10
           setupperbound(Variable(model, col), 1e10)
+
         end
       end
-      #add attributes to check if LP cuts has stalled 
-      setattribute(node, :LP_stalled, false)
-    end
+      #add attributes to check if LP cuts has stalled
+    #end
+    setattribute(node, :LP_stalled, false)
 
-    #create standard matrix for lift and project cuts 
+    #create standard matrix for lift and project cuts
     if :LIFT in cuts && in_degree(graph, node) != 0
       getmatrixform(node)
     end
@@ -371,10 +373,10 @@ function bdprepare(graph::ModelGraph, cuts::Array{Symbol,1}=[:LP])
       @variable(model, θ[i in childrenindices] >= -1e6)
       model.obj += sum(θ[i] for i in childrenindices)
     end
-    #get the index of linking variables 
+    #get the index of linking variables
     if in_degree(graph, node) != 0
       setattribute(node, :linking_vars_indices, [])
-    end    
+    end
   end
 
 
@@ -406,15 +408,15 @@ function bdprepare(graph::ModelGraph, cuts::Array{Symbol,1}=[:LP])
     push!(getattribute(childnode, :xinvars),linkvar)
     conref = @constraint(childmodel, linkvar - childvar == 0)
     push!(getattribute(childnode, :linkconstraints), conref)
-    #store child var index 
+    #store child var index
     push!(getattribute(childnode, :linking_vars_indices), childvar.col)
-    push!(getattribute(childnode, :linking_vars_indices), linkvar.col)    
+    push!(getattribute(childnode, :linking_vars_indices), linkvar.col)
   end
 
   #set up CGLPs
-  if :LIFT in cuts 
+  if :LIFT in cuts
     for node in values(getnodes(graph))
-      if in_degree(graph, node) != 0 
+      if in_degree(graph, node) != 0
         setCGLP(node, graph)
       end
     end

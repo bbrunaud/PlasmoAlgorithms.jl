@@ -46,4 +46,4 @@ edge2 = Plasmo.add_edge(g,n1,n3)
 @linkconstraint(g, n1[:x1] == n3[:x1])
 
 
-PlasmoAlgorithms.crosssolve(g,max_iterations = 10, bdcuts =[:LIFT])
+PlasmoAlgorithms.crosssolve(g,max_iterations = 10, bdcuts =[:LP])

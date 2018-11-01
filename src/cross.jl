@@ -8,7 +8,7 @@ function CrossGraph(g::ModelGraph)
  return c
 end
 
-function crossprepare(c::CrossGraph)
+function crossprepare(c::CrossGraph, cuts=[:LP])
     # cross-specific mappings
     # Lagrange mappings in Benders Graph
     links = getlinkconstraints(c.bd)
@@ -60,7 +60,7 @@ function crossprepare(c::CrossGraph)
     end
 
     # Standard preparations
-    PlasmoAlgorithms.bdprepare(c.bd)
+    PlasmoAlgorithms.bdprepare(c.bd, cuts)
     PlasmoAlgorithms.lgprepare(c.lg, 0.5, 3, 1e6)
  end
 
@@ -72,7 +72,7 @@ function crossprepare(c::CrossGraph)
  function crosssolve(c::CrossGraph; max_iterations=10, subgradientiterations=5, ϵ=0.005, timelimit=200, bdcuts=[:LP])
      s = Solution(method=:cross)
      starttime = time()
-     crossprepare(c)
+     crossprepare(c, bdcuts)
      n = getattribute(c.bd, :normalized)
 
      for i in 1:max_iterations
