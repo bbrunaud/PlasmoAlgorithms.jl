@@ -30,6 +30,7 @@ function generate_model()
 	@variable(m, Bb[i in feeds, w in scenarios]>=0)
 	@variable(m, Bb1[i in feeds, w in scenarios]>=0)
 	@variable(m, Bb2[i in feeds, w in scenarios]>=0)
+	@variable(m, stage1cost)
 
 	@constraint(m, f1[i in feeds], AL[i]*gamma_intlt[i]<= A[i])
 	@constraint(m, f2[i in feeds], A[i] <= AU[i]*gamma_intlt[i])
@@ -78,8 +79,10 @@ function generate_model()
 	@constraint(m, c21[i in feeds, w in scenarios], Bb2[i,w]<= AU[i]*ub2[i,w])
 	@constraint(m, c22[i in feeds, w in scenarios], ub1[i,w]+ub2[i,w]==ub[i,w])
 
-	@constraint(m, cobj[w in scenarios], θ[w] == prob[w]*(sum(CT[i,w] for i in feeds) -sum(d[j,w]*(sum(y[l,j,w] for l in pools if (l,j) in Ty) + sum(z[i,j,w] for i in feeds if (i,j) in Tz)) for j in products) ))
+	# @constraint(m, cobj[w in scenarios], θ[w] == prob[w]*(sum(CT[i,w] for i in feeds) -sum(d[j,w]*(sum(y[l,j,w] for l in pools if (l,j) in Ty) + sum(z[i,j,w] for i in feeds if (i,j) in Tz)) for j in products) ))
+	@constraint(m, cobj[w in scenarios], θ[w] == (sum(CT[i,w] for i in feeds) -sum(d[j,w]*(sum(y[l,j,w] for l in pools if (l,j) in Ty) + sum(z[i,j,w] for i in feeds if (i,j) in Tz)) for j in products) ))
 
+	@constraint(m, stage1cost == sum(c_fixed_inlt[i] * gamma_intlt[i]+c_variable_inlt[i]*A[i] for i in feeds) + sum(c_fixed_pool[l] * gamma_pool[l] + c_variable_pool[l]*S[l] for l in pools) )
 	@objective(m, Min,  sum(c_fixed_inlt[i] * gamma_intlt[i]+c_variable_inlt[i]*A[i] for i in feeds) + sum(c_fixed_pool[l] * gamma_pool[l] + c_variable_pool[l]*S[l] for l in pools) + sum(prob[w]*(sum(CT[i,w] for i in feeds) -sum(d[j,w]*(sum(y[l,j,w] for l in pools if (l,j) in Ty) + sum(z[i,j,w] for i in feeds if (i,j) in Tz)) for j in products) ) for w in scenarios))
 
 	return m
@@ -110,6 +113,7 @@ println(getobjectivevalue(model))
 println(getvalue(getindex(model, :A)))
 println(getvalue(getindex(model, :S)))
 println(getvalue(getindex(model, :θ)))
+println(getvalue(getindex(model, :stage1cost)))
 # println(getvalue(getindex(model, :y)))
 # println(getvalue(getindex(model, :z)))
 # y_value = getvalue(getindex(model, :y))
