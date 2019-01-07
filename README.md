@@ -45,7 +45,7 @@ m2 = Model(solver=GurobiSolver(OutputFlag=0))
 @objective(m2, Max, 4y[2])
 
 ## Plasmo Graph
-g = PlasmoGraph()
+g = ModelGraph()
 g.solver = GurobiSolver(OutputFlag=0)
 n1 = add_node(g)
 setmodel(n1,m1)
