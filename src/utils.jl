@@ -39,13 +39,13 @@ function savenodeobjective(mf::JuMP.Model)
     end
 end
 
-function getnodeindex(node::Plasmo.PlasmoModels.ModelNode)
+function getnodeindex(node::Plasmo.PlasmoModelGraph.ModelNode)
     indexdict = node.basenode.indices
     length(indexdict) > 1 && error("More than one index found for node")
     return collect(values(node.basenode.indices))[1]
 end
 
-function getgraph(node::Plasmo.PlasmoModels.ModelNode)
+function getgraph(node::Plasmo.PlasmoModelGraph.ModelNode)
     indexdict = node.basenode.indices
     length(indexdict) > 1 && error("More than one index found for node")
     return collect(keys(node.basenode.indices))[1]
