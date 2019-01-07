@@ -3,7 +3,7 @@ module PlasmoAlgorithms
 using Plasmo
 using JuMP
 using Requires
-
+using LinearAlgebra
 
 import Plasmo.solve, Base.==
 
