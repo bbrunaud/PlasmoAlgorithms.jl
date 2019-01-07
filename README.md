@@ -9,15 +9,10 @@ The algorithms implemented are:
 
 ## Installation
 ```julia
-Pkg.clone("https://github.com/jalving/Plasmo.jl.git")
-Pkg.clone("https://github.com/bbrunaud/PlasmoAlgorithms.jl.git")
+(v1.0) pkg> add https://github.com/jalving/Plasmo.jl.git
+(v1.0) pkg> add https://github.com/bbrunaud/PlasmoAlgorithms.jl.git
 ```
 
-PlasmoAlgorithms is currently working with Plasmo version v0.0.1. In order to use the algorithms, after installation Plasmo must be downgraded using the following command in the Plasmo tree (`/home/user/.julia/v0.6/Plasmo.jl/`). PlasmoAlgorithms will be updated to use the latest version of Plasmo in August 2018.
-
-```
-$ git checkout v0.0.1
-```
 
 ## Usage
 
@@ -50,7 +45,7 @@ m2 = Model(solver=GurobiSolver(OutputFlag=0))
 @objective(m2, Max, 4y[2])
 
 ## Plasmo Graph
-g = PlasmoGraph()
+g = ModelGraph()
 g.solver = GurobiSolver(OutputFlag=0)
 n1 = add_node(g)
 setmodel(n1,m1)

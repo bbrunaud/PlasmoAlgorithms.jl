@@ -1,27 +1,19 @@
 module PlasmoAlgorithms
 
-
 using Plasmo
 using JuMP
 using Requires
 
 
-import Plasmo.solve
+import Plasmo.solve, Base.==
 
-export Solution, lagrangesolve, psolve, bendersolve,
-lgprepare, solvenode,
+export Solution, lagrangesolve, bendersolve
 
-# Solution
-saveiteration,
-
-# Utils
-normalizegraph, smpsread
-
-
+include("types.jl")
 include("lagrange.jl")
 include("benders.jl")
+include("cross.jl")
 include("solution.jl")
 include("utils.jl")
-
 
 end

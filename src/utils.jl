@@ -1,8 +1,8 @@
-function normalizegraph(graph::PlasmoGraph)
+import Plasmo.getgraph
+
+function normalizegraph(graph::ModelGraph)
     n = 1
-    nodedict = getnodes(graph)
-    for k in keys(nodedict)
-        node = nodedict[k]
+    for node in getnodes(graph)
         m = getmodel(node)
         if m.objSense == :Max
             m.objSense = :Min
@@ -10,7 +10,7 @@ function normalizegraph(graph::PlasmoGraph)
             n = -1
         end
     end
-    graph.attributes[:normalized] = n
+    setattribute(graph, :normalized, n)
     return n
 end
 
@@ -22,7 +22,7 @@ end
 """
 Checks if n1 is a child node of n2
 """
-ischildnode(graph::PlasmoGraph, n1::PlasmoNode, n2::PlasmoNode) = in(n2,in_neighbors(graph,n1))
+ischildnode(graph::ModelGraph, n1::ModelNode, n2::ModelNode) = in(n2,in_neighbors(graph,n1))
 
 function savenodeobjective(mf::JuMP.Model)
     g = mf.ext[:Graph]
@@ -37,4 +37,23 @@ function savenodeobjective(mf::JuMP.Model)
         index = nodeindex[nodename]
         push!(nov[index],coeff,var)
     end
+end
+
+function getnodeindex(node::Plasmo.PlasmoModels.ModelNode)
+    indexdict = node.basenode.indices
+    length(indexdict) > 1 && error("More than one index found for node")
+    return collect(values(node.basenode.indices))[1]
+end
+
+function getgraph(node::Plasmo.PlasmoModels.ModelNode)
+    indexdict = node.basenode.indices
+    length(indexdict) > 1 && error("More than one index found for node")
+    return collect(keys(node.basenode.indices))[1]
+end
+
+function subgraphobjective(node, graph)
+    if out_degree(graph, node) == 0
+        return getobjectivevalue(getmodel(node))
+    end
+    return getobjectivevalue(getmodel(node)) + sum(subgraphobjective(childnode, graph) for childnode in out_neighbors(graph, node))
 end

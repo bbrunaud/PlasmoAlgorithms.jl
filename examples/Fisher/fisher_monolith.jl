@@ -2,8 +2,8 @@ using Plasmo
 using JuMP
 using Gurobi
 
-graph = PlasmoGraph()
-graph.solver = GurobiSolver()
+graph = ModelGraph()
+setsolver(graph, GurobiSolver())
 
 m1 = Model()
 @variable(m1,x[1:2], Bin)

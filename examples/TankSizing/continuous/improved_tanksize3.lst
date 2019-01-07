@@ -1,0 +1,1156 @@
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/29/18 16:07:25 Page 1
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+       
+      Tank sizing problem based on the three product example in 
+      Rebennack et al., Computers and Chemical Engineering, 2011
+      This model contains three uncertain product demands.
+      Number of binary complicating variables: 
+      Number of continuous complicating variables: 
+      Number of binary recourse variables: 0
+      Number of continuous recourse variables: *s
+      Number of bilinear terms: *s
+      Number of univariate signomial terms: 
+      Number of complicating constraints: 
+      Number of recourse constraints: 
+       
+      This file is based on tanksize.350 in the gamslib_ml folder of the GAMS
+      distribution
+      compared to Barton's formulation
+      1. We changed some of the variable bounds
+      2. reformulate the ProductionUpperBound ProductionLowerBound with Glover inequalites
+      3. change the storage cost CampaignStorageCost
+      4. put CampaignInvestmentCost in the objective 
+  23   
+  24  *-------------------------------------------
+  25  *                       SET SOLUTION OPTIONS
+  26  *-------------------------------------------
+  27   
+  28  OPTION LIMROW = 0;
+  29  OPTION LIMCOL = 0;
+  30  OPTION OPTCA  = 1E-09;
+  31  OPTION OPTCR  = 1E-03;
+  32  OPTION RESLIM = 1E+04;
+  33  OPTION ITERLIM = 1E+09;
+  34   
+  35  OPTION LP=CPLEX;
+  36  OPTION NLP=SNOPT;
+  37  OPTION MIP=CPLEX;
+  38  *OPTION MINLP=bonmin;
+  39  *OPTION MINLP=ANTIGONE;
+  40  *OPTION MINLP=BARON;
+  41  *OPTION MINLP=COUENNE;
+  42  OPTION MINLP=SCIP;
+  43   
+  44  *--------------------------------
+  45  *               SET DEFINITIONS
+  46  *--------------------------------
+  47   
+  48  SETS
+  49          p               "products"                                                                      / 1*3 /
+  50          n               "event points"                                                          / 1*3 /
+  51          h               "number of scenarios"                                           / 1*3 /
+  52          subh    "num. realizations per uncertain param"         / 1*3 /
+  53  ;
+  54  *** NOTE: Use h = subh or subh^2 or subh^3
+  55   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/29/18 16:07:25 Page 2
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+  56  alias(subh,subh2,subh3);
+  57  alias(p,pp);
+  58   
+  59  *-------------------------------------------------
+  60  *               DEFINE MODEL-SPECIFIC PARAMETERS
+  61  *-------------------------------------------------
+  62   
+  63  SCALARS
+  64          VariableInvestmentCostFactor    "variable part of the tank investment cost"     / 0.3271 /
+  65          NumDaysInYear "number of days in a year" / 365 /
+  66  ;
+  67   
+  68  PARAMETERS
+  69          MinProductionRate(p) "lower bound on the production rate in m^3/day"
+  70          /       1       15.0
+  71                  2       15.0
+  72                  3       7.0/,
+  73   
+  74          MaxProductionRate(p) "upper bound on the production rate in m^3/day"
+  75          /       1       50.0
+  76                  2       50.0
+  77                  3       50.0/,
+  78   
+  79          InventoryLowerBound(p) "lower bound on inventory in m^3"
+  80          /       1       643.0
+  81                  2       536.0
+  82                  3       214.0/,
+  83   
+  84          InventoryUpperBound(p) "upper bound on inventory in m^3"
+  85          /       1       4018.36
+  86                  2       3348.63
+  87                  3       1339.45/,
+  88   
+  89          InitialInventory(p) "initial inventory in m^3",
+  90   
+  91          ProductionLength_lower(p) "lower bound on production length"
+  92          /       1       1
+  93                  2       1
+  94                  3       1/,
+  95   
+  96          ProductionLength_upper(p) "upper bound on production length"
+  97          /       1       10
+  98                  2       10
+  99                  3       10/,
+ 100   
+ 101          ProductDemand_nominal(p) "nominal demand of product in m^3/year"
+ 102          /       1       4190
+ 103                  2       3492
+ 104                  3       1397/,
+ 105   
+ 106          ProductDemand_stdev(p) "standard deviation of demand of product in m^3/year",
+ 107   
+ 108          ProductDemand(p,h) "demand of product in m^3/year",
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/29/18 16:07:25 Page 3
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 109   
+ 110          CampaignSetupTime(p) "campaign setup time in days"
+ 111          /       1       0.4
+ 112                  2       0.2
+ 113                  3       0.1/,
+ 114   
+ 115          CampaignVariableCost(p) "tank variable cost per ton"
+ 116          /       1       18.8304
+ 117                  2       19.2934
+ 118                  3       19.7563/,
+ 119   
+ 120          CampaignSetupCost(p) "campaign setup cost"
+ 121          /       1       10
+ 122                  2       20
+ 123                  3       30/,
+ 124   
+ 125          prob(h) "probability of each scenario",
+ 126   
+ 127          subprob(subh) "probability for each individual uncertain realization"
+ 128  ;
+ 129   
+ 130  *---------------------------------------------
+ 131  *        Compute derived parameter values
+ 132  *---------------------------------------------
+ 133   
+ 134  InitialInventory(p) = 1.1*InventoryLowerBound(p);
+ 135   
+ 136  ProductDemand_stdev('1') = ProductDemand_nominal('1')*0.1;
+ 137  ProductDemand_stdev('2') = ProductDemand_nominal('2')*0.1;
+ 138  ProductDemand_stdev('3') = ProductDemand_nominal('3')*0.1;
+ 139   
+ 140  *---------------------------------------------
+ 141  *        Initialize the uncertain parameters
+ 142  *---------------------------------------------
+ 143   
+ 144  ProductDemand(p,h) = ProductDemand_nominal(p);
+ 145   
+ 146   
+ 147   
+ 148  *=========== Generate scenarios for the uncertain parameters =============
+ 149   
+ 150   
+ 151  if (card(h)=1,
+ 152          prob(h)=1;
+ 153   
+ 154  elseif (card(h)=card(subh)),
+ 155          subprob(subh)$(card(subh)>1 and ord(subh)=1) = errorf(-3+6/card(subh));
+ 156          subprob(subh)$(card(subh)>1 and ord(subh)>1 and ord(subh)<card(subh))
+ 157                  = errorf(-3+ord(subh)*6/card(subh))-errorf(-3+(ord(subh)-1)*6/card(subh));
+ 158          subprob(subh)$(card(subh)>1 and ord(subh) = card(subh))
+ 159                  = 1 - errorf(-3+(card(subh)-1)*6/card(subh));
+ 160   
+ 161          loop(subh,
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/29/18 16:07:25 Page 4
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 162                  prob(h)$(ord(h)=ord(subh)) = subprob(subh);
+ 163   
+ 164                  ProductDemand('1',h)$(ord(h)=ord(subh)) =       ProductDemand_nominal('1') -
+ 165                                                                                                          3*ProductDemand_stdev('1')*(1 - 1/card(subh)) +
+ 166                                                                                                          (ord(subh)-1)*6*ProductDemand_stdev('1')/card(subh);
+ 167          );
+ 168   
+ 169  elseif (card(h)=card(subh)*card(subh)),
+ 170          subprob(subh)$(card(subh)>1 and ord(subh)=1) = errorf(-3+6/card(subh));
+ 171          subprob(subh)$(card(subh)>1 and ord(subh)>1 and ord(subh)<card(subh))
+ 172                  = errorf(-3+ord(subh)*6/card(subh))-errorf(-3+(ord(subh)-1)*6/card(subh));
+ 173          subprob(subh)$(card(subh)>1 and ord(subh) = card(subh))
+ 174                  = 1 - errorf(-3+(card(subh)-1)*6/card(subh));
+ 175   
+ 176          loop(subh,
+ 177              loop(subh2,
+ 178                          prob(h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh))
+ 179                          = subprob(subh)*subprob(subh2);
+ 180   
+ 181                          ProductDemand('1',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh))
+ 182                          = ProductDemand_nominal('1') - 3*ProductDemand_stdev('1')*(1 - 1/card(subh)) +
+ 183                                  (ord(subh)-1)*6*ProductDemand_stdev('1')/card(subh);
+ 184   
+ 185                          ProductDemand('2',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh))
+ 186                          = ProductDemand_nominal('2') - 3*ProductDemand_stdev('2')*(1 - 1/card(subh2)) +
+ 187                                  (ord(subh2)-1)*6*ProductDemand_stdev('2')/card(subh2);
+ 188              );
+ 189          );
+ 190   
+ 191  elseif (card(h)=card(subh)*card(subh)*card(subh)),
+ 192          subprob(subh)$(card(subh)>1 and ord(subh)=1) = errorf(-3+6/card(subh));
+ 193          subprob(subh)$(card(subh)>1 and ord(subh)>1 and ord(subh)<card(subh))
+ 194                  = errorf(-3+ord(subh)*6/card(subh))-errorf(-3+(ord(subh)-1)*6/card(subh));
+ 195          subprob(subh)$(card(subh)>1 and ord(subh) = card(subh))
+ 196                  = 1 - errorf(-3+(card(subh)-1)*6/card(subh));
+ 197   
+ 198          loop(subh,
+ 199              loop(subh2,
+ 200                          loop(subh3,
+ 201                                  prob(h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh)+(ord(subh3)-1)*card(subh)*card(subh2))
+ 202                                  = subprob(subh)*subprob(subh2)*subprob(subh3);
+ 203   
+ 204                                  ProductDemand('1',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh)+(ord(subh3)-1)*card(subh)*card(subh2))
+ 205                                  = ProductDemand_nominal('1') - 3*ProductDemand_stdev('1')*(1 - 1/card(subh)) +
+ 206                                          (ord(subh)-1)*6*ProductDemand_stdev('1')/card(subh);
+ 207   
+ 208                                  ProductDemand('2',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh)+(ord(subh3)-1)*card(subh)*card(subh2))
+ 209                                  = ProductDemand_nominal('2') - 3*ProductDemand_stdev('2')*(1 - 1/card(subh2)) +
+ 210                                          (ord(subh2)-1)*6*ProductDemand_stdev('2')/card(subh2);
+ 211   
+ 212                                  ProductDemand('3',h)$(ord(h)=ord(subh)+(ord(subh2)-1)*card(subh)+(ord(subh3)-1)*card(subh)*card(subh2))
+ 213                                  = ProductDemand_nominal('3') - 3*ProductDemand_stdev('3')*(1 - 1/card(subh3)) +
+ 214                                          (ord(subh3)-1)*6*ProductDemand_stdev('3')/card(subh3);
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/29/18 16:07:25 Page 5
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 215                          );
+ 216              );
+ 217          );
+ 218   
+ 219  else
+ 220          abort "ERROR in setting the number of scenarios! Try again"
+ 221  );
+ 222   
+ 223  *======================================================================
+ 224   
+ 225  *---------------------------------------------
+ 226  *        Compute derived parameter values
+ 227  *---------------------------------------------
+ 228   
+ 229  PARAMETERS
+ 230          DemandPerDay(p,h)               "demand/day/product [tons/day]"
+ 231          TotalDemandPerDay(h)    "total demand/day [tons/day]"
+ 232  ;
+ 233   
+ 234  DemandPerDay(p,h) = ProductDemand(p,h)/NumDaysInYear;
+ 235  TotalDemandPerDay(h) = sum(p, DemandPerDay(p,h));
+ 236  CampaignVariableCost(p) = CampaignVariableCost(p)/NumDaysInYear;
+ 237   
+ 238   
+ 239  *---------------------------------------------------------------
+ 240  *-------------    FULL SPACE PROBLEM DEFINITION   --------------
+ 241  *---------------------------------------------------------------
+ 242   
+ 243   
+ 244  POSITIVE VARIABLES
+ 245          campaignDuration(n,h)           "duration of the campaigns"
+ 246          amtProductInCampaign(p,n,h)     "amount of product p produced in campaign n"
+ 247          productInventory(p,n,h)         "amount of product p stored at the beginning of campaign n"
+ 248          productTankSize(p)                      "size of the product tanks in tons"
+ 249          auxiliaryVariable(p,n,h)        "auxiliary variables"
+ 250          investmentCost(h)                       "investment costs"
+ 251          setupCost(h)                            "campaign setup costs"
+ 252          variableCost(h)                         "variable storage costs"
+ 253          cycleTime(h)                            "cycle time"
+ 254          costPerTon(h)                           "cost per ton"
+ 255          campaignLength(n,h)             "campaignLength is campaignDuration + setuptime "
+ 256  ;
+ 257   
+ 258  BINARY VARIABLES
+ 259          assignProductToCampaign(p,n,h)  "binary variable mapping product to campaign"
+ 260  ;
+ 261   
+ 262  VARIABLE
+ 263          objvar          "objective function"
+ 264  ;
+ 265   
+ 266   
+ 267  EQUATIONS
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/29/18 16:07:25 Page 6
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 268          TimeCapacity(h)                                 "time capacity"
+ 269          UniqueProduct(n,h)                              "at most one product per campaign"
+ 270          MaterialBalance(p,n,h)                  "material balance constraint (steady state)"
+ 271          TankCapacity(p,n,h)                             "tank capacity constraint"
+ 272          ProductionUpperBound1(p,n,h)            "upper bound for product"
+ 273          ProductionLowerBound1(p,n,h)            "lower bound for product"
+ 274          ProductionUpperBound2(p,n,h)            "upper bound for product"
+ 275          ProductionLowerBound2(p,n,h)            "lower bound for product"
+ 276          CampanLengthDef(n,h)                "Definition of campaign length"
+ 277          CampaignUpperBound(n,h)                 "upper bound on duration"
+ 278          CampaignLowerBound(n,h)                 "lower bound on duration"
+ 279          CampaignSetupCostCon(h)                 "campaign setup cost"
+ 280          CampaignStorageCost(h)                  "campaign variable storage cost"
+ 281          AuxiliaryCon(p,n,h)                             "define the auxiliary variables"
+ 282          CampaignCostPerTon(h)                   "cost per ton"
+ 283          Sequence(p,n,h)                                 "redundant constraint on the omega"
+ 284          BreakSymmetry(n,h)                              "break the symmetry of active campaigns"
+ 285          objective                                               "objective function"
+ 286  ;
+ 287   
+ 288  *-------------------------------------
+ 289  *               EQUATION DEFINITIONS
+ 290  *-------------------------------------
+ 291   
+ 292  objective .. objvar =e= sum(h,prob(h)*costPerTon(h))+ VariableInvestmentCostFactor * sum(h, prob[h] /TotalDemandPerDay[h]) *sum(p, sqrt(productTankSize[p]))
+ 293  ;
+ 294   
+ 295  *** time balance constraint with unknown cycle time T
+ 296  TimeCapacity(h) .. cycleTime(h) =e= sum(n, campaignDuration(n,h) + sum (p, CampaignSetupTime(p)*assignProductToCampaign(p,n,h)))
+ 297  ;
+ 298   
+ 299  UniqueProduct(n,h) .. sum(p, assignProductToCampaign(p,n,h)) =l= 1
+ 300  ;
+ 301   
+ 302  MaterialBalance(p,n,h) .. productInventory(p,n++1,h) =e= productInventory(p,n,h) + amtProductInCampaign(p,n,h) -
+ 303                                                                                                                          DemandPerDay(p,h)*(campaignDuration(n,h) +
+ 304                                                                                                                                                                  sum (pp, CampaignSetupTime(pp)*assignProductToCampaign(pp,n,h)))
+ 305  ;
+ 306   
+ 307  TankCapacity(p,n,h) .. productInventory(p,n,h) =l= productTankSize(p)
+ 308  ;
+ 309   
+ 310   
+ 311   
+ 312  ProductionUpperBound1(p,n,h) .. amtProductInCampaign(p,n,h) =l= MaxProductionRate(p) * ProductionLength_upper(p) * assignProductToCampaign(p,n,h)
+ 313  ;
+ 314   
+ 315  ProductionLowerBound1(p,n,h) .. amtProductInCampaign(p,n,h) =g= MinProductionRate(p) * ProductionLength_lower(p) * assignProductToCampaign(p,n,h)
+ 316  ;
+ 317  ProductionUpperBound2(p,n,h) .. amtProductInCampaign(p,n,h) =l= MaxProductionRate(p) * campaignDuration(n,h)
+ 318  ;
+ 319   
+ 320  ProductionLowerBound2(p,n,h) .. amtProductInCampaign(p,n,h) =g= MinProductionRate(p) * (campaignDuration(n,h) - ProductionLength_upper(p) * (1 - assignProductToCampaign(p,n,h)))
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/29/18 16:07:25 Page 7
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 321  ;
+ 322   
+ 323  *** semi-continuous upper and lower bound on campaigns
+ 324  CampaignUpperBound(n,h) .. campaignDuration(n,h) =l= sum(p, ProductionLength_upper(p)*assignProductToCampaign(p,n,h))
+ 325  ;
+ 326   
+ 327  CampaignLowerBound(n,h) .. campaignDuration(n,h) =g= sum(p, ProductionLength_lower(p)*assignProductToCampaign(p,n,h))
+ 328  ;
+ 329   
+ 330  CampanLengthDef(n,h) .. campaignLength(n,h) =e= campaignDuration(n,h) + sum(pp, CampaignSetupTime(pp) * assignProductToCampaign(pp,n,h))
+ 331  ;
+ 332   
+ 333  CampaignSetupCostCon(h) .. setupCost(h) =e= sum((p,n), CampaignSetupCost(p)*assignProductToCampaign(p,n,h))
+ 334  ;
+ 335   
+ 336   
+ 337  CampaignStorageCost(h) .. variableCost(h) =e= sum((p,n), CampaignVariableCost(p)*auxiliaryVariable(p,n,h)
+ 338                                                                                                          *campaignLength(n,h) )
+ 339  ;
+ 340   
+ 341  AuxiliaryCon(p,n,h) .. auxiliaryVariable(p,n,h) =e= 0.5*(productInventory(p,n++1,h) + productInventory(p,n,h)) - InventoryLowerBound(p)
+ 342  ;
+ 343   
+ 344  CampaignCostPerTon(h) .. costPerTon(h)*cycleTime(h)*TotalDemandPerDay(h) =e=  setupCost(h) + variableCost(h)
+ 345  ;
+ 346   
+ 347  *** if a product is produced during period n, then it cannot be produced during period n+1
+ 348  Sequence(p,n,h) .. 1 - assignProductToCampaign(p,n,h) =g= assignProductToCampaign(p,n+1,h)
+ 349  ;
+ 350   
+ 351  *** break symmetry by shifting empty periods to the end
+ 352  BreakSymmetry(n,h) .. sum(p, assignProductToCampaign(p,n,h)) =g= sum(p, assignProductToCampaign(p,n+1,h))
+ 353  ;
+ 354   
+ 355   
+ 356  MODEL tanksize1 / all /;
+ 357   
+ 358   
+ 359  *---------------------------------------------
+ 360  *                       SET VARIABLE BOUNDS
+ 361  *---------------------------------------------
+ 362   
+ 363  campaignDuration.up(n,h) = smax(p,ProductionLength_upper(p));
+ 364   
+ 365  amtProductInCampaign.up(p,n,h) = MaxProductionRate(p)*ProductionLength_upper(p);
+ 366   
+ 367  productInventory.lo(p,n,h) = InventoryLowerBound(p);
+ 368  productInventory.up(p,n,h) = InventoryUpperBound(p);
+ 369  *** fix initial storage
+ 370  productInventory.fx('1','1',h) = InventoryLowerBound('1');
+ 371   
+ 372  auxiliaryVariable.up(p,n,h) = (InventoryUpperBound(p) - InventoryLowerBound(p))/30;
+ 373   
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/29/18 16:07:25 Page 8
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+ 374  cycleTime.up(h) = card(n)*smax(p,ProductionLength_upper(p)) + sum(p,CampaignSetupTime(p));
+ 375   
+ 376  *** the inital storage has some implications
+ 377  assignProductToCampaign.fx(p,'1',h) = 0;
+ 378  assignProductToCampaign.fx('1','1',h) = 1;
+ 379  assignProductToCampaign.fx('1','2',h) = 0;
+ 380   
+ 381  productTankSize.lo(p) = InventoryLowerBound(p);
+ 382  productTankSize.up(p) = InventoryUpperBound(p);
+ 383   
+ 384  campaignLength.lo(n,h) = smin(p, ProductionLength_lower(p) + CampaignSetupTime(p));
+ 385  campaignLength.up(n,h) = smax(p, ProductionLength_upper(p) + CampaignSetupTime(p));
+ 386   
+ 387  *---------------------------------------------
+ 388  *                       SET VARIABLE BOUNDS
+ 389  *---------------------------------------------
+ 390   
+ 391  SOLVE tanksize1 minimizing objvar using MINLP;
+ 392   
+ 393   
+ 394  *---------------------------------------------------
+ 395  *                       PRINT FINAL SOLUTION STATISTICS
+ 396  *---------------------------------------------------
+ 397   
+ 398  SCALARS SOLVER_TIME, WALL_TIME;
+ 399   
+ 400  SOLVER_TIME = tanksize1.resusd;
+ 401  WALL_TIME = tanksize1.etsolve;
+ 402   
+ 403  display SOLVER_TIME, WALL_TIME;
+ 404   
+
+
+COMPILATION TIME     =        0.003 SECONDS      3 MB  25.1.1 r66732 LEX-LEG
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                      09/29/18 16:07:25 Page 9
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Model Statistics    SOLVE tanksize1 Using MINLP From line 391
+
+
+MODEL STATISTICS
+
+BLOCKS OF EQUATIONS          18     SINGLE EQUATIONS          274
+BLOCKS OF VARIABLES          12     SINGLE VARIABLES          142  36 projected
+NON ZERO ELEMENTS           928     NON LINEAR N-Z             45
+DERIVATIVE POOL              20     CONSTANT POOL              23
+CODE LENGTH                 142     DISCRETE VARIABLES         15
+
+
+GENERATION TIME      =        0.004 SECONDS      4 MB  25.1.1 r66732 LEX-LEG
+
+
+EXECUTION TIME       =        0.005 SECONDS      4 MB  25.1.1 r66732 LEX-LEG
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 10
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+               S O L V E      S U M M A R Y
+
+     MODEL   tanksize1           OBJECTIVE  objvar
+     TYPE    MINLP               DIRECTION  MINIMIZE
+     SOLVER  SCIP                FROM LINE  391
+
+**** SOLVER STATUS     1 Normal Completion         
+**** MODEL STATUS      8 Integer Solution          
+**** OBJECTIVE VALUE                1.2730
+
+ RESOURCE USAGE, LIMIT       7960.735     10000.000
+ ITERATION COUNT, LIMIT  23637788    1000000000
+ EVALUATION ERRORS              0             0
+
+SCIP             25.1.1 r66732 Released May 19, 2018 LEG x86 64bit/Linux      
+
+---- EQU TimeCapacity  time capacity
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+
+---- EQU UniqueProduct  at most one product per campaign
+
+           LOWER          LEVEL          UPPER
+
+1.1        -INF            1.0000         1.0000      
+1.2        -INF            1.0000         1.0000      
+1.3        -INF            1.0000         1.0000      
+2.1        -INF            1.0000         1.0000      
+2.2        -INF            1.0000         1.0000      
+2.3        -INF            1.0000         1.0000      
+3.1        -INF            1.0000         1.0000      
+3.2        -INF            1.0000         1.0000      
+3.3        -INF            1.0000         1.0000      
+
+---- EQU MaterialBalance  material balance constraint (steady state)
+
+             LOWER          LEVEL          UPPER
+
+1.1.1          .              .              .          
+1.1.2          .              .              .          
+1.1.3          .              .              .          
+1.2.1          .              .              .          
+1.2.2          .              .              .          
+1.2.3          .              .              .          
+1.3.1          .              .              .          
+1.3.2          .              .              .          
+1.3.3          .              .              .          
+2.1.1          .              .              .          
+2.1.2          .              .              .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 11
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+     EQU MaterialBalance  material balance constraint (steady state)
+
+             LOWER          LEVEL          UPPER
+
+2.1.3          .              .              .          
+2.2.1          .              .              .          
+2.2.2          .              .              .          
+2.2.3          .              .              .          
+2.3.1          .              .              .          
+2.3.2          .              .              .          
+2.3.3          .              .              .          
+3.1.1          .              .              .          
+3.1.2          .              .              .          
+3.1.3          .              .              .          
+3.2.1          .              .              .          
+3.2.2          .              .              .          
+3.2.3          .              .              .          
+3.3.1          .              .              .          
+3.3.2          .              .              .          
+3.3.3          .              .              .          
+
+---- EQU TankCapacity  tank capacity constraint
+
+             LOWER          LEVEL          UPPER
+
+1.1.1        -INF          -46.1983          .          
+1.1.2        -INF          -46.1983          .          
+1.1.3        -INF          -46.1983          .          
+1.2.1        -INF      -3.738154E-7          .          
+1.2.2        -INF      -6.202072E-8          .          
+1.2.3        -INF      -2.761806E-8          .          
+1.3.1        -INF          -36.0963          .          
+1.3.2        -INF          -12.6274          .          
+1.3.3        -INF          -15.1529          .          
+2.1.1        -INF          -20.1494          .          
+2.1.2        -INF      -2.149193E-8          .          
+2.1.3        -INF      -8.619793E-8          .          
+2.2.1        -INF          -81.1233          .          
+2.2.2        -INF          -70.5994          .          
+2.2.3        -INF          -70.5994          .          
+2.3.1        -INF           -9.6256          .          
+2.3.2        -INF          -81.1233          .          
+2.3.3        -INF          -81.1233          .          
+3.1.1        -INF      -2.369768E-8          .          
+3.1.2        -INF          -11.1930          .          
+3.1.3        -INF          -11.1930          .          
+3.2.1        -INF          -24.3930          .          
+3.2.2        -INF          -39.4368          .          
+3.2.3        -INF          -39.4368          .          
+3.3.1        -INF          -39.4368          .          
+3.3.2        -INF      -2.061361E-8          .          
+3.3.3        -INF           -2.5672          .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 12
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+---- EQU ProductionUpperBound1  upper bound for product
+
+             LOWER          LEVEL          UPPER
+
+1.1.1        -INF         -395.2724          .          
+1.1.2        -INF         -369.0905          .          
+1.1.3        -INF         -352.1483          .          
+1.2.1        -INF             .              .          
+1.2.2        -INF             .              .          
+1.2.3        -INF             .              .          
+1.3.1        -INF             .              .          
+1.3.2        -INF             .              .          
+1.3.3        -INF             .              .          
+2.1.1        -INF             .              .          
+2.1.2        -INF             .              .          
+2.1.3        -INF             .              .          
+2.2.1        -INF         -390.8983          .          
+2.2.2        -INF             .              .          
+2.2.3        -INF             .              .          
+2.3.1        -INF             .              .          
+2.3.2        -INF         -390.8983          .          
+2.3.3        -INF         -397.3154          .          
+3.1.1        -INF             .              .          
+3.1.2        -INF             .              .          
+3.1.3        -INF             .              .          
+3.2.1        -INF             .              .          
+3.2.2        -INF         -456.3531          .          
+3.2.3        -INF         -458.9203          .          
+3.3.1        -INF         -456.3531          .          
+3.3.2        -INF             .              .          
+3.3.3        -INF             .              .          
+
+---- EQU ProductionLowerBound1  lower bound for product
+
+             LOWER          LEVEL          UPPER
+
+1.1.1          .            89.7276        +INF         
+1.1.2          .           115.9095        +INF         
+1.1.3          .           132.8517        +INF         
+1.2.1          .              .            +INF         
+1.2.2          .              .            +INF         
+1.2.3          .              .            +INF         
+1.3.1          .              .            +INF         
+1.3.2          .              .            +INF         
+1.3.3          .              .            +INF         
+2.1.1          .              .            +INF         
+2.1.2          .              .            +INF         
+2.1.3          .              .            +INF         
+2.2.1          .            94.1017        +INF         
+2.2.2          .              .            +INF         
+2.2.3          .              .            +INF         
+2.3.1          .              .            +INF         
+2.3.2          .            94.1017        +INF         
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 13
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+     EQU ProductionLowerBound1  lower bound for product
+
+             LOWER          LEVEL          UPPER
+
+2.3.3          .            87.6846        +INF         
+3.1.1          .              .            +INF         
+3.1.2          .              .            +INF         
+3.1.3          .              .            +INF         
+3.2.1          .              .            +INF         
+3.2.2          .            36.6469        +INF         
+3.2.3          .            34.0797        +INF         
+3.3.1          .            36.6469        +INF         
+3.3.2          .              .            +INF         
+3.3.3          .              .            +INF         
+
+---- EQU ProductionUpperBound2  upper bound for product
+
+             LOWER          LEVEL          UPPER
+
+1.1.1        -INF         -193.9360          .          
+1.1.2        -INF         -218.0595          .          
+1.1.3        -INF         -201.1172          .          
+1.2.1        -INF         -186.5269          .          
+1.2.2        -INF          -50.0000          .          
+1.2.3        -INF          -50.0000          .          
+1.3.1        -INF          -50.0000          .          
+1.3.2        -INF         -136.2216          .          
+1.3.3        -INF         -102.6846          .          
+2.1.1        -INF         -298.6636          .          
+2.1.2        -INF         -348.9690          .          
+2.1.3        -INF         -348.9690          .          
+2.2.1        -INF          -77.4253          .          
+2.2.2        -INF          -50.0000          .          
+2.2.3        -INF          -50.0000          .          
+2.3.1        -INF          -50.0000          .          
+2.3.2        -INF          -27.1199          .          
+2.3.3        -INF      -9.636416E-8          .          
+3.1.1        -INF         -298.6636          .          
+3.1.2        -INF         -348.9690          .          
+3.1.3        -INF         -348.9690          .          
+3.2.1        -INF         -186.5269          .          
+3.2.2        -INF           -6.3531          .          
+3.2.3        -INF           -8.9203          .          
+3.3.1        -INF           -6.3531          .          
+3.3.2        -INF         -136.2216          .          
+3.3.3        -INF         -102.6846          .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 14
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+---- EQU ProductionLowerBound2  lower bound for product
+
+             LOWER          LEVEL          UPPER
+
+1.1.1      -150.0000      -134.8715        +INF         
+1.1.2      -150.0000      -123.7812        +INF         
+1.1.3      -150.0000      -106.8389        +INF         
+1.2.1      -150.0000       -55.9581        +INF         
+1.2.2      -150.0000       -15.0000        +INF         
+1.2.3      -150.0000       -15.0000        +INF         
+1.3.1      -150.0000       -15.0000        +INF         
+1.3.2      -150.0000       -40.8665        +INF         
+1.3.3      -150.0000       -30.8054        +INF         
+2.1.1      -150.0000       -89.5991        +INF         
+2.1.2      -150.0000      -104.6907        +INF         
+2.1.3      -150.0000      -104.6907        +INF         
+2.2.1      -150.0000       -96.8564        +INF         
+2.2.2      -150.0000       -15.0000        +INF         
+2.2.3      -150.0000       -15.0000        +INF         
+2.3.1      -150.0000       -15.0000        +INF         
+2.3.2      -150.0000       -81.7648        +INF         
+2.3.3      -150.0000       -78.1208        +INF         
+3.1.1       -70.0000       -41.8129        +INF         
+3.1.2       -70.0000       -48.8557        +INF         
+3.1.3       -70.0000       -48.8557        +INF         
+3.2.1       -70.0000       -26.1138        +INF         
+3.2.2       -70.0000       -33.3531        +INF         
+3.2.3       -70.0000       -35.9203        +INF         
+3.3.1       -70.0000       -33.3531        +INF         
+3.3.2       -70.0000       -19.0710        +INF         
+3.3.3       -70.0000       -14.3758        +INF         
+
+---- EQU CampanLengthDef  Definition of campaign length
+
+           LOWER          LEVEL          UPPER
+
+1.1          .              .              .          
+1.2          .              .              .          
+1.3          .              .              .          
+2.1          .              .              .          
+2.2          .              .              .          
+2.3          .              .              .          
+3.1          .              .              .          
+3.2          .              .              .          
+3.3          .              .              .          
+
+---- EQU CampaignUpperBound  upper bound on duration
+
+           LOWER          LEVEL          UPPER
+
+1.1        -INF           -4.0267          .          
+1.2        -INF           -3.0206          .          
+1.3        -INF           -3.0206          .          
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 15
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+     EQU CampaignUpperBound  upper bound on duration
+
+           LOWER          LEVEL          UPPER
+
+2.1        -INF           -6.2695          .          
+2.2        -INF           -9.0000          .          
+2.3        -INF           -9.0000          .          
+3.1        -INF           -9.0000          .          
+3.2        -INF           -7.2756          .          
+3.3        -INF           -7.9463          .          
+
+---- EQU CampaignLowerBound  lower bound on duration
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             4.9733        +INF         
+1.2          .             5.9794        +INF         
+1.3          .             5.9794        +INF         
+2.1          .             2.7305        +INF         
+2.2          .              .            +INF         
+2.3          .              .            +INF         
+3.1          .       1.4655600E-8        +INF         
+3.2          .             1.7244        +INF         
+3.3          .             1.0537        +INF         
+
+---- EQU CampaignSetupCostCon  campaign setup cost
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+
+---- EQU CampaignStorageCost  campaign variable storage cost
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+
+---- EQU AuxiliaryCon  define the auxiliary variables
+
+             LOWER          LEVEL          UPPER
+
+1.1.1      -643.0000      -643.0000      -643.0000      
+1.1.2      -643.0000      -643.0000      -643.0000      
+1.1.3      -643.0000      -643.0000      -643.0000      
+1.2.1      -643.0000      -643.0000      -643.0000      
+1.2.2      -643.0000      -643.0000      -643.0000      
+1.2.3      -643.0000      -643.0000      -643.0000      
+1.3.1      -643.0000      -643.0000      -643.0000      
+1.3.2      -643.0000      -643.0000      -643.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 16
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+     EQU AuxiliaryCon  define the auxiliary variables
+
+             LOWER          LEVEL          UPPER
+
+1.3.3      -643.0000      -643.0000      -643.0000      
+2.1.1      -536.0000      -536.0000      -536.0000      
+2.1.2      -536.0000      -536.0000      -536.0000      
+2.1.3      -536.0000      -536.0000      -536.0000      
+2.2.1      -536.0000      -536.0000      -536.0000      
+2.2.2      -536.0000      -536.0000      -536.0000      
+2.2.3      -536.0000      -536.0000      -536.0000      
+2.3.1      -536.0000      -536.0000      -536.0000      
+2.3.2      -536.0000      -536.0000      -536.0000      
+2.3.3      -536.0000      -536.0000      -536.0000      
+3.1.1      -214.0000      -214.0000      -214.0000      
+3.1.2      -214.0000      -214.0000      -214.0000      
+3.1.3      -214.0000      -214.0000      -214.0000      
+3.2.1      -214.0000      -214.0000      -214.0000      
+3.2.2      -214.0000      -214.0000      -214.0000      
+3.2.3      -214.0000      -214.0000      -214.0000      
+3.3.1      -214.0000      -214.0000      -214.0000      
+3.3.2      -214.0000      -214.0000      -214.0000      
+3.3.3      -214.0000      -214.0000      -214.0000      
+
+---- EQU CampaignCostPerTon  cost per ton
+
+         LOWER          LEVEL          UPPER
+
+1          .              .              .          
+2          .              .              .          
+3          .              .              .          
+
+---- EQU Sequence  redundant constraint on the omega
+
+             LOWER          LEVEL          UPPER
+
+1.1.1        -1.0000        -1.0000        +INF         
+1.1.2        -1.0000        -1.0000        +INF         
+1.1.3        -1.0000        -1.0000        +INF         
+1.2.1        -1.0000          .            +INF         
+1.2.2        -1.0000          .            +INF         
+1.2.3        -1.0000          .            +INF         
+1.3.1        -1.0000          .            +INF         
+1.3.2        -1.0000          .            +INF         
+1.3.3        -1.0000          .            +INF         
+2.1.1        -1.0000        -1.0000        +INF         
+2.1.2        -1.0000          .            +INF         
+2.1.3        -1.0000          .            +INF         
+2.2.1        -1.0000        -1.0000        +INF         
+2.2.2        -1.0000        -1.0000        +INF         
+2.2.3        -1.0000        -1.0000        +INF         
+2.3.1        -1.0000          .            +INF         
+2.3.2        -1.0000        -1.0000        +INF         
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 17
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+     EQU Sequence  redundant constraint on the omega
+
+             LOWER          LEVEL          UPPER
+
+2.3.3        -1.0000        -1.0000        +INF         
+3.1.1        -1.0000          .            +INF         
+3.1.2        -1.0000        -1.0000        +INF         
+3.1.3        -1.0000        -1.0000        +INF         
+3.2.1        -1.0000        -1.0000        +INF         
+3.2.2        -1.0000        -1.0000        +INF         
+3.2.3        -1.0000        -1.0000        +INF         
+3.3.1        -1.0000        -1.0000        +INF         
+3.3.2        -1.0000          .            +INF         
+3.3.3        -1.0000          .            +INF         
+
+---- EQU BreakSymmetry  break the symmetry of active campaigns
+
+           LOWER          LEVEL          UPPER
+
+1.1          .              .            +INF         
+1.2          .              .            +INF         
+1.3          .              .            +INF         
+2.1          .              .            +INF         
+2.2          .              .            +INF         
+2.3          .              .            +INF         
+3.1          .             1.0000        +INF         
+3.2          .             1.0000        +INF         
+3.3          .             1.0000        +INF         
+
+                           LOWER          LEVEL          UPPER
+
+---- EQU objective           .              .              .          
+
+  objective  objective function
+
+---- VAR campaignDuration  duration of the campaigns
+
+           LOWER          LEVEL          UPPER
+
+1.1          .             5.9733        10.0000      
+1.2          .             6.9794        10.0000      
+1.3          .             6.9794        10.0000      
+2.1          .             3.7305        10.0000      
+2.2          .             1.0000        10.0000      
+2.3          .             1.0000        10.0000      
+3.1          .             1.0000        10.0000      
+3.2          .             2.7244        10.0000      
+3.3          .             2.0537        10.0000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 18
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+---- VAR amtProductInCampaign  amount of product p produced in campaign n
+
+             LOWER          LEVEL          UPPER
+
+1.1.1          .           104.7276       500.0000      
+1.1.2          .           130.9095       500.0000      
+1.1.3          .           147.8517       500.0000      
+1.2.1          .              .           500.0000      
+1.2.2          .              .           500.0000      
+1.2.3          .              .           500.0000      
+1.3.1          .              .           500.0000      
+1.3.2          .              .           500.0000      
+1.3.3          .              .           500.0000      
+2.1.1          .              .           500.0000      
+2.1.2          .              .           500.0000      
+2.1.3          .              .           500.0000      
+2.2.1          .           109.1017       500.0000      
+2.2.2          .              .           500.0000      
+2.2.3          .              .           500.0000      
+2.3.1          .              .           500.0000      
+2.3.2          .           109.1017       500.0000      
+2.3.3          .           102.6846       500.0000      
+3.1.1          .              .           500.0000      
+3.1.2          .              .           500.0000      
+3.1.3          .              .           500.0000      
+3.2.1          .              .           500.0000      
+3.2.2          .            43.6469       500.0000      
+3.2.3          .            41.0797       500.0000      
+3.3.1          .            43.6469       500.0000      
+3.3.2          .              .           500.0000      
+3.3.3          .              .           500.0000      
+
+---- VAR productInventory  amount of product p stored at the beginning of campaign n
+
+             LOWER          LEVEL          UPPER
+
+1.1.1       643.0000       643.0000       643.0000      
+1.1.2       643.0000       643.0000       643.0000      
+1.1.3       643.0000       643.0000       643.0000      
+1.2.1       643.0000       689.1983      4018.3600      
+1.2.2       643.0000       689.1983      4018.3600      
+1.2.3       643.0000       689.1983      4018.3600      
+1.3.1       643.0000       653.1019      4018.3600      
+1.3.2       643.0000       676.5709      4018.3600      
+1.3.3       643.0000       674.0454      4018.3600      
+2.1.1       536.0000       596.9739      3348.6300      
+2.1.2       536.0000       617.1233      3348.6300      
+2.1.3       536.0000       617.1233      3348.6300      
+2.2.1       536.0000       536.0000      3348.6300      
+2.2.2       536.0000       546.5238      3348.6300      
+2.2.3       536.0000       546.5238      3348.6300      
+2.3.1       536.0000       607.4977      3348.6300      
+2.3.2       536.0000       536.0000      3348.6300      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 19
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+     VAR productInventory  amount of product p stored at the beginning of campaign n
+
+             LOWER          LEVEL          UPPER
+
+2.3.3       536.0000       536.0000      3348.6300      
+3.1.1       214.0000       253.4368      1339.4500      
+3.1.2       214.0000       242.2438      1339.4500      
+3.1.3       214.0000       242.2438      1339.4500      
+3.2.1       214.0000       229.0437      1339.4500      
+3.2.2       214.0000       214.0000      1339.4500      
+3.2.3       214.0000       214.0000      1339.4500      
+3.3.1       214.0000       214.0000      1339.4500      
+3.3.2       214.0000       253.4368      1339.4500      
+3.3.3       214.0000       250.8696      1339.4500      
+
+---- VAR productTankSize  size of the product tanks in tons
+
+         LOWER          LEVEL          UPPER
+
+1       643.0000       689.1983      4018.3600      
+2       536.0000       617.1233      3348.6300      
+3       214.0000       253.4368      1339.4500      
+
+---- VAR auxiliaryVariable  auxiliary variables
+
+             LOWER          LEVEL          UPPER
+
+1.1.1          .            23.0991       112.5120      
+1.1.2          .            23.0991       112.5120      
+1.1.3          .            23.0991       112.5120      
+1.2.1          .            28.1501       112.5120      
+1.2.2          .            39.8846       112.5120      
+1.2.3          .            38.6218       112.5120      
+1.3.1          .             5.0510       112.5120      
+1.3.2          .            16.7854       112.5120      
+1.3.3          .            15.5227       112.5120      
+2.1.1          .            30.4869        93.7543      
+2.1.2          .            45.8236        93.7543      
+2.1.3          .            45.8236        93.7543      
+2.2.1          .            35.7489        93.7543      
+2.2.2          .             5.2619        93.7543      
+2.2.3          .             5.2619        93.7543      
+2.3.1          .            66.2358        93.7543      
+2.3.2          .            40.5616        93.7543      
+2.3.3          .            40.5616        93.7543      
+3.1.1          .            27.2403        37.5150      
+3.1.2          .            14.1219        37.5150      
+3.1.3          .            14.1219        37.5150      
+3.2.1          .             7.5219        37.5150      
+3.2.2          .            19.7184        37.5150      
+3.2.3          .            18.4348        37.5150      
+3.3.1          .            19.7184        37.5150      
+3.3.2          .            33.8403        37.5150      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 20
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+     VAR auxiliaryVariable  auxiliary variables
+
+             LOWER          LEVEL          UPPER
+
+3.3.3          .            32.5567        37.5150      
+
+---- VAR setupCost  campaign setup costs
+
+         LOWER          LEVEL          UPPER
+
+1          .            60.0000        +INF         
+2          .            60.0000        +INF         
+3          .            60.0000        +INF         
+
+---- VAR variableCost  variable storage costs
+
+         LOWER          LEVEL          UPPER
+
+1          .            47.3100        +INF         
+2          .            50.2111        +INF         
+3          .            46.5122        +INF         
+
+---- VAR cycleTime  cycle time
+
+         LOWER          LEVEL          UPPER
+
+1          .            11.4038        30.7000      
+2          .            11.4038        30.7000      
+3          .            10.7331        30.7000      
+
+---- VAR costPerTon  cost per ton
+
+         LOWER          LEVEL          UPPER
+
+1          .             0.4168        +INF         
+2          .             0.3885        +INF         
+3          .             0.3652        +INF         
+
+---- VAR campaignLength  campaignLength is campaignDuration + setuptime 
+
+           LOWER          LEVEL          UPPER
+
+1.1         1.1000         6.3733        10.4000      
+1.2         1.1000         7.3794        10.4000      
+1.3         1.1000         7.3794        10.4000      
+2.1         1.1000         3.9305        10.4000      
+2.2         1.1000         1.1000        10.4000      
+2.3         1.1000         1.1000        10.4000      
+3.1         1.1000         1.1000        10.4000      
+3.2         1.1000         2.9244        10.4000      
+3.3         1.1000         2.2537        10.4000      
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 21
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+Solution Report     SOLVE tanksize1 Using MINLP From line 391
+
+
+---- VAR assignProductToCampaign  binary variable mapping product to campaign
+
+             LOWER          LEVEL          UPPER
+
+1.1.1         1.0000         1.0000         1.0000      
+1.1.2         1.0000         1.0000         1.0000      
+1.1.3         1.0000         1.0000         1.0000      
+1.2.1          .              .              .          
+1.2.2          .              .              .          
+1.2.3          .              .              .          
+1.3.1          .              .             1.0000      
+1.3.2          .              .             1.0000      
+1.3.3          .              .             1.0000      
+2.1.1          .              .              .          
+2.1.2          .              .              .          
+2.1.3          .              .              .          
+2.2.1          .             1.0000         1.0000      
+2.2.2          .              .             1.0000      
+2.2.3          .              .             1.0000      
+2.3.1          .              .             1.0000      
+2.3.2          .             1.0000         1.0000      
+2.3.3          .             1.0000         1.0000      
+3.1.1          .              .              .          
+3.1.2          .              .              .          
+3.1.3          .              .              .          
+3.2.1          .              .             1.0000      
+3.2.2          .             1.0000         1.0000      
+3.2.3          .             1.0000         1.0000      
+3.3.1          .             1.0000         1.0000      
+3.3.2          .              .             1.0000      
+3.3.3          .              .             1.0000      
+
+                           LOWER          LEVEL          UPPER
+
+---- VAR objvar            -INF            1.2730        +INF         
+
+  objvar  objective function
+
+
+**** REPORT SUMMARY :        0     NONOPT
+                             0 INFEASIBLE
+                             0  UNBOUNDED
+                             0     ERRORS
+                            65  PROJECTED
+GAMS 25.1.1  r66732 Released May 19, 2018 LEX-LEG x86 64bit/Linux                                                                                                                                                                     09/29/18 16:07:25 Page 22
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+E x e c u t i o n
+
+
+----    403 PARAMETER SOLVER_TIME          =     7960.735  
+            PARAMETER WALL_TIME            =     7974.912  
+
+
+EXECUTION TIME       =        0.002 SECONDS      3 MB  25.1.1 r66732 LEX-LEG
+
+
+USER: Eval License Carnegie Mellon University        G180112/0001AS-GEN
+      Dept. of Chemical Engineering                              DC9476
+      License for teaching and research at degree granting institutions
+
+
+**** FILE SUMMARY
+
+Input      /home/canl1/PlasmoAlgorithms/examples/TankSizing/continuous/improved_tanksize3.gms
+Output     /home/canl1/PlasmoAlgorithms/examples/TankSizing/continuous/improved_tanksize3.lst
