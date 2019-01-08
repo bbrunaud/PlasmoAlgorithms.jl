@@ -21,7 +21,7 @@ saveiteration,
 normalizegraph, smpsread,
 
 #convexification
-add_PiecewiseMcCormick, add_McCormick
+add_LogPiecewiseMcCormick,add_PiecewiseMcCormick, add_McCormick
 
 include("lagrange.jl")
 include("benders.jl")
