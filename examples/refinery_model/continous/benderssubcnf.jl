@@ -1,6 +1,6 @@
-function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,1], Desulphurisation_cost=Desulphurisation_cost[:,1], Sulphur_2=[:,1], Sulphur_GO_data= Sulphur_GO_data[:,1])
+function generate_benderssubcustom(; prob=prob[1], Crude_yield_data = Crude_yield_data[:,:,1], Desulphurisation_cost=Desulphurisation_cost[:,1], Sulphur_2=[:,1], Sulphur_GO_data= Sulphur_GO_data[:,1])
 	
-	model = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0))
+	model = Model(solver=CplexSolver(CPX_PARAM_SCRIND=0, CPXPARAM_Simplex_Tolerances_Feasibility=1e-2, CPX_PARAM_EPRHS=1e-5))
 	@variable(model, pickCrude[c in crudes], Bin)
 
 	@variable(model, 0<=crudeQuantity[c in crudes]<=Crude_upper_bound[c])
@@ -424,4 +424,59 @@ function generate_benderssub(; prob=prob[1], Crude_yield_data = Crude_yield_data
    	return model
 end
 
+function strengthen_relaxation(model::Model, varnametovar)
+    #add convex relaxations
+    npoints =5 
+    A_lp,b_lp,m_lp, n = getModelInfo(model, 20)
+ 	fraction_LG_1 = varnametovar["fraction_LG[1]"]
+    fraction_LG_2 = varnametovar["fraction_LG[2]"]
+    fraction_LG_3 = varnametovar["fraction_LG[3]"]
+    fraction_LG_4 = varnametovar["fraction_LG[4]"]
+    fraction_LG_5 = varnametovar["fraction_LG[5]"]
+    fraction_CGO_1 = varnametovar["fraction_CGO[1]"]
+    fraction_CGO_2 = varnametovar["fraction_CGO[2]"]
+    flow_ES95_1 = varnametovar["flow_ES95[1]"]
+    flow_PG98_1 = varnametovar["flow_PG98[1]"]
+    flow_Burn_2 = varnametovar["flow_Burn[2]"]
+    flow_LG_producing = varnametovar["flow_LG_producing"]
+    blin_CDU_LG_1	=varnametovar["blin_CDU_LG[1]"]
+	blin_CDU_LG_2	=varnametovar["blin_CDU_LG[2]"]
+	blin_CDU_LG_3	=varnametovar["blin_CDU_LG[3]"]
+	blin_CDU_LG_4	=varnametovar["blin_CDU_LG[4]"]
+	blin_Reformer95_LG_1	=varnametovar["blin_Reformer95_LG[1]"]
+	blin_Reformer95_LG_2	=varnametovar["blin_Reformer95_LG[2]"]
+	blin_Reformer95_LG_3	=varnametovar["blin_Reformer95_LG[3]"]
+	blin_Reformer95_LG_4	=varnametovar["blin_Reformer95_LG[4]"]
+	blin_Reformer100_LG_1	=varnametovar["blin_Reformer100_LG[1]"]
+	blin_Reformer100_LG_2	=varnametovar["blin_Reformer100_LG[2]"]
+	blin_Reformer100_LG_3	=varnametovar["blin_Reformer100_LG[3]"]
+	blin_Reformer100_LG_4	=varnametovar["blin_Reformer100_LG[4]"]
+	blin_Mogas_LG_1	=varnametovar["blin_Mogas_LG[1]"]
+	blin_Mogas_LG_2	=varnametovar["blin_Mogas_LG[2]"]
+	blin_Mogas_LG_3	=varnametovar["blin_Mogas_LG[3]"]
+	blin_Mogas_LG_4	=varnametovar["blin_Mogas_LG[4]"]
+	blin_AGO_LG_1	=varnametovar["blin_AGO_LG[1]"]
+	blin_AGO_LG_2	=varnametovar["blin_AGO_LG[2]"]
+	blin_AGO_LG_3	=varnametovar["blin_AGO_LG[3]"]
+	blin_AGO_LG_4	=varnametovar["blin_AGO_LG[4]"]
+	blin_Cracker_Mogas_2	=varnametovar["blin_Cracker_Mogas[2]"]
+	blin_Cracker_Mogas_3	=varnametovar["blin_Cracker_Mogas[3]"]
+	blin_Cracker_Mogas_1	=varnametovar["blin_Cracker_Mogas[1]"]
+	blin_Cracker_AGO_1	=varnametovar["blin_Cracker_AGO[1]"]
+	blin_Cracker_AGO_2	=varnametovar["blin_Cracker_AGO[2]"]
+	blin_Cracker_AGO_3	=varnametovar["blin_Cracker_AGO[3]"]
+	flow_AGO_3_2	=varnametovar["flow_AGO_3[2]"]
+	flow_HF_2	=varnametovar["flow_HF_2"]
+	flow_Desulphurisation_CGO	=varnametovar["flow_Desulphurisation_CGO"]
+	fraction_CGO_1	=varnametovar["fraction_CGO[1]"]
+	fraction_CGO_2	=varnametovar["fraction_CGO[2]"]   
+    add_disjunction(model, A_lp,b_lp,m_lp, n, fraction_LG_1, [flow_ES95_1,flow_PG98_1,flow_Burn_2,flow_LG_producing], [blin_CDU_LG_1,blin_CDU_LG_2,blin_CDU_LG_3, blin_CDU_LG_4], npoints)
+    add_disjunction(model, A_lp,b_lp,m_lp, n, fraction_LG_2, [flow_ES95_1,flow_PG98_1,flow_Burn_2,flow_LG_producing], [blin_Reformer95_LG_1,blin_Reformer95_LG_2,blin_Reformer95_LG_3,blin_Reformer95_LG_4], npoints)
+    add_disjunction(model, A_lp,b_lp,m_lp, n, fraction_LG_3, [flow_ES95_1,flow_PG98_1,flow_Burn_2,flow_LG_producing], [blin_Reformer100_LG_1,blin_Reformer100_LG_2,blin_Reformer100_LG_3,blin_Reformer100_LG_4], npoints)
+    add_disjunction(model, A_lp,b_lp,m_lp, n, fraction_LG_4, [flow_ES95_1,flow_PG98_1,flow_Burn_2,flow_LG_producing], [blin_Mogas_LG_1,blin_Mogas_LG_2,blin_Mogas_LG_3,blin_Mogas_LG_4], npoints)
+    add_disjunction(model, A_lp,b_lp,m_lp, n, fraction_LG_5, [flow_ES95_1,flow_PG98_1,flow_Burn_2,flow_LG_producing], [blin_AGO_LG_1,blin_AGO_LG_2,blin_AGO_LG_3,blin_AGO_LG_4], npoints)
+    add_disjunction(model, A_lp,b_lp,m_lp, n, fraction_CGO_1, [flow_AGO_3_2,flow_HF_2,flow_Desulphurisation_CGO], [blin_Cracker_Mogas_1,blin_Cracker_Mogas_2,blin_Cracker_Mogas_3], npoints)
+    add_disjunction(model, A_lp,b_lp,m_lp, n, fraction_CGO_2, [flow_AGO_3_2,flow_HF_2,flow_Desulphurisation_CGO], [blin_Cracker_AGO_1,blin_Cracker_AGO_2,blin_Cracker_AGO_3], npoints)
 
+
+end

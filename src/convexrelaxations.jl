@@ -138,13 +138,14 @@ function add_disjunction(model::Model, A_lp,b_lp,m_lp, n, x_var, y_var_array, xy
     @constraint(model, [i in 1:n], Variable(model, i) == sum(vars_all_djc[d][i] for d in 1:npoints))
 end
 
-function getModelInfo(model::Model)
+function getModelInfo(model::Model, num_redundant::Int=0)
 	A = JuMP.prepConstrMatrix(model)
-    n = size(A,2)                               # Numver of variables of original problem
-    m = size(A,1)                               # Number of constraints of original problem
+    n = size(A,2) - num_redundant                             # Numver of variables of original problem
+    m = size(A,1)  - num_redundant
+    A = A[1:m, 1:n]                             # Number of constraints of original problem
     conBounds = JuMP.prepConstrBounds(model)       # trabsforn all constraints in greater than
-    LHS = conBounds[1]
-    RHS = conBounds[2]
+    LHS = conBounds[1][1:m]
+    RHS = conBounds[2][1:m]
     b = zeros(m)
     eq_counter = 0
     for i = 1:m

@@ -149,6 +149,10 @@ function solveprimalnode(node::PlasmoNode, graph::PlasmoGraph, cuts::Array{Symbo
   if :LIFT in cuts && in_degree(graph, node) != 0 
     solveliftandprojectrelaxation(node, graph)
   end
+
+  if :CUSTOM in cuts && in_degree(graph, node) != 0 
+    solvecustomrelaxation(node, graph)
+  end
   
   if updatebound
     solvenodemodel(node,graph)
