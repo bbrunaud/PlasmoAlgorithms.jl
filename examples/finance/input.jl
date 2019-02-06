@@ -1,6 +1,7 @@
 using JuMP
 #sets
 Investments = 1:2 
+base_scenarios = 1:2
 
 InitialWealth = 55000 
 TargetCapital = 80000 

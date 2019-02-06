@@ -5,6 +5,6 @@ function generate_master()
 	@variable(mp, InvestmentType[i in Investments], Bin)
 	@constraint(mp, sum(InvestmentType[i] for i in Investments) == 1)
 	@constraint(mp, c[i in Investments], AmountInvestedCurrentStage[i] <= 120000 * InvestmentType[i])
-	@constraint(mp, sum(AmountInvested[i] for i in Investments) == InitialWealth)
+	@constraint(mp, sum(AmountInvestedCurrentStage[i] for i in Investments) == InitialWealth)
 	return mp
 end
