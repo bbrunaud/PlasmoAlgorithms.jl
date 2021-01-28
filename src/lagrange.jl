@@ -2,7 +2,7 @@
   lagrangesolve(graph)
   solve graph using lagrange decomposition
 """
-function lagrangesolve(graph;
+function lagrangeoptimize!(graph;
   max_iterations=10,
   update_method=:subgradient, #probingsubgradient
   ϵ=0.001, # ϵ-convergence tolerance
@@ -13,10 +13,11 @@ function lagrangesolve(graph;
   δ = 0.5, # Factor to shrink step when subgradient stuck
   maxnoimprove = 3,
   cpbound=1e6,
-  verbose=true) # Amount of iterations that no improvement is allowed before shrinking step
+  verbose=true,
+  singleline = true) # Amount of iterations that no improvement is allowed before shrinking step
 
   ### INITIALIZATION ###
-  lgprepare(graph,δ,maxnoimprove,cpbound)
+  lgprepare(graph, δ=δ, maxnoimprove=maxnoimprove,cpbound=cpbound)
   n = getattribute(graph,:normalized)
 
   if initialmultipliers == :relaxation
@@ -41,7 +42,7 @@ function lagrangesolve(graph;
     # Solve subproblems
     Zk = 0
     for node in nodes
-       (x,Zkn) = solvenode(node,λ,x,variant)
+       (x,Zkn) = solvenode(graph,node,λ,x,variant)
        Zk += Zkn
     end
     setattribute(graph, :steptaken, true)
@@ -69,8 +70,11 @@ function lagrangesolve(graph;
     itertime = time() - iterstart
     tstamp = time() - starttime
     saveiteration(s,tstamp,[n*iterval,n*Zk,itertime,tstamp],n)
-    verbose && printiterationsummary(s,singleline=false)
-
+    if verbose 
+      iter == 1 && singleline && printheader(graph, :Lagrange)
+      printiterationsummary(s,singleline=singleline)
+    end
+    
     # Check convergence
     if norm(res) < ϵ
       s.termination = "Optimal"
@@ -84,7 +88,6 @@ function lagrangesolve(graph;
     end
 
     # Update multipliers
-    println("α = $α")
     (λ, iterval) = updatemultipliers(graph,λ,res,update_method,lagrangeheuristic)
     push!(getattribute(graph, :λ), λ)
     # Update iteration time
@@ -97,10 +100,9 @@ end
 # Preprocess function
 """
   lgprepare(graph::PlasmoGraph)
-
   Prepares the graph to apply lagrange decomposition algorithm
 """
-function lgprepare(graph::ModelGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
+function lgprepare(graph::OptiGraph; δ=0.5, maxnoimprove=3,cpbound=1e6)
   if hasattribute(graph,:preprocessed)
     return true
   end
@@ -123,8 +125,9 @@ function lgprepare(graph::ModelGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   setattribute(graph, :cutdata, Dict(i => CutData[] for i in 1:numnodes))
 
   # Create Lagrange Master
-  ms = Model(solver=getsolver(graph))
-  @variable(ms, η[1:numnodes], upperbound=cpbound)
+  ms = isnothing(graph.optimizer) ? Model() : Model(graph.optimizer)
+  #set_silent(ms)
+  @variable(ms, η[1:numnodes], upper_bound=cpbound)
   @variable(ms, λ[1:nmult])
   @objective(ms, Max, sum(η))
 
@@ -133,10 +136,7 @@ function lgprepare(graph::ModelGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   # Each node save its initial objective and set a solver if they don't have one
   for n in values(getnodes(graph))
     mn = getmodel(n)
-    if mn.solver == JuMP.UnsetSolver()
-      JuMP.setsolver(mn, getsolver(graph))
-    end
-    mn.ext[:preobj] = mn.obj
+    mn.ext[:preobj] = objective_function(mn)
     mn.ext[:multmap] = Dict()
     mn.ext[:varmap] = Dict()
   end
@@ -145,10 +145,11 @@ function lgprepare(graph::ModelGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
   # Multiplier map to know which component of λ to take
   # Varmap knows what values to post where
   for (i,lc) in enumerate(links)
-    for j in 1:length(lc.terms.vars)
-      var = lc.terms.vars[j]
-      var.m.ext[:multmap][i] = (lc.terms.coeffs[j],lc.terms.vars[j])
-      var.m.ext[:varmap][var] = (i,j)
+    for (j,term) in enumerate(lc.func.terms)
+      var = term[1]
+      coeff = term[2]
+      owner_model(var).ext[:multmap][i] = (coeff, var)
+      owner_model(var).ext[:varmap][var] = (i,j)
     end
   end
 
@@ -156,36 +157,36 @@ function lgprepare(graph::ModelGraph, δ=0.5, maxnoimprove=3,cpbound=nothing)
 end
 
 # Solve a single subproblem
-function solvenode(node,λ,x,variant=:default)
+function solvenode(graph, node,λ,x,variant=:default)
   m = getmodel(node)
   # Restore objective function
-  m.obj = m.ext[:preobj]
+  set_objective_function(m, m.ext[:preobj])  
   m.ext[:lgobj] = m.ext[:preobj]
   # Add dualized part to objective function
   for k in keys(m.ext[:multmap])
     coef = m.ext[:multmap][k][1]
     var = m.ext[:multmap][k][2]
     m.ext[:lgobj] += λ[k]*coef*var
-    m.obj += λ[k]*coef*var
+    set_objective_function(m, objective_function(m) + λ[k]*coef*var)
     if variant == :ADMM
       j = 3 - m.ext[:varmap][var][2]
-      m.obj += 1/2*(coef*var - coef*x[k,j])^2
+      set_objective_function(m, objective_function(m) + 1/2*(coef*var - coef*x[k,j])^2)
     end
   end
   # Solve
-  solve(m)
+  optimize!(m)
   # Pass output
   for v in keys(m.ext[:varmap])
-    val = JuMP.getvalue(v)
+    val = value(v)
     x[m.ext[:varmap][v]...] = val
   end
-  objval = JuMP.getvalue(m.ext[:lgobj])
+  objval = value(m.ext[:lgobj])
   setattribute(node, :objective, objval)
-  setattribute(node, :solvetime, getsolvetime(m))
+  node[:solvetime] =  solve_time(m)
 
   # Push Cut Data
-  nodeindex = getnodeindex(node)
-  preobjval = JuMP.getvalue(m.ext[:preobj])
+  nodeindex = graph[node]
+  preobjval = value(m.ext[:preobj])
   λcomponent = Int64[]
   coeffs = Float64[]
   xk = Float64[]
@@ -194,9 +195,8 @@ function solvenode(node,λ,x,variant=:default)
     var = m.ext[:multmap][k][2]
     push!(λcomponent, k)
     push!(coeffs, coeff)
-    push!(xk, JuMP.getvalue(var))
+    push!(xk, value(var))
   end
-  graph = getgraph(node)
   cutdataarray = getattribute(graph,:cutdata)
   push!(cutdataarray[nodeindex], LagrangeCutData(preobjval, λcomponent, coeffs, xk))
 
@@ -206,15 +206,23 @@ end
 # Multiplier Initialization
 function initialrelaxation(graph)
   if !hasattribute(graph,:mflat)
-    setattribute(graph, :mflat, create_jump_graph_model(graph))
-    getattribute(graph, :mflat).solver = getsolver(graph)
+    optinode, = combine(graph)
+    optimodel = getmodel(optinode)
+    JuMP.set_optimizer(optimodel, graph.optimizer)
+    setattribute(graph, :mflat, optimodel)
   end
   n = getattribute(graph , :normalized)
   nmult = getattribute(graph , :numlinks)
   mf = getattribute(graph , :mflat)
-  solve(mf,relaxation=true)
-  getattribute(graph , :λ)[end] = n*mf.linconstrDuals[end-nmult+1:end]
-  return getobjectivevalue(mf)
+  unrelax = relax_integrality(mf)
+#  set_silent(mf)
+  optimize!(mf)
+  λ = getattribute(graph , :λ)
+  equalities = all_constraints(mf, AffExpr, MOI.EqualTo{Float64})
+  links = equalities[1:nmult]
+  λ[end] = n*dual.(links)
+#  unrelax()
+  return objective_value(mf)
 end
 
 
@@ -246,7 +254,7 @@ function αeval(αv,graph,bound)
   res = getattribute(graph , :res)[end]
   Zk = getattribute(graph , :Zk)[end]
   λ = getattribute(graph , :λ)[end]
-  nodes = [node for node in values(getnodes(graph))]
+  nodes = [node for node in getnodes(graph)]
   step = abs(Zk-bound)/(norm(res)^2)
   zk = 0
   for node in nodes
@@ -316,13 +324,12 @@ function cuttingplanes(graph)
   ms = getattribute(graph, :lgmaster)
   nmult = getattribute(graph, :numlinks)
 
-  λvar = getindex(ms, :λ)
-  η = getindex(ms,:η)
+  λvar = ms[:λ]
+  η = ms[:η]
 
   cutdataarray = getattribute(graph,:cutdata)
   for node in getnodes(graph)
-    nodeindex = getnodeindex(node)
-    println("Nodeindex = $nodeindex")
+    nodeindex = graph[node]
     while length(cutdataarray[nodeindex]) > 0
       cd = pop!(cutdataarray[nodeindex])
       cut = @constraint(ms, η[nodeindex] <= cd.zk + sum(cd.coeffs[j]*λvar[cd.λc[j]]*cd.xk[j] for j in 1:length(cd.λc)))
@@ -330,13 +337,13 @@ function cuttingplanes(graph)
     end
   end
 
-  solve(ms)
-  return getvalue(λvar), getobjectivevalue(ms)
+  optimize!(ms)
+  return value.(λvar), objective_value(ms)
 end
 
-
+#=
 # Standard Lagrangean Heuristics
-function fixbinaries(graph::ModelGraph,cat=[:Bin])
+function fixbinaries(graph::OptiGraph,cat=[:Bin])
   if !hasattribute(graph,:mflat)
     setattribute(graph, :mflat, create_jump_graph_model(graph))
     getattribute(graph, :mflat).solver = getsolver(graph)
@@ -351,14 +358,15 @@ function fixbinaries(graph::ModelGraph,cat=[:Bin])
     end
   end
   println("Solving Heuristic with Fixing Binary/Integer Variables")
-  status = solve(mflat)
+  status = optimize!(mflat)
   if status == :Optimal
-    return n*getobjectivevalue(mflat)
+    return n*objective_value(mflat)
   else
     error("Heuristic model not infeasible or unbounded")
   end
 end
 
-function fixintegers(graph::ModelGraph)
+function fixintegers(graph::OptiGraph)
   fixbinaries(graph,[:Bin,:Int])
 end
+=#

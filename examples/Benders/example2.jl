@@ -1,17 +1,21 @@
 using JuMP
-using Gurobi
+using Xpress
 using Plasmo
 using PlasmoAlgorithms
 
-mp = Model(solver = GurobiSolver())
-sp1 = Model(solver = GurobiSolver())
-sp2 = Model(solver = GurobiSolver())
-sp3 = Model(solver = GurobiSolver())
+graph = OptiGraph()
+optimizer = Xpress.Optimizer
+Plasmo.set_optimizer(graph, optimizer)
 
+
+mp = @optinode(graph)
+JuMP.set_optimizer(mp.model, optimizer)
 @variable(mp,x[1:3]>=0)
 @constraint(mp,x[1]+x[2]+x[3]<=500)
 @objective(mp,Min,150x[1]+230x[2]+260x[3])
 
+sp1 = @optinode(graph)
+JuMP.set_optimizer(sp1.model, optimizer)
 @variable(sp1, w[1:4]>=0)
 @variable(sp1, y[1:2]>=0)
 @variable(sp1, x[1:3]>=0)
@@ -21,6 +25,8 @@ sp3 = Model(solver = GurobiSolver())
 @constraint(sp1, w[3]<=6000)
 @objective(sp1,Min,(-1/3)*(170w[1]-238y[1]+150w[2]-210y[2]+36w[3]+10w[4]))
 
+sp2 = @optinode(graph)
+JuMP.set_optimizer(sp2.model, optimizer)
 @variable(sp2, w[5:8]>=0)
 @variable(sp2, y[3:4]>=0)
 @variable(sp2, x[1:3]>=0)
@@ -30,6 +36,8 @@ sp3 = Model(solver = GurobiSolver())
 @constraint(sp2, w[7]<=6000)
 @objective(sp2, Min, (-1/3)*(170w[5]-238y[3]+150w[6]-210y[4]+36w[7]+10w[8]))
 
+sp3 = @optinode(graph)
+JuMP.set_optimizer(sp3.model, optimizer)
 @variable(sp3,w[9:12]>=0)
 @variable(sp3,y[5:6]>=0)
 @variable(sp3, x[1:3]>=0)
@@ -39,26 +47,13 @@ sp3 = Model(solver = GurobiSolver())
 @constraint(sp3, w[11]<=6000)
 @objective(sp3, Min, (-1/3)*(170w[9]-238y[5]+150w[10]-210y[6]+36w[11]+10w[12]))
 
-
-g = ModelGraph()
-setsolver(g, GurobiSolver())
-n1 = add_node(g)
-n2 = add_node(g)
-n3 = add_node(g)
-n4 = add_node(g)
-
-setmodel(n1, mp)
-setmodel(n2, sp1)
-setmodel(n3, sp2)
-setmodel(n4, sp3)
-
-edge1 = Plasmo.add_edge(g,n1,n2)
-edge2 = Plasmo.add_edge(g,n1,n3)
-edge3 = Plasmo.add_edge(g,n1,n4)
+edge1 = add_edge!(graph, [mp,sp1])
+edge2 = add_edge!(graph, [mp,sp2])
+edge3 = add_edge!(graph, [mp,sp3])
 
 
-@linkconstraint(g,[i in 1:3], n1[:x][i] == n2[:x][i])
-@linkconstraint(g,[i in 1:3], n1[:x][i] == n3[:x][i])
-@linkconstraint(g,[i in 1:3], n1[:x][i] == n4[:x][i])
+@linkconstraint(graph, [i in 1:3], mp[:x][i] == sp1[:x][i])
+@linkconstraint(graph, [i in 1:3], mp[:x][i] == sp2[:x][i])
+@linkconstraint(graph, [i in 1:3], mp[:x][i] == sp3[:x][i])
 
-r = bendersolve(g,max_iterations = 10)
+r = bendersoptimize!(graph, max_iterations = 10)

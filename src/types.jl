@@ -27,6 +27,17 @@ struct LagrangeCrossCutData <: CutData
     λk
 end
 
+  
+mutable struct CrossGraph
+  bd
+  lg
+ end
+ 
+ function CrossGraph(g::OptiGraph)
+  c = CrossGraph(g,deepcopy(g))
+  return c
+ end
+ 
 (==)(cd1::BendersCutData,cd2::BendersCutData) = (cd1.θk == cd2.θk) && (cd1.λk == cd2.λk) && (cd1.xk == cd2.xk)
 (==)(cd1::LLIntegerCutData,cd2::LLIntegerCutData) = (cd1.θlb == cd2.θlb) &&  (cd1.yk == cd2.yk)
 (==)(cd1::IntegerCutData,cd2::IntegerCutData) = (cd1.yk == cd2.yk)

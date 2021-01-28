@@ -55,15 +55,35 @@ function Base.show(io::IO,s::Solution)
     println("Termination : $(s.termination)")
 end
 
+function printheader(graph, algorithm)
+    println("""
+    ===============================================
+    ==                                           ==
+    ==             PlasmoAlgorithms              ==
+    ==                                           ==
+    ===============================================
+  
+    Solving model with $(num_nodes(graph)) nodes using $algorithm Decomposition
+
+    """)
+    print(rpad("n", 6))
+    print(rpad("| IterVal", 20))
+    print(rpad(" IterBound", 20))
+    print(rpad("| Objective", 20))
+    print(rpad("Best Bound", 20))
+    print(rpad("| Gap", 12))
+    println(rpad(" Time", 6))
+end
+
 function printiterationsummary(s::Solution; singleline=false)
     if singleline
-        print("$(s.numiterations)  ")
-        print("| $(round(s.iterval[end], digits=4)) \t")
-        print("$(round(s.iterbound[end], digits=4)) \t")
-        print("| $(round(s.objval, digits=4)) \t")
-        print("$(round(s.bestbound, digits=4)) \t")
-        print("| $(round(s.gap*100, digits=2)) %\t")
-        print("| $(round(s.clocktime[end], digits=2)) s\n")
+        print(rpad("$(s.numiterations)  ", 6))
+        print(rpad("| $(round(s.iterval[end], digits=4))", 20))
+        print(rpad(" $(round(s.iterbound[end], digits=4))", 20))
+        print(rpad("| $(round(s.objval, digits=4))", 20))
+        print(rpad("$(round(s.bestbound, digits=4))", 20))
+        print(rpad("| $(round(s.gap*100, digits=2))%", 12))
+        print(rpad(" $(round(s.clocktime[end], digits=2))s\n", 6))
     else
         println("-----------------")
         println(" Iteration $(s.numiterations)")

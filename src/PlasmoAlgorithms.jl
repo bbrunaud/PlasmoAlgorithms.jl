@@ -1,19 +1,21 @@
 module PlasmoAlgorithms
 
-using Plasmo
-using JuMP
-using Requires
-using LinearAlgebra
+    using Plasmo
+    using JuMP
+    using Requires
+    using LinearAlgebra
+    using Distributed
 
-import Plasmo.solve, Base.==
+    import Base.==
 
-export Solution, lagrangesolve, bendersolve
+    export Solution, lagrangeoptimize!, bendersoptimize!, crossoptimize!
 
-include("types.jl")
-include("lagrange.jl")
-include("benders.jl")
-include("cross.jl")
-include("solution.jl")
-include("utils.jl")
+    include("utils.jl")
+    include("types.jl")
+    include("lagrange.jl")
+    include("benders.jl")
+    include("cross.jl")
+    include("solution.jl")
+
 
 end
