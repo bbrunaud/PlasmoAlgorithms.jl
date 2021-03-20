@@ -107,7 +107,6 @@ function solvelprelaxation(node::OptiNode)
   model = getmodel(node)
   unrelax = relax_integrality(model)
   optimize!(model)
-  
 
   dualconstraints = node[:linkconstraints]
 
