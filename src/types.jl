@@ -6,6 +6,11 @@ struct BendersCutData <: CutData
   xk
 end
 
+struct FeasibilityCutData <: CutData
+  λk
+  xk
+end
+
 struct LLIntegerCutData <: CutData
   θlb
   yk

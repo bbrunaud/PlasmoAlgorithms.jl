@@ -47,4 +47,10 @@ edge3 = add_edge!(graph, [sp1,sp2])
 @linkconstraint(graph, [i in 1:2], mp[:x][i] == sp3[:x][i])
 @linkconstraint(graph, [i in 1:2], sp1[:y][i] == sp2[:y][i])
 
-r = bendersoptimize!(graph, max_iterations = 10)
+r = bendersoptimize!(graph, max_iterations = 2)
+
+PA.generatecuts(mp)
+PA.takex(mp)
+PA.solvelprelaxation(mp)
+PA.solvenodemodel(mp)
+PA.putx(mp)

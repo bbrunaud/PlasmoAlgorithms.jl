@@ -4,7 +4,7 @@ using Plasmo
 using PlasmoAlgorithms
 
 graph = OptiGraph()
-optimizer  = Xpress.Optimizer
+optimizer = Xpress.Optimizer
 
 ##Place MP and SP into PlasmoGraph
 mp = @optinode(graph)

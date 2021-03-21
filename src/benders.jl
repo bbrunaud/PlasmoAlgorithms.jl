@@ -89,17 +89,21 @@ function solveprimalnode(node::OptiNode, cuts::Array{Symbol,1}, updatebound::Boo
   generatecuts(node)
   # 2. Take x
   takex(node)
-  # 3. solve
-  if :LP in cuts
-    solvelprelaxation(node)
+  if node[:updated]
+    # 3. solve
+    if :LP in cuts
+      solvelprelaxation(node)
+    end
+    if node[:primalstatus] == MOI.FEASIBLE_POINT
+      if updatebound
+        solvenodemodel(node)
+      end
+      # 4. put x
+      putx(node)
+    end
+    # 5. put cuts and nodebound
+    putcutdata(node,cuts)
   end
-  if updatebound
-    solvenodemodel(node)
-  end
-  # 4. put x
-  putx(node)
-  # 5. put cuts and nodebound
-  putcutdata(node,cuts)
 end
 
 
@@ -108,10 +112,14 @@ function solvelprelaxation(node::OptiNode)
   unrelax = relax_integrality(model)
   optimize!(model)
 
+  node[:primalstatus] = primal_status(model)
+  node[:dualstatus] = dual_status(model)
+
+  node[:primalstatus] == MOI.NO_SOLUTION && node[:dualstatus] == MOI.NO_SOLUTION && error("Infeasible model at node, solver does not provide infeasibility certificate")
   dualconstraints = node[:linkconstraints]
 
   λnode = dual.(dualconstraints)
-  nodebound = objective_value(model)
+  nodebound = node[:primalstatus] == MOI.FEASIBLE_POINT ? objective_value(model) : 0
 
   node[:bound] = nodebound
   node[:λ] = λnode
@@ -133,9 +141,15 @@ end
 function takex(node::OptiNode)
   node[:numparents] == 0 && return true
   xinvals = fetch(node[:xin])
-  xinvars = node[:xinvars]
-  if length(xinvals) > 0
-    fix.(xinvars,xinvals)
+  if xinvals == node[:prevx] && node[:cutsgenerated] == 0
+    node[:updated] = false
+  else
+    xinvars = node[:xinvars]
+    if length(xinvals) > 0
+      fix.(xinvars,xinvals)
+    end
+    node[:updated] = true
+    node[:prevx] = xinvals
   end
 end
 
@@ -153,23 +167,28 @@ function putcutdata(node::OptiNode,cuts::Array{Symbol,1})
   θk = node[:bound]
   λk = node[:λ]
   xk = take!(node[:xin])
-  if :LP in cuts || :Root in cuts
-    bcd = BendersCutData(θk, λk, xk)
-    put!(node[:cutdataout],bcd)
-  end
-  if :LLinteger in cuts
-    llintcd = LLIntegerCutData(θlb,xk)
-    put!(node[:cutdataout],llintcd)
-  end
-  if :Integer in cuts
-    intcd = IntegerCutData(xk)
-    put!(node[:cutdataout],intcd)
+  if node[:dualstatus] == MOI.INFEASIBILITY_CERTIFICATE
+    fcd = FeasibilityCutData(λk, xk)
+    put!(node[:cutdataout],fcd)
+  else
+    if :LP in cuts || :Root in cuts
+      bcd = BendersCutData(θk, λk, xk)
+      put!(node[:cutdataout],bcd)
+    end
+    if :LLinteger in cuts
+      llintcd = LLIntegerCutData(θlb,xk)
+      put!(node[:cutdataout],llintcd)
+    end
+    if :Integer in cuts
+      intcd = IntegerCutData(xk)
+      put!(node[:cutdataout],intcd)
+    end
   end
 end
 
 function generatecuts(node::OptiNode)
   node[:numchildren] == 0 && return true
-
+  node[:cutsgenerated] = 0
   cutdataarray = node[:cutdata]
   previouscuts = node[:prevcuts]
   thisitercuts = Dict()
@@ -191,6 +210,7 @@ function generatecuts(node::OptiNode)
       elseif typeof(cutdata) == LagrangeCrossCutData
         generatelagrangecrosscut(node, cutdata, childindex)
       end
+      node[:cutsgenerated] += 1
       push!(thisitercuts[childindex],cutdata)
     end
     samecuts[childindex] = reduce(*,samecuts[childindex]) && length(samecuts[childindex]) > 0
@@ -211,6 +231,13 @@ function generatebenderscut(node::OptiNode, cd::BendersCutData,index)
   θ = model[:θ]
   x = node[:childvars][index]
   @constraint(model, θ[index] >= cd.θk + sum(cd.λk[i]*(cd.xk[i] - x[i]) for i in keys(x)))
+end
+
+
+function generatefeasibilitycut(node::OptiNode, cd::FeasibilityCutData,index)
+  model = getmodel(node)
+  x = node[:childvars][index]
+  @constraint(model, 0 >= sum(cd.λk[i]*(cd.xk[i] - x[i]) for i in keys(x)))
 end
 
 
@@ -273,6 +300,12 @@ function identifylevels(graph::OptiGraph)
         node[:prevcuts] = Dict()
         node[:numchildren] = 0
         node[:stalled] = false
+        node[:cutsgenerated] = 0
+        node[:updated] = true
+        node[:prevx] = []
+        node[:primalstatus] = MOI.FEASIBLE_POINT
+        node[:dualstatus] = MOI.FEASIBLE_POINT
+        
         for child in out_neighbors(graph,node)
             childindex = graph[child]
             node[:childvars][childindex] = []
