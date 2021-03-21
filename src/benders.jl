@@ -103,6 +103,9 @@ function solveprimalnode(node::OptiNode, cuts::Array{Symbol,1}, updatebound::Boo
     end
     # 5. put cuts and nodebound
     putcutdata(node,cuts)
+  else
+    # Flush x_in
+    xin = take!(node[:xin])
   end
 end
 
