@@ -31,6 +31,6 @@ edge1 = add_edge!(graph, [mp,sp])
 
 @linkconstraint(graph, mp[:y] == sp[:y])
 
-r = bendersoptimize!(graph, max_iterations = 5)
+r = bendersoptimize!(graph, max_iterations = 2)
 
-Gurobi.free_env(env)
+#Gurobi.free_env(env)

@@ -206,6 +206,8 @@ function generatecuts(node::OptiNode)
       samecut && continue
       if typeof(cutdata) == BendersCutData
         generatebenderscut(node,cutdata,childindex)
+      elseif typeof(cutdata) == FeasibilityCutData
+        generatefeasibilitycut(node,cutdata,childindex)
       elseif typeof(cutdata) == LLIntegerCutData
         generateLLintegercut(node,cutdata)
       elseif typeof(cutdata) == IntegerCutData
@@ -239,8 +241,9 @@ end
 
 function generatefeasibilitycut(node::OptiNode, cd::FeasibilityCutData,index)
   model = getmodel(node)
+  θ = model[:θ]
   x = node[:childvars][index]
-  @constraint(model, 0 >= sum(cd.λk[i]*(cd.xk[i] - x[i]) for i in keys(x)))
+  @constraint(model, θ[index] >= sum(cd.λk[i]*(cd.xk[i] - x[i]) for i in keys(x)))
 end
 
 
