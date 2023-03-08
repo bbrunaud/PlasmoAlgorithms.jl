@@ -1,9 +1,9 @@
 using Plasmo
-using Xpress
+using Gurobi
 using JuMP
 
 graph = OptiGraph()
-optimizer = Xpress.Optimizer
+optimizer = Gurobi.Optimizer
 
 ## Model on x
 # Min 16x[1] + 10x[2]
@@ -12,7 +12,7 @@ optimizer = Xpress.Optimizer
 n1 = @optinode(graph)
 JuMP.set_optimizer(getmodel(n1), optimizer)
 #set_silent(getmodel(n1))
-@variable(n1, xm[i in 1:2],Bin)
+@variable(n1, xm[i in 1:2], Bin)
 @constraint(n1, xm[1] + xm[2] <= 1)
 @objective(n1, Max, 16xm[1] + 10xm[2])
 
@@ -24,7 +24,7 @@ JuMP.set_optimizer(getmodel(n1), optimizer)
 n2 = @optinode(graph)
 JuMP.set_optimizer(getmodel(n2), optimizer)
 #set_silent(getmodel(n2))
-@variable(n2, xs[i in 1:2],Bin)
+@variable(n2, xs[i in 1:2], Bin)
 @variable(n2, y[i in 1:2], Bin)
 @constraint(n2, y[1] + y[2] <= 1)
 @constraint(n2, 8xs[1] + 2xs[2] + y[1] + 4y[2] <= 10)

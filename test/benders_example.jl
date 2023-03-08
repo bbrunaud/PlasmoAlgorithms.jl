@@ -1,10 +1,10 @@
 using JuMP
-using Xpress
+using Gurobi
 using Plasmo
 using PlasmoAlgorithms
 
 graph = OptiGraph()
-optimizer = Xpress.Optimizer
+optimizer = Gurobi.Optimizer
 
 ##Place MP and SP into PlasmoGraph
 mp = @optinode(graph)
