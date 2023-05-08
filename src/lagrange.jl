@@ -258,7 +258,7 @@ function αeval(αv,graph,bound)
   step = abs(Zk-bound)/(norm(res)^2)
   zk = 0
   for node in nodes
-     (xv,Zkn) = solvenode(node,λ+αv*step*res,xv,:default)
+     (xv,Zkn) = solvenode(graph, node,λ+αv*step*res,xv,:default)
      zk += Zkn
   end
   return zk
