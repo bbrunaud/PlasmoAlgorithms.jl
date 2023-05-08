@@ -304,7 +304,6 @@ function probingsubgradient(graph,λ,res,lagrangeheuristic,α=getattribute(graph
   end
 end
 
-@require Plots begin
 function interactive(graph,λ,res,lagrangeheuristic)
   α = getattribute(graph , :α)[end]
   n = getattribute(graph , :normalized)
@@ -317,7 +316,6 @@ function interactive(graph,λ,res,lagrangeheuristic)
   step = α*abs(Zk-bound)/(norm(res)^2)
   λ += step*res
   return λ,bound
-end
 end
 
 function cuttingplanes(graph)
