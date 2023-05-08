@@ -5,6 +5,7 @@ module PlasmoAlgorithms
     using Requires
     using LinearAlgebra
     using Distributed
+    using Plots
 
     import Base.==
 
